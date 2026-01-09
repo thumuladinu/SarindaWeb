@@ -90,43 +90,42 @@ router.post('/api/addItem', async (req, res) => {
         // Remove STOCK from request - stock is managed locally on POS only
         delete req.body.STOCK;
 
-        // SMART ADD: Check if item code already exists (even if inactive)
-        const existingItems = await pool.query('SELECT * FROM store_items WHERE CODE = ?', [req.body.CODE]);
+        // UPSERT: Insert item or update if CODE already exists (prevents duplicates atomically)
+        const editedDate = req.body.EDITED_DATE || new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const createdBy = req.body.CREATED_BY || null;
 
+        const upsertResult = await pool.query(`
+            INSERT INTO store_items (CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE, CREATED_BY)
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                NAME = VALUES(NAME),
+                BUYING_PRICE = VALUES(BUYING_PRICE),
+                SELLING_PRICE = VALUES(SELLING_PRICE),
+                IS_ACTIVE = 1,
+                EDITED_DATE = VALUES(EDITED_DATE),
+                CREATED_BY = VALUES(CREATED_BY)
+        `, [
+            req.body.CODE,
+            req.body.NAME,
+            req.body.BUYING_PRICE,
+            req.body.SELLING_PRICE,
+            editedDate,
+            createdBy
+        ]);
+
+        // insertId is 0 if it was an update (duplicate key), otherwise it's the new ID
         let insertId;
         let isReactivation = false;
 
-        if (existingItems.length > 0) {
-            // REACTIVATE & UPDATE
-            const existing = existingItems[0];
-            insertId = existing.ITEM_ID;
+        if (upsertResult.insertId === 0) {
+            // It was an update - get the existing ID
+            const [existing] = await pool.query('SELECT ITEM_ID FROM store_items WHERE CODE = ?', [req.body.CODE]);
+            insertId = existing ? existing.ITEM_ID : null;
             isReactivation = true;
-
-            console.log(`[SmartAdd] Item code ${req.body.CODE} exists (ID: ${insertId}). Reactivating...`);
-
-            // Prepare Update Query - NO STOCK column (stock is managed locally on POS)
-            const editedDate = req.body.EDITED_DATE || new Date();
-            const createdBy = req.body.CREATED_BY || null;
-
-            await pool.query(
-                `UPDATE store_items 
-                 SET CODE = ?, NAME = ?, BUYING_PRICE = ?, SELLING_PRICE = ?, IS_ACTIVE = 1, EDITED_DATE = ?, CREATED_BY = ? 
-                 WHERE ITEM_ID = ?`,
-                [
-                    req.body.CODE,
-                    req.body.NAME,
-                    req.body.BUYING_PRICE,
-                    req.body.SELLING_PRICE,
-                    editedDate,
-                    createdBy,
-                    insertId
-                ]
-            );
-
+            console.log(`[SmartAdd] Item code ${req.body.CODE} already exists (ID: ${insertId}). Updated/Reactivated.`);
         } else {
-            // NEW INSERT
-            const insertResult = await pool.query('INSERT INTO store_items SET ?', req.body);
-            insertId = insertResult.insertId;
+            insertId = upsertResult.insertId;
+            console.log(`[SmartAdd] New item ${req.body.CODE} created (ID: ${insertId}).`);
         }
 
         if (insertId) {

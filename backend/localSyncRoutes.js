@@ -25,6 +25,51 @@ pool.query = util.promisify(pool.query);
     }
 })();
 
+// Database Migration: Add UNIQUE constraint on CODE column to prevent duplicates
+(async () => {
+    try {
+        // Step 1: Clean up existing duplicates (keep IS_ACTIVE=1 preferred, then newest EDITED_DATE)
+        const duplicatesQuery = `
+            SELECT CODE, COUNT(*) as cnt 
+            FROM store_items 
+            WHERE CODE IS NOT NULL AND CODE != '' 
+            GROUP BY CODE 
+            HAVING cnt > 1
+        `;
+        const duplicateCodes = await pool.query(duplicatesQuery);
+
+        if (duplicateCodes && duplicateCodes.length > 0) {
+            console.log(`[Migration] Found ${duplicateCodes.length} duplicate CODE(s), cleaning up...`);
+            for (const dup of duplicateCodes) {
+                // Get all items with this CODE, ordered by preference
+                const items = await pool.query(
+                    'SELECT ITEM_ID FROM store_items WHERE CODE = ? ORDER BY IS_ACTIVE DESC, EDITED_DATE DESC',
+                    [dup.CODE]
+                );
+                if (items.length > 1) {
+                    // Keep the first one, delete rest
+                    const deleteIds = items.slice(1).map(i => i.ITEM_ID);
+                    await pool.query('DELETE FROM store_items WHERE ITEM_ID IN (?)', [deleteIds]);
+                    console.log(`[Migration] Removed ${deleteIds.length} duplicate(s) for CODE: ${dup.CODE}`);
+                }
+            }
+        }
+
+        // Step 2: Create unique index on CODE column
+        await pool.query("CREATE UNIQUE INDEX idx_store_items_code ON store_items(CODE)");
+        console.log("[Migration] Created UNIQUE index on store_items.CODE - duplicates will now be prevented!");
+    } catch (err) {
+        // Index already exists - that's fine
+        if (err.code === 'ER_DUP_KEYNAME') {
+            console.log("[Migration] UNIQUE index on CODE already exists - good!");
+        } else if (err.code === 'ER_DUP_ENTRY') {
+            console.log("[Migration] Cannot create unique index - duplicates still exist. Will clean on next sync.");
+        } else {
+            console.log("[Migration] CODE unique index:", err.message);
+        }
+    }
+})();
+
 // Sync items from POS to Web App
 // NOTE: STOCK column does not exist in store_items table - stock is managed locally on POS
 // This endpoint handles both item updates AND soft deletes (IS_ACTIVE = 0)
@@ -254,10 +299,16 @@ router.post('/api/items/merge-sync', async (req, res) => {
                     }
                     // If dates are equal, no action needed
                 } else {
-                    // Item only exists on POS - create on Web
+                    // Item only exists on POS - create on Web (or update if duplicate exists)
                     await pool.query(`
                         INSERT INTO store_items (CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE)
                         VALUES (?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE 
+                            NAME = VALUES(NAME),
+                            BUYING_PRICE = VALUES(BUYING_PRICE),
+                            SELLING_PRICE = VALUES(SELLING_PRICE),
+                            IS_ACTIVE = VALUES(IS_ACTIVE),
+                            EDITED_DATE = VALUES(EDITED_DATE)
                     `, [
                         localItem.CODE, localItem.NAME, localItem.BUYING_PRICE,
                         localItem.SELLING_PRICE, localItem.IS_ACTIVE, formatDate(localItem.EDITED_DATE)
