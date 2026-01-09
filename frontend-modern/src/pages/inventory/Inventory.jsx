@@ -203,9 +203,9 @@ export default function Inventory() {
     const stockColumns = [
         { title: 'Code', dataIndex: 'CODE', key: 'CODE', render: (code) => <span className="font-mono font-medium">{code}</span> },
         { title: 'Name', dataIndex: 'NAME', key: 'NAME' },
-        { title: 'Store 1', dataIndex: 'STOCK_S1', key: 'STOCK_S1', align: 'center', render: (val) => <Tag color={val > 0 ? 'blue' : val < 0 ? 'red' : 'default'} className="font-bold">{val} Kg</Tag> },
-        { title: 'Store 2', dataIndex: 'STOCK_S2', key: 'STOCK_S2', align: 'center', render: (val) => <Tag color={val > 0 ? 'purple' : val < 0 ? 'red' : 'default'} className="font-bold">{val} Kg</Tag> },
-        { title: 'Total', dataIndex: 'TOTAL_STOCK', key: 'TOTAL', align: 'center', render: (val) => <span className="font-bold">{val} Kg</span> },
+        { title: 'Store 1', dataIndex: 'STOCK_S1', key: 'STOCK_S1', align: 'center', render: (val) => <Tag color={val > 0 ? 'blue' : val < 0 ? 'red' : 'default'} className="font-bold">{Number(val).toFixed(1)} Kg</Tag> },
+        { title: 'Store 2', dataIndex: 'STOCK_S2', key: 'STOCK_S2', align: 'center', render: (val) => <Tag color={val > 0 ? 'purple' : val < 0 ? 'red' : 'default'} className="font-bold">{Number(val).toFixed(1)} Kg</Tag> },
+        { title: 'Total', dataIndex: 'TOTAL_STOCK', key: 'TOTAL', align: 'center', render: (val) => <span className="font-bold">{Number(val).toFixed(1)} Kg</span> },
         { title: 'Action', key: 'action', align: 'center', render: (_, record) => <Button type="primary" size="small" ghost icon={<StockOutlined />} onClick={() => openAdjustment(record)}>Adjust</Button> }
     ];
 
@@ -215,7 +215,7 @@ export default function Inventory() {
         { title: 'Date', dataIndex: 'CREATED_DATE', key: 'DATE', width: 150, render: (date) => dayjs(date).format('DD MMM YY, hh:mm A') },
         { title: 'Type', dataIndex: 'DISPLAY_TYPE', key: 'TYPE', width: 100, render: (type) => <Tag icon={['AdjIn', 'Opening'].includes(type) ? <RiseOutlined /> : <FallOutlined />} color={['AdjIn', 'Opening'].includes(type) ? 'success' : 'error'}>{type}</Tag> },
         { title: 'Item', dataIndex: 'ITEM_NAME', key: 'ITEM', render: (text, record) => <div className="flex flex-col"><span className="font-medium">{record.ITEM_NAME}</span><span className="text-xs text-gray-400">{record.ITEM_CODE}</span></div> },
-        { title: 'Qty', dataIndex: 'ITEM_QTY', key: 'QTY', width: 80, align: 'right', render: (qty, record) => { const isNeg = ['AdjOut', 'StockClear'].includes(record.DISPLAY_TYPE); return <span className={isNeg ? 'text-red-500 font-bold' : 'text-emerald-600 font-bold'}>{isNeg ? '-' : '+'}{qty} Kg</span>; } },
+        { title: 'Qty', dataIndex: 'ITEM_QTY', key: 'QTY', width: 80, align: 'right', render: (qty, record) => { const isNeg = ['AdjOut', 'StockClear'].includes(record.DISPLAY_TYPE); return <span className={isNeg ? 'text-red-500 font-bold' : 'text-emerald-600 font-bold'}>{isNeg ? '-' : '+'}{Number(qty).toFixed(1)} Kg</span>; } },
         { title: 'Store', dataIndex: 'STORE_NO', key: 'STORE', width: 80, align: 'center', render: (store) => <Tag>S{store}</Tag> },
         { title: 'Reason', dataIndex: 'COMMENTS', key: 'NOTE', ellipsis: true, className: 'text-xs text-gray-500' },
         {
@@ -294,16 +294,16 @@ export default function Inventory() {
                                 <div className="flex flex-col gap-1">
                                     <div className="flex flex-col">
                                         <span className="text-[10px] text-gray-400 uppercase tracking-wider">Store 1</span>
-                                        <span className={`text-sm font-bold ${item.STOCK_S1 > 0 ? 'text-blue-500' : item.STOCK_S1 < 0 ? 'text-red-500' : 'dark:text-gray-300'}`}>{item.STOCK_S1} Kg</span>
+                                        <span className={`text-sm font-bold ${item.STOCK_S1 > 0 ? 'text-blue-500' : item.STOCK_S1 < 0 ? 'text-red-500' : 'dark:text-gray-300'}`}>{Number(item.STOCK_S1).toFixed(1)} Kg</span>
                                     </div>
                                     <div className="flex flex-col mt-1">
                                         <span className="text-[10px] text-gray-400 uppercase tracking-wider">Store 2</span>
-                                        <span className={`text-sm font-bold ${item.STOCK_S2 > 0 ? 'text-purple-500' : item.STOCK_S2 < 0 ? 'text-red-500' : 'dark:text-gray-300'}`}>{item.STOCK_S2} Kg</span>
+                                        <span className={`text-sm font-bold ${item.STOCK_S2 > 0 ? 'text-purple-500' : item.STOCK_S2 < 0 ? 'text-red-500' : 'dark:text-gray-300'}`}>{Number(item.STOCK_S2).toFixed(1)} Kg</span>
                                     </div>
                                 </div>
                                 <div className="flex flex-col items-end">
                                     <span className="text-xs text-gray-500">Total Stock</span>
-                                    <span className="text-xl font-bold text-emerald-500">{item.TOTAL_STOCK} Kg</span>
+                                    <span className="text-xl font-bold text-emerald-500">{Number(item.TOTAL_STOCK).toFixed(1)} Kg</span>
                                 </div>
                             </div>
                         </div>
@@ -340,7 +340,7 @@ export default function Inventory() {
                                     <div className="flex flex-col">
                                         <span className="text-[10px] text-gray-400 uppercase tracking-wider">Qty</span>
                                         <span className={`font-bold ${['AdjOut', 'StockClear'].includes(item.DISPLAY_TYPE) ? 'text-red-500' : 'text-emerald-600'}`}>
-                                            {['AdjOut', 'StockClear'].includes(item.DISPLAY_TYPE) ? '-' : '+'}{item.ITEM_QTY} Kg
+                                            {['AdjOut', 'StockClear'].includes(item.DISPLAY_TYPE) ? '-' : '+'}{Number(item.ITEM_QTY).toFixed(1)} Kg
                                         </span>
                                     </div>
                                 </div>
@@ -359,8 +359,8 @@ export default function Inventory() {
                             <h4 className="font-bold text-gray-800 dark:text-gray-200">{selectedItem.NAME}</h4>
                             <p className="text-xs text-gray-500">{selectedItem.CODE}</p>
                             <div className="flex gap-4 mt-2 text-sm">
-                                <span>Store 1: <b>{selectedItem.STOCK_S1 || 0} Kg</b></span>
-                                <span>Store 2: <b>{selectedItem.STOCK_S2 || 0} Kg</b></span>
+                                <span>Store 1: <b>{Number(selectedItem.STOCK_S1 || 0).toFixed(1)} Kg</b></span>
+                                <span>Store 2: <b>{Number(selectedItem.STOCK_S2 || 0).toFixed(1)} Kg</b></span>
                             </div>
                         </div>
 
