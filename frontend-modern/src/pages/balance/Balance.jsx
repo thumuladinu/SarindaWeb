@@ -178,10 +178,10 @@ export default function Balance() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2 mb-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                                 {DENOMINATIONS.map(denom => (
-                                    <div key={denom} className="flex items-center gap-2">
-                                        <div className="w-16 text-right font-bold text-gray-500 text-sm">{denom}</div>
+                                    <div key={denom} className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 rounded-lg p-2">
+                                        <div className="w-14 sm:w-16 text-right font-bold text-gray-600 dark:text-gray-300 text-sm">{denom}</div>
                                         <span className="text-gray-300">×</span>
                                         <InputNumber
                                             min={0}
@@ -215,8 +215,8 @@ export default function Balance() {
                         {/* BIG BALANCE CARD */}
                         <div className="glass-card p-8 rounded-2xl flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 text-white shadow-xl relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
-                            <span className="text-gray-400 uppercase tracking-widest text-sm mb-2">Current Cash In Hand</span>
-                            <span className={`text-5xl md:text-6xl font-black font-mono tracking-tight ${balanceData.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                            <span className="text-gray-400 uppercase tracking-widest text-xs sm:text-sm mb-2">Current Cash In Hand</span>
+                            <span className={`text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black font-mono tracking-tight break-all ${balanceData.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                                 Rs. {balanceData.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                             <span className="text-gray-500 text-xs mt-4">
@@ -225,41 +225,41 @@ export default function Balance() {
                         </div>
 
                         {/* Breakdown Grid */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <Card className="glass-card border-none shadow-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                            <Card className="glass-card border-none shadow-sm !p-3 sm:!p-4">
                                 <Statistic
-                                    title={<span className="text-gray-500 font-semibold">Opening</span>}
+                                    title={<span className="text-gray-500 font-semibold text-xs sm:text-sm">Opening</span>}
                                     value={balanceData.opening}
                                     precision={2}
                                     prefix="+"
-                                    valueStyle={{ color: '#3f8600', fontWeight: 'bold' }}
+                                    valueStyle={{ color: '#3f8600', fontWeight: 'bold', fontSize: 'clamp(14px, 4vw, 24px)' }}
                                 />
                             </Card>
-                            <Card className="glass-card border-none shadow-sm">
+                            <Card className="glass-card border-none shadow-sm !p-3 sm:!p-4">
                                 <Statistic
-                                    title={<span className="text-gray-500 font-semibold">Sales (Cash)</span>}
+                                    title={<span className="text-gray-500 font-semibold text-xs sm:text-sm">Sales (Cash)</span>}
                                     value={balanceData.sales}
                                     precision={2}
                                     prefix="+"
-                                    valueStyle={{ color: '#3f8600', fontWeight: 'bold' }}
+                                    valueStyle={{ color: '#3f8600', fontWeight: 'bold', fontSize: 'clamp(14px, 4vw, 24px)' }}
                                 />
                             </Card>
-                            <Card className="glass-card border-none shadow-sm">
+                            <Card className="glass-card border-none shadow-sm !p-3 sm:!p-4">
                                 <Statistic
-                                    title={<span className="text-gray-500 font-semibold">Buying (Cash)</span>}
+                                    title={<span className="text-gray-500 font-semibold text-xs sm:text-sm">Buying (Cash)</span>}
                                     value={balanceData.buying}
                                     precision={2}
                                     prefix="-"
-                                    valueStyle={{ color: '#cf1322', fontWeight: 'bold' }}
+                                    valueStyle={{ color: '#cf1322', fontWeight: 'bold', fontSize: 'clamp(14px, 4vw, 24px)' }}
                                 />
                             </Card>
-                            <Card className="glass-card border-none shadow-sm">
+                            <Card className="glass-card border-none shadow-sm !p-3 sm:!p-4">
                                 <Statistic
-                                    title={<span className="text-gray-500 font-semibold">Expenses (Cash)</span>}
+                                    title={<span className="text-gray-500 font-semibold text-xs sm:text-sm">Expenses (Cash)</span>}
                                     value={balanceData.expenses}
                                     precision={2}
                                     prefix="-"
-                                    valueStyle={{ color: '#d46b08', fontWeight: 'bold' }}
+                                    valueStyle={{ color: '#d46b08', fontWeight: 'bold', fontSize: 'clamp(14px, 4vw, 24px)' }}
                                 />
                             </Card>
                         </div>

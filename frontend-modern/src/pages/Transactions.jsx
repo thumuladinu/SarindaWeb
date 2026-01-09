@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Tag, Button, Tooltip, Pagination, Spin, App, Modal } from 'antd';
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Tag, Button, Tooltip, Pagination, Spin, App, Modal, Form, DatePicker, InputNumber, Input } from 'antd';
+import { EditOutlined, DeleteOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
 import TransactionFilters from './transactions/TransactionFilters';
 import TransactionForm from './transactions/TransactionForm';
 import dayjs from 'dayjs';
 import axios from 'axios';
+import { generateReceiptHTML } from '../utils/receiptGenerator';
 
 export default function Transactions() {
     const { message } = App.useApp();
@@ -16,6 +17,11 @@ export default function Transactions() {
     // Edit Drawer State
     const [editDrawerOpen, setEditDrawerOpen] = useState(false);
     const [selectedTransactionId, setSelectedTransactionId] = useState(null);
+
+    // Add Expense Modal State
+    const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+    const [expenseLoading, setExpenseLoading] = useState(false);
+    const [expenseForm] = Form.useForm();
 
     const [filters, setFilters] = useState({
         code: '',
@@ -123,6 +129,95 @@ export default function Transactions() {
         fetchData(); // Refresh list on update
     };
 
+    // Add Expense Handler
+    const handleAddExpense = async (values) => {
+        setExpenseLoading(true);
+        try {
+            // Get current user from cookie (set during login)
+            const Cookies = (await import('js-cookie')).default;
+            const userStr = Cookies.get('rememberedUser');
+            const user = userStr ? JSON.parse(userStr) : null;
+            const createdBy = user?.USER_ID || 1;
+
+            // Generate expense code: WEB-EXP-YYMMDD-NNN
+            const expenseDate = values.DATE || dayjs();
+            const dateStr = expenseDate.format('YYMMDD');
+            // Get a random 3-digit suffix (backend will ensure uniqueness if needed)
+            const randomSuffix = String(Math.floor(Math.random() * 900) + 100);
+            const expenseCode = `WEB-EXP-${dateStr}-${randomSuffix}`;
+
+            const payload = {
+                CODE: expenseCode,
+                TYPE: 'Expenses',
+                STORE_NO: 1, // Default store
+                SUB_TOTAL: values.SUB_TOTAL,
+                AMOUNT_SETTLED: values.SUB_TOTAL,
+                DUE_AMOUNT: 0,
+                COMMENTS: values.COMMENTS || '',
+                CREATED_BY: createdBy,
+                CREATED_DATE: expenseDate.format('YYYY-MM-DD HH:mm:ss'),
+                ITEMS: [] // Expenses don't have items
+            };
+
+            const response = await axios.post('/api/addTransaction', payload);
+
+            if (response.data.success) {
+                message.success('Expense added successfully');
+                setExpenseModalOpen(false);
+                expenseForm.resetFields();
+                fetchData(); // Refresh list
+            } else {
+                message.error(response.data.message || 'Failed to add expense');
+            }
+        } catch (error) {
+            console.error('Error adding expense:', error);
+            message.error('Failed to add expense');
+        } finally {
+            setExpenseLoading(false);
+        }
+    };
+
+    // Open Add Expense Modal
+    const openExpenseModal = () => {
+        expenseForm.setFieldsValue({
+            DATE: dayjs(),
+            SUB_TOTAL: null,
+            COMMENTS: ''
+        });
+        setExpenseModalOpen(true);
+    };
+
+    // View Bill Handler - Opens receipt in new window
+    const handleViewBill = async (record) => {
+        try {
+            // Check if BILL_DATA exists on record, otherwise fetch it
+            let billData = record.BILL_DATA;
+
+            if (!billData) {
+                // Fetch full transaction details if BILL_DATA not in list
+                const response = await axios.post('/api/getTransactionDetails', { TRANSACTION_ID: record.TRANSACTION_ID });
+                if (response.data.success && response.data.result[0]) {
+                    billData = response.data.result[0].BILL_DATA;
+                }
+            }
+
+            if (billData) {
+                const parsedData = typeof billData === 'string' ? JSON.parse(billData) : billData;
+                const receiptHTML = generateReceiptHTML(parsedData);
+                const printWindow = window.open('', '_blank', 'width=400,height=600');
+                if (printWindow) {
+                    printWindow.document.write(receiptHTML);
+                    printWindow.document.close();
+                }
+            } else {
+                message.warning('No bill data available for this transaction');
+            }
+        } catch (error) {
+            console.error('Error viewing bill:', error);
+            message.error('Failed to load bill');
+        }
+    };
+
     const columns = [
         // ... (other columns)
         {
@@ -200,6 +295,9 @@ export default function Transactions() {
             align: 'center',
             render: (_, record) => (
                 <div className="flex gap-2 justify-center">
+                    <Tooltip title="View Bill">
+                        <Button onClick={() => handleViewBill(record)} type="text" shape="circle" icon={<EyeOutlined />} className="text-green-500 hover:bg-green-50 dark:hover:bg-green-500/10" />
+                    </Tooltip>
                     <Tooltip title="Edit">
                         <Button onClick={() => handleEdit(record.TRANSACTION_ID)} type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10" />
                     </Tooltip>
@@ -216,6 +314,18 @@ export default function Transactions() {
             {/* <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Transactions</h2> */}
 
             <TransactionFilters filters={filters} setFilters={setFilters} />
+
+            {/* Add Expense Button */}
+            <div className="flex justify-end mb-4">
+                <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={openExpenseModal}
+                    className="bg-orange-500 hover:bg-orange-600 border-orange-500"
+                >
+                    Add Expense
+                </Button>
+            </div>
 
             {/* Desktop Table */}
             <div className="hidden md:block glass-card rounded-2xl overflow-hidden p-1">
@@ -268,6 +378,7 @@ export default function Transactions() {
                         </div>
 
                         <div className="mt-2 flex justify-end gap-3 pt-2 border-t border-white/5">
+                            <Button onClick={() => handleViewBill(item)} size="small" icon={<EyeOutlined />} className="dark:text-green-400 border-green-500/20 hover:border-green-500/50 bg-green-500/5">View</Button>
                             <Button onClick={() => handleEdit(item.TRANSACTION_ID)} size="small" icon={<EditOutlined />} className="dark:text-blue-400 border-blue-500/20 hover:border-blue-500/50 bg-blue-500/5">Edit</Button>
                             <Button onClick={() => handleDelete(item)} size="small" danger icon={<DeleteOutlined />} className="border-red-500/20 hover:border-red-500/50 bg-red-500/5">Delete</Button>
                         </div>
@@ -285,6 +396,64 @@ export default function Transactions() {
                 transactionId={selectedTransactionId}
                 onSuccess={handleEditSuccess}
             />
+
+            {/* Add Expense Modal */}
+            <Modal
+                title="Add Expense"
+                open={expenseModalOpen}
+                onCancel={() => setExpenseModalOpen(false)}
+                footer={null}
+                destroyOnClose
+            >
+                <Form
+                    form={expenseForm}
+                    layout="vertical"
+                    onFinish={handleAddExpense}
+                    className="mt-4"
+                >
+                    <Form.Item
+                        name="DATE"
+                        label="Date & Time"
+                        rules={[{ required: true, message: 'Please select date and time' }]}
+                    >
+                        <DatePicker
+                            showTime
+                            format="YYYY-MM-DD HH:mm"
+                            className="w-full"
+                        />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="SUB_TOTAL"
+                        label="Amount (Rs.)"
+                        rules={[{ required: true, message: 'Please enter amount' }]}
+                    >
+                        <InputNumber
+                            min={0}
+                            step={0.01}
+                            className="w-full"
+                            placeholder="Enter expense amount"
+                        />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="COMMENTS"
+                        label="Comments"
+                    >
+                        <Input.TextArea
+                            rows={3}
+                            placeholder="Enter expense description or notes"
+                        />
+                    </Form.Item>
+
+                    <div className="flex justify-end gap-2 mt-4">
+                        <Button onClick={() => setExpenseModalOpen(false)}>Cancel</Button>
+                        <Button type="primary" htmlType="submit" loading={expenseLoading}>
+                            Add Expense
+                        </Button>
+                    </div>
+                </Form>
+            </Modal>
         </div>
     );
 }

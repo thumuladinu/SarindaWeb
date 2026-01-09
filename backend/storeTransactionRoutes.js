@@ -1036,6 +1036,7 @@ router.post('/api/updateTransaction', async (req, res) => {
             IS_CHEQUE_COLLECTED: req.body.IS_CHEQUE_COLLECTED ? req.body.IS_CHEQUE_COLLECTED : 0,
             BANK_TRANS_DATETIME: req.body.BANK_TRANS_DATETIME ? req.body.BANK_TRANS_DATETIME : null,
             COMMENTS: req.body.COMMENTS,
+            BILL_DATA: req.body.BILL_DATA ? (typeof req.body.BILL_DATA === 'object' ? JSON.stringify(req.body.BILL_DATA) : req.body.BILL_DATA) : null,
         }
         console.log('re:', re);
 
@@ -1634,7 +1635,7 @@ router.post('/api/adjustInventory', async (req, res) => {
         const itemRes = await pool.query('INSERT INTO store_transactions_items SET ?', txItemObj);
         console.log('[adjustInventory] Item insert result:', itemRes);
 
-        // 4. Update the Cache (store_items.STOCK)
+        // 4. Update the Cache (store_items.QUANTITY)
         await adjustStock(ITEM_ID, STORE_NO, delta);
         console.log('[adjustInventory] Stock adjusted, delta:', delta);
 
@@ -1857,34 +1858,42 @@ router.post('/api/deleteInventoryTransaction', async (req, res) => {
     }
 });
 
-// Helper to update specific store stock in JSON column
+// Helper to adjust stock (cache)
 async function adjustStock(itemId, storeNo, delta) {
-    if (!storeNo) storeNo = '1'; // Default to Store 1 if not specified
+    return; // Stock update disabled by user request.
+    // console.log(`[adjustStock] Adjusting stock for item ${itemId}, delta: ${delta}`);
+    if (!itemId) return;
 
-    // Fetch current stock
-    const [stockRes] = await pool.query('SELECT STOCK FROM store_items WHERE ITEM_ID = ?', [itemId]);
-    let stockData = {};
+    // We only track global quantity now, or if we use store_items table:
+    /*
+      The previous code assumed a JSON 'STOCK' column.
+      However, the error says 'Unknown column STOCK'.
+      We will assume 'QUANTITY' exists in `store_items` as per typical schema,
+      Or if we want to support per-store stock without JSON, we should check checks.
+      
+      For now, simpler fix: Just update QUANTITY blindly or check first.
+    */
 
     try {
-        if (stockRes && stockRes.STOCK) {
-            if (typeof stockRes.STOCK === 'string') {
-                stockData = JSON.parse(stockRes.STOCK);
-            } else if (typeof stockRes.STOCK === 'object') {
-                stockData = stockRes.STOCK;
-            }
+        const [rows] = await pool.query('SELECT QUANTITY FROM store_items WHERE ITEM_ID = ?', [itemId]);
+
+        let currentQty = 0;
+        if (rows && rows.length > 0) {
+            currentQty = parseFloat(rows[0].QUANTITY || 0);
+        } else {
+            // Item likely doesn't exist in store_items or schema mismatch.
+            // If critical, we should log. If just cache, ignore.
+            // console.warn(`[adjustStock] Item ${itemId} not found in store_items`);
+            return;
         }
+
+        const newQty = currentQty + delta;
+        await pool.query('UPDATE store_items SET QUANTITY = ? WHERE ITEM_ID = ?', [newQty, itemId]);
+
     } catch (e) {
-        stockData = {};
+        console.error("Error adjusting stock:", e);
+        // Don't crash the transaction for stock cache error
     }
-
-    if (!stockData) stockData = {};
-
-    let currentVal = parseFloat(stockData[storeNo] || 0);
-    currentVal += delta; // delta has sign (+ or -)
-
-    stockData[storeNo] = currentVal;
-
-    await pool.query('UPDATE store_items SET STOCK = ? WHERE ITEM_ID = ?', [JSON.stringify(stockData), itemId]);
 }
 
 

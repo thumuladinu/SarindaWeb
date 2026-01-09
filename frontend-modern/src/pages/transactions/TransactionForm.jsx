@@ -18,8 +18,16 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
     const [users, setUsers] = useState([]);
     const [transactionType, setTransactionType] = useState(null); // 'Selling', 'Buying', 'Expenses'
     const [transactionItems, setTransactionItems] = useState([]); // Local state for items table
+    const [deductionItems, setDeductionItems] = useState([]); // Container/Return items (Read-only)
     const [receiptData, setReceiptData] = useState(null);
     const [showReceipt, setShowReceipt] = useState(false);
+
+    // Helper to identify deduction items
+    const isDeduction = (item) => {
+        const code = (item.ITEM_CODE || item.code || '').toUpperCase();
+        const name = (item.ITEM_NAME || item.name || '').toLowerCase();
+        return code === 'CONTAINER' || code === 'RETURN' || name.includes('container') || name.includes('return');
+    };
 
     // Load initial data (Customers, Items, Users)
     useEffect(() => {
@@ -74,11 +82,12 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
 
 
 
-                    // Parse BILL_DATA for Receipt View
+                    // Parse BILL_DATA for Receipt View & Lot Entries
+                    let parsedBillData = null;
                     if (fullTx.BILL_DATA) {
                         try {
-                            const parsed = typeof fullTx.BILL_DATA === 'string' ? JSON.parse(fullTx.BILL_DATA) : fullTx.BILL_DATA;
-                            setReceiptData(parsed);
+                            parsedBillData = typeof fullTx.BILL_DATA === 'string' ? JSON.parse(fullTx.BILL_DATA) : fullTx.BILL_DATA;
+                            setReceiptData(parsedBillData);
                         } catch (e) {
                             console.error("Error parsing BILL_DATA", e);
                             setReceiptData(null);
@@ -108,17 +117,62 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
 
                     // Populate Items Table
                     // Map backend items to frontend structure
-                    const mappedItems = fullItems.map((item, index) => ({
-                        key: index,
-                        ITEM_ID: item.ITEM_ID,
-                        // We need code/name for display, hopefully included in join
-                        ITEM_CODE: item.ITEM_CODE,
-                        ITEM_NAME: item.ITEM_NAME,
-                        PRICE: item.PRICE,
-                        QUANTITY: item.QUANTITY,
-                        TOTAL: item.TOTAL
-                    }));
-                    setTransactionItems(mappedItems);
+                    const allMappedItems = fullItems.map((item, index) => {
+                        // Normalize backend data (handle camelCase product* fields)
+                        const rawId = item.ITEM_ID || item.productId;
+                        const rawCode = item.ITEM_CODE || item.productCode;
+                        const rawName = item.ITEM_NAME || item.name || item.productName;
+                        const rawPrice = item.PRICE || item.price;
+                        const rawQty = item.QUANTITY || item.quantity;
+                        const rawTotal = item.TOTAL || item.total;
+
+                        let lotEntries = [];
+                        let matchedBillItem = null;
+
+                        if (parsedBillData && parsedBillData.items && Array.isArray(parsedBillData.items)) {
+                            matchedBillItem = parsedBillData.items.find(bi =>
+                                (rawId && bi.id == rawId) ||
+                                (bi.code && rawCode && bi.code === rawCode) ||
+                                (bi.name && rawName && bi.name === rawName)
+                            );
+
+                            // Fallback: If no match found, try matching by index (assuming order is preserved)
+                            // This is critical for special items like "Container" / "Return" which might have ID=0 but exist in BILL_DATA
+                            if (!matchedBillItem && parsedBillData.items[index]) {
+                                matchedBillItem = parsedBillData.items[index];
+                            }
+
+                            if (matchedBillItem && matchedBillItem.lotEntries) {
+                                lotEntries = matchedBillItem.lotEntries;
+                            }
+                        }
+
+                        // Fallback Name from Bill Data if missing in SQL result
+                        let finalName = rawName;
+                        if (!finalName && matchedBillItem) {
+                            finalName = matchedBillItem.name || matchedBillItem.productName || matchedBillItem.ITEM_NAME;
+                        }
+
+                        return {
+                            originalBillItem: matchedBillItem, // Preserve entire original object
+                            key: index,
+                            ITEM_ID: rawId,
+                            ITEM_CODE: rawCode,
+                            ITEM_NAME: finalName,
+                            PRICE: rawPrice,
+                            QUANTITY: rawQty,
+                            TOTAL: rawTotal,
+                            lotEntries: lotEntries
+                        };
+
+                    });
+
+                    // Split into Regular Items and Deductions
+                    const regularItems = allMappedItems.filter(i => !isDeduction(i));
+                    const deductions = allMappedItems.filter(i => isDeduction(i));
+
+                    setTransactionItems(regularItems);
+                    setDeductionItems(deductions);
                 }
             }
         } catch (error) {
@@ -136,7 +190,8 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
             ITEM_ID: null,
             PRICE: 0,
             QUANTITY: 1,
-            TOTAL: 0
+            TOTAL: 0,
+            lotEntries: [] // Initialize for bags
         };
         setTransactionItems([...transactionItems, newItem]);
     };
@@ -176,6 +231,86 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
         calculateTotals(newItems);
     };
 
+    // --- BAG MANAGEMENT LOGIC (Web) ---
+    const handleAddBag = (itemKey) => {
+        setTransactionItems(prev => prev.map(item => {
+            if (item.key === itemKey) {
+                const currentEntries = item.lotEntries || [];
+                const newEntry = { id: Date.now(), bags: 0, kilos: 0 };
+
+                // Recalculate total (old + new, new is 0)
+                const newTotalWeight = currentEntries.reduce((sum, e) => sum + (parseFloat(e.kilos) || 0), 0);
+
+                return {
+                    ...item,
+                    lotEntries: [...currentEntries, newEntry],
+                    QUANTITY: newTotalWeight,
+                    TOTAL: newTotalWeight * item.PRICE
+                };
+            }
+            return item;
+        }));
+    };
+
+    const handleRemoveBag = (itemKey, entryIndex) => {
+        setTransactionItems(prev => prev.map(item => {
+            if (item.key === itemKey) {
+                const updatedEntries = (item.lotEntries || []).filter((_, i) => i !== entryIndex);
+                const newTotalWeight = updatedEntries.reduce((sum, e) => sum + (parseFloat(e.kilos) || 0), 0);
+
+                return {
+                    ...item,
+                    lotEntries: updatedEntries,
+                    QUANTITY: newTotalWeight,
+                    TOTAL: newTotalWeight * item.PRICE
+                };
+            }
+            return item;
+        }));
+        // Note: calculateTotals triggers via effect or manual call if needed, 
+        // but since we update state, we should also update form totals.
+        // We'll trust the next render or force calculation:
+        // Ideally we should call calculateTotals here but we need the *new* list.
+        // Fixed:
+        setTimeout(() => {
+            const updatedParams = transactionItems.map(item => {
+                if (item.key === itemKey) {
+                    const updatedEntries = (item.lotEntries || []).filter((_, i) => i !== entryIndex);
+                    const newTotalWeight = updatedEntries.reduce((sum, e) => sum + (parseFloat(e.kilos) || 0), 0);
+                    return { ...item, lotEntries: updatedEntries, QUANTITY: newTotalWeight, TOTAL: newTotalWeight * item.PRICE };
+                }
+                return item;
+            });
+            calculateTotals(updatedParams);
+        }, 0);
+    };
+
+    const handleBagChange = (itemKey, entryIndex, field, value) => {
+        setTransactionItems(prev => {
+            const newItems = prev.map(item => {
+                if (item.key === itemKey) {
+                    const updatedEntries = [...(item.lotEntries || [])];
+                    updatedEntries[entryIndex] = {
+                        ...updatedEntries[entryIndex],
+                        [field]: parseFloat(value) || 0
+                    };
+
+                    const newTotalWeight = updatedEntries.reduce((sum, e) => sum + (parseFloat(e.kilos) || 0), 0);
+
+                    return {
+                        ...item,
+                        lotEntries: updatedEntries,
+                        QUANTITY: newTotalWeight,
+                        TOTAL: newTotalWeight * item.PRICE
+                    };
+                }
+                return item;
+            });
+            calculateTotals(newItems); // Sync totals immediately
+            return newItems;
+        });
+    };
+
     const calculateTotals = (currentItems) => {
         const subTotal = currentItems.reduce((sum, item) => sum + (Number(item.TOTAL) || 0), 0);
         form.setFieldsValue({ SUB_TOTAL: subTotal });
@@ -203,7 +338,61 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
             const payload = {
                 ...values,
                 TRANSACTION_ID: transactionId,
-                ITEMS: transactionItems,
+                ITEMS: [...transactionItems, ...deductionItems], // Merge items + deductions
+                // Build BILL_DATA by updating original items in-place, preserving all nested data
+                BILL_DATA: (() => {
+                    // Start with original receipt data
+                    const updatedBillData = { ...(receiptData || {}) };
+
+                    // If no original items, fallback to simple mapping
+                    if (!updatedBillData.items || !Array.isArray(updatedBillData.items)) {
+                        updatedBillData.items = [...transactionItems, ...deductionItems].map(i => ({
+                            id: i.ITEM_ID,
+                            name: i.ITEM_NAME || 'Item',
+                            price: i.PRICE,
+                            quantity: i.QUANTITY,
+                            total: i.TOTAL,
+                            lotEntries: i.lotEntries || []
+                        }));
+                        return updatedBillData;
+                    }
+
+                    // Update original items in place - only change what was actually edited
+                    updatedBillData.items = updatedBillData.items.map((originalItem, idx) => {
+                        // Find matching edited item by id, name, or index
+                        const allEditedItems = [...transactionItems, ...deductionItems];
+                        let editedItem = allEditedItems.find(ei =>
+                            (ei.originalBillItem === originalItem) ||
+                            (ei.ITEM_ID && originalItem.id == ei.ITEM_ID) ||
+                            (originalItem.name && ei.ITEM_NAME === originalItem.name)
+                        );
+
+                        // Fallback to index if no match found
+                        if (!editedItem && allEditedItems[idx]) {
+                            editedItem = allEditedItems[idx];
+                        }
+
+                        if (!editedItem) {
+                            // Item was not in our edit list - keep original completely
+                            return originalItem;
+                        }
+
+                        // Preserve ALL original properties, only update specific editable fields
+                        return {
+                            ...originalItem, // Keep ALL original nested data (deductions, adjustments, etc.)
+                            // Only update the fields that could have been edited:
+                            price: editedItem.PRICE,
+                            quantity: editedItem.QUANTITY,
+                            total: editedItem.TOTAL,
+                            // Update lotEntries only if they exist and were modified
+                            lotEntries: (editedItem.lotEntries && editedItem.lotEntries.length > 0)
+                                ? editedItem.lotEntries
+                                : (originalItem.lotEntries || [])
+                        };
+                    });
+
+                    return updatedBillData;
+                })(),
                 DATE: values.DATE ? values.DATE.format('YYYY-MM-DD HH:mm:ss') : null,
                 DUE_DATE: values.DUE_DATE ? values.DUE_DATE.format('YYYY-MM-DD') : null,
                 CHEQUE_EXPIRY: values.CHEQUE_EXPIRY ? values.CHEQUE_EXPIRY.format('YYYY-MM-DD') : null,
@@ -236,19 +425,53 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
             dataIndex: 'ITEM_ID',
             key: 'ITEM_ID',
             width: '30%',
-            render: (text, record) => (
-                <Select
-                    showSearch
-                    placeholder="Select Item"
-                    value={text}
-                    onChange={(val) => handleItemChange(record.key, 'ITEM_ID', val)}
-                    className="w-full"
-                    filterOption={(input, option) =>
-                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                    }
-                    options={items.map(i => ({ value: i.ITEM_ID, label: `${i.CODE} - ${i.NAME}` }))}
-                />
-            )
+            render: (text, record) => {
+                // Check if ITEM_ID matches a known item
+                const isKnownItem = items.some(i => i.ITEM_ID === record.ITEM_ID);
+                // If it has an ID but not in list (archived?) OR has no ID but has Name (Special) => Treat as Special if explicitly desired or fallback
+                // User said: "Show direct name without item select from.. becuse they dont have at that databse"
+
+                // Logic: If ITEM_ID is null/0, OR if it's set but not in our 'items' list, show Input for Name.
+                // Otherwise show Select.
+
+                const showInput = !record.ITEM_ID || !isKnownItem;
+
+                if (showInput) {
+                    return (
+                        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                            <Input
+                                placeholder="Item Name"
+                                value={record.ITEM_NAME}
+                                onChange={(e) => handleItemChange(record.key, 'ITEM_NAME', e.target.value)}
+                                autoFocus={!record.ITEM_NAME}
+                            />
+                        </div>
+                    );
+                }
+
+                return (
+                    <Select
+                        showSearch
+                        placeholder="Select Item"
+                        value={text}
+                        onChange={(val) => handleItemChange(record.key, 'ITEM_ID', val)}
+                        className="w-full"
+                        filterOption={(input, option) =>
+                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        }
+                        options={items.map(i => ({ value: i.ITEM_ID, label: `${i.CODE} - ${i.NAME}` }))}
+                        dropdownRender={(menu) => (
+                            <>
+                                {menu}
+                                <Divider style={{ margin: '8px 0' }} />
+                                <Button type="text" block icon={<PlusOutlined />} onClick={() => handleItemChange(record.key, 'ITEM_ID', null)}>
+                                    Add Special Item
+                                </Button>
+                            </>
+                        )}
+                    />
+                );
+            }
         },
         {
             title: 'Price',
@@ -275,7 +498,8 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                     min={0}
                     value={text}
                     onChange={(val) => handleItemChange(record.key, 'QUANTITY', val)}
-                    className="w-full"
+                    disabled={(record.lotEntries && record.lotEntries.length > 0) || (record.ITEM_NAME && record.ITEM_NAME.toLowerCase().includes('lot'))}
+                    className={`w-full ${(record.lotEntries && record.lotEntries.length > 0) || (record.ITEM_NAME && record.ITEM_NAME.toLowerCase().includes('lot')) ? 'opacity-70' : ''}`}
                 />
             )
         },
@@ -387,7 +611,53 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                     columns={itemColumns}
                                     pagination={false}
                                     size="small"
-                                    rowClassName="bg-white dark:bg-black/20"
+                                    rowClassName="bg-white dark:bg-black/20 align-top"
+                                    expandable={{
+                                        expandedRowRender: (record) => (
+                                            <div className="p-4 bg-gray-50 dark:bg-black/40 rounded-lg mx-4 mb-2 border border-gray-100 dark:border-white/5">
+                                                <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Bag Details (Lot)</h4>
+                                                {record.lotEntries && record.lotEntries.map((entry, idx) => (
+                                                    <div key={idx} className="flex gap-4 mb-2 items-center">
+                                                        <div className="flex-1">
+                                                            <span className="text-[10px] text-gray-400 block mb-1">Weight (Kg)</span>
+                                                            <InputNumber
+                                                                size="small"
+                                                                value={entry.kilos}
+                                                                onChange={v => handleBagChange(record.key, idx, 'kilos', v)}
+                                                                className="w-full"
+                                                            />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <span className="text-[10px] text-gray-400 block mb-1">Bags</span>
+                                                            <InputNumber
+                                                                size="small"
+                                                                value={entry.bags}
+                                                                onChange={v => handleBagChange(record.key, idx, 'bags', v)}
+                                                                className="w-full"
+                                                            />
+                                                        </div>
+                                                        <Button
+                                                            danger
+                                                            type="text"
+                                                            icon={<DeleteOutlined />}
+                                                            size="small"
+                                                            className="mt-4"
+                                                            onClick={() => handleRemoveBag(record.key, idx)}
+                                                        />
+                                                    </div>
+                                                ))}
+                                                <Button
+                                                    type="dashed"
+                                                    size="small"
+                                                    onClick={() => handleAddBag(record.key)}
+                                                    className="w-full mt-2 text-xs"
+                                                >
+                                                    + Add Bag Line
+                                                </Button>
+                                            </div>
+                                        ),
+                                        rowExpandable: (record) => true,
+                                    }}
                                 />
                             </div>
 
@@ -433,6 +703,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                                     value={item.QUANTITY}
                                                     onChange={(val) => handleItemChange(item.key, 'QUANTITY', val)}
                                                     className="w-full"
+                                                    disabled={(item.lotEntries && item.lotEntries.length > 0) || (item.ITEM_NAME && item.ITEM_NAME.toLowerCase().includes('lot'))}
                                                 />
                                             </div>
                                         </div>
@@ -441,12 +712,79 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                             <span className="text-xs text-gray-400">Total</span>
                                             <span className="font-bold text-gray-700 dark:text-gray-200 text-lg">Rs.{item.TOTAL}</span>
                                         </div>
+
+                                        {/* Mobile Bag Details */}
+                                        {((item.lotEntries && item.lotEntries.length > 0) || (item.ITEM_NAME && item.ITEM_NAME.toLowerCase().includes('lot'))) && (
+                                            <div className="mt-2 pt-2 border-t border-dashed border-gray-200 dark:border-white/10">
+                                                <div className="text-xs font-semibold text-gray-500 mb-2">Bag Details</div>
+                                                {item.lotEntries && item.lotEntries.map((entry, idx) => (
+                                                    <div key={idx} className="flex gap-2 mb-2 items-center">
+                                                        <InputNumber
+                                                            size="small"
+                                                            placeholder="Kg"
+                                                            value={entry.kilos}
+                                                            onChange={v => handleBagChange(item.key, idx, 'kilos', v)}
+                                                            style={{ width: '80px' }}
+                                                        />
+                                                        <span className="text-xs text-gray-400">kg</span>
+                                                        <InputNumber
+                                                            size="small"
+                                                            placeholder="Bags"
+                                                            value={entry.bags}
+                                                            onChange={v => handleBagChange(item.key, idx, 'bags', v)}
+                                                            style={{ width: '60px' }}
+                                                        />
+                                                        <span className="text-xs text-gray-400">bags</span>
+                                                        <Button
+                                                            danger
+                                                            type="text"
+                                                            icon={<DeleteOutlined />}
+                                                            size="small"
+                                                            onClick={() => handleRemoveBag(item.key, idx)}
+                                                        />
+                                                    </div>
+                                                ))}
+                                                <Button
+                                                    type="dashed"
+                                                    size="small"
+                                                    block
+                                                    onClick={() => handleAddBag(item.key)}
+                                                    className="text-xs"
+                                                >
+                                                    + Add Bag Line
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                                 {transactionItems.length === 0 && (
                                     <div className="text-center py-4 text-gray-400 text-sm">No items added</div>
                                 )}
                             </div>
+
+                            {/* Deductions (Containers/Returns) Summary */}
+                            {deductionItems.length > 0 && (
+                                <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-xl mx-2 md:mx-4 mb-4">
+                                    <span className="text-xs font-bold text-red-500 uppercase tracking-widest block mb-2">
+                                        Containers & Returns
+                                    </span>
+                                    <div className="flex flex-col gap-2">
+                                        {deductionItems.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-sm p-2 bg-white dark:bg-red-900/20 rounded border border-red-100 dark:border-red-900/30">
+                                                <span className="text-gray-700 dark:text-gray-300">
+                                                    {item.ITEM_NAME || 'Unknown'}
+                                                    <span className="text-gray-400 text-xs ml-2">
+                                                        ({item.QUANTITY} kg @ Rs.{item.PRICE})
+                                                    </span>
+                                                </span>
+                                                <span className="font-mono font-medium text-red-600 dark:text-red-400">
+                                                    - Rs.{Math.abs(item.TOTAL || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

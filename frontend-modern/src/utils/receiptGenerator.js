@@ -205,11 +205,26 @@ export const generateReceiptHTML = (data) => {
     }
   });
 
+  // Header content - different for sell mode
   let headerContent = `
       <div class="code">${billId || data.code}</div>
       ${s2BillId ? `<div style="font-weight:bold; font-size:12px; margin-bottom:2px">QR Ref: ${s2BillId}</div>` : ''}
       <div class="date-time">${date || ''} ${time || ''}</div>
     `;
+
+  // Sell mode: Big S box on left, bill info aligned left after box
+  if (mode === 'sell') {
+    headerContent = `
+      <div class="sell-header">
+        <div class="sell-box">S</div>
+        <div class="sell-info">
+          <div class="code">${billId || data.code}</div>
+          ${s2BillId ? `<div style="font-weight:bold; font-size:12px;">QR: ${s2BillId}</div>` : ''}
+          <div class="date-time">${date || ''} ${time || ''}</div>
+        </div>
+      </div>
+    `;
+  }
 
   return `
   <!DOCTYPE html>
@@ -236,6 +251,12 @@ export const generateReceiptHTML = (data) => {
       thead th:last-child { text-align: right; }
       tbody td { text-align: right; }
       tbody td:first-child { text-align: left; }
+      /* Sell mode header - Big S box with bill info aligned left */
+      .sell-header { display: flex; align-items: stretch; gap: 8px; margin-bottom: 5px; }
+      .sell-box { width: 40%; min-height: 50px; background: #000; color: #fff; font-size: 40px; font-weight: bold; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .sell-info { flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: left; padding-left: 2px; }
+      .sell-info .code { font-weight: bold; font-size: 14px; }
+      .sell-info .date-time { font-size: 12px; }
     </style>
   </head>
   <body>
