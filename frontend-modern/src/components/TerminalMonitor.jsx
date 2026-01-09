@@ -78,12 +78,7 @@ const TerminalMonitor = () => {
                 )
             )
         },
-        {
-            title: 'Version',
-            dataIndex: 'version',
-            key: 'version',
-            className: 'text-gray-500 font-mono text-xs'
-        },
+
         {
             title: 'Connected Since',
             dataIndex: 'connectedAt',
@@ -154,7 +149,6 @@ const TerminalMonitor = () => {
                             </div>
 
                             <div className="flex justify-between items-center mt-1 pt-2 border-t border-gray-200 dark:border-white/10">
-                                <span className="text-[10px] text-gray-400 font-mono">v{term.version}</span>
                                 <div className="flex items-center gap-2">
                                     {/* <span className={`text-[10px] font-bold ${term.allowed ? 'text-green-600' : 'text-red-500'}`}>
                                         {term.allowed ? 'SYNC ON' : 'BLOCKED'}
