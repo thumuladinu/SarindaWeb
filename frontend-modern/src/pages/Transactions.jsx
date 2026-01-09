@@ -3,6 +3,7 @@ import { Table, Tag, Button, Tooltip, Pagination, Spin, App, Modal, Form, DatePi
 import { EditOutlined, DeleteOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
 import TransactionFilters from './transactions/TransactionFilters';
 import TransactionForm from './transactions/TransactionForm';
+import TransactionView from './transactions/TransactionView';
 import dayjs from 'dayjs';
 import axios from 'axios';
 import { generateReceiptHTML } from '../utils/receiptGenerator';
@@ -17,6 +18,15 @@ export default function Transactions() {
     // Edit Drawer State
     const [editDrawerOpen, setEditDrawerOpen] = useState(false);
     const [selectedTransactionId, setSelectedTransactionId] = useState(null);
+
+    // View Modal State
+    const [viewModalOpen, setViewModalOpen] = useState(false);
+    const [viewTransactionId, setViewTransactionId] = useState(null);
+
+    // Receipt View Modal State (like 'View Original Bill' in edit form)
+    const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+    const [receiptData, setReceiptData] = useState(null);
+    const [receiptLoading, setReceiptLoading] = useState(false);
 
     // Add Expense Modal State
     const [expenseModalOpen, setExpenseModalOpen] = useState(false);
@@ -187,34 +197,35 @@ export default function Transactions() {
         setExpenseModalOpen(true);
     };
 
-    // View Bill Handler - Opens receipt in new window
+    // View Bill Handler - Opens receipt in modal popup (exactly like 'View Original Bill' button in edit form)
     const handleViewBill = async (record) => {
+        setReceiptLoading(true);
+        setReceiptModalOpen(true);
         try {
             // Check if BILL_DATA exists on record, otherwise fetch it
             let billData = record.BILL_DATA;
 
             if (!billData) {
                 // Fetch full transaction details if BILL_DATA not in list
-                const response = await axios.post('/api/getTransactionDetails', { TRANSACTION_ID: record.TRANSACTION_ID });
-                if (response.data.success && response.data.result[0]) {
-                    billData = response.data.result[0].BILL_DATA;
+                const response = await axios.get(`/api/getTransactionDetails/${record.TRANSACTION_ID}`);
+                if (response.data.success && response.data.transaction) {
+                    billData = response.data.transaction.BILL_DATA;
                 }
             }
 
             if (billData) {
                 const parsedData = typeof billData === 'string' ? JSON.parse(billData) : billData;
-                const receiptHTML = generateReceiptHTML(parsedData);
-                const printWindow = window.open('', '_blank', 'width=400,height=600');
-                if (printWindow) {
-                    printWindow.document.write(receiptHTML);
-                    printWindow.document.close();
-                }
+                setReceiptData(parsedData);
             } else {
                 message.warning('No bill data available for this transaction');
+                setReceiptModalOpen(false);
             }
         } catch (error) {
-            console.error('Error viewing bill:', error);
+            console.error('Error loading bill:', error);
             message.error('Failed to load bill');
+            setReceiptModalOpen(false);
+        } finally {
+            setReceiptLoading(false);
         }
     };
 
@@ -388,6 +399,39 @@ export default function Transactions() {
                     <div className="text-center py-10 text-gray-500">No transactions found</div>
                 )}
             </div>
+
+            {/* Receipt View Modal - Exactly like 'View Original Bill' in edit form */}
+            <Modal
+                title={
+                    <div className="flex justify-between items-center pr-8">
+                        <span>Original Receipt View</span>
+                        {receiptData && <Tag color="blue">Bill #{receiptData?.billId || receiptData?.code}</Tag>}
+                    </div>
+                }
+                open={receiptModalOpen}
+                onCancel={() => { setReceiptModalOpen(false); setReceiptData(null); }}
+                footer={[
+                    <Button key="close" onClick={() => { setReceiptModalOpen(false); setReceiptData(null); }}>Close</Button>
+                ]}
+                width={400}
+                className="receipt-modal"
+            >
+                {receiptLoading ? (
+                    <div className="flex justify-center items-center h-[500px]">
+                        <Spin size="large" />
+                    </div>
+                ) : receiptData ? (
+                    <div className="h-[500px] w-full bg-gray-50 overflow-hidden border border-gray-200">
+                        <iframe
+                            srcDoc={generateReceiptHTML(receiptData)}
+                            style={{ width: '100%', height: '100%', border: 'none' }}
+                            title="Receipt Preview"
+                        />
+                    </div>
+                ) : (
+                    <div className="text-center py-10 text-gray-400">No receipt data</div>
+                )}
+            </Modal>
 
             {/* Edit Drawer */}
             <TransactionForm
