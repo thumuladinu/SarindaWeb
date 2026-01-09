@@ -6,7 +6,11 @@ module.exports = {
         env: {
             NODE_ENV: "production",
             PORT: 3001,
-            // DB Credentials will be loaded from .env file or system env
+            DB_HOST: "localhost",
+            DB_USER: "sarinda_user",
+            DB_PASSWORD: "Sarinda@2024",
+            DB_NAME: "chamika_rice_mill",
+            FRONTEND_URL: "*"
         }
     }]
 };
