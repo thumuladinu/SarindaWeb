@@ -61,7 +61,7 @@ const Login = () => {
                                 Welcome Back
                             </h1>
                             <p className="text-gray-400 text-sm font-medium">
-                                Sign in to Sarinda POS
+                                Sign in to Ishanka Stores Management System
                             </p>
                         </div>
                     </div>
