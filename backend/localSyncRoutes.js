@@ -70,6 +70,52 @@ pool.query = util.promisify(pool.query);
     }
 })();
 
+// Database Migration: Add UNIQUE constraint on store_transactions.CODE to prevent duplicate transactions
+(async () => {
+    try {
+        // Step 1: Clean up existing duplicate transactions (keep newest by CREATED_DATE)
+        const duplicatesQuery = `
+            SELECT CODE, COUNT(*) as cnt 
+            FROM store_transactions 
+            WHERE CODE IS NOT NULL AND CODE != '' 
+            GROUP BY CODE 
+            HAVING cnt > 1
+        `;
+        const duplicateCodes = await pool.query(duplicatesQuery);
+
+        if (duplicateCodes && duplicateCodes.length > 0) {
+            console.log(`[Migration] Found ${duplicateCodes.length} duplicate transaction CODE(s), cleaning up...`);
+            for (const dup of duplicateCodes) {
+                // Get all transactions with this CODE, keep newest
+                const items = await pool.query(
+                    'SELECT TRANSACTION_ID FROM store_transactions WHERE CODE = ? ORDER BY CREATED_DATE DESC, TRANSACTION_ID DESC',
+                    [dup.CODE]
+                );
+                if (items.length > 1) {
+                    // Keep the first (newest), delete rest
+                    const deleteIds = items.slice(1).map(i => i.TRANSACTION_ID);
+                    // Also delete related transaction items
+                    await pool.query('DELETE FROM store_transactions_items WHERE TRANSACTION_ID IN (?)', [deleteIds]);
+                    await pool.query('DELETE FROM store_transactions WHERE TRANSACTION_ID IN (?)', [deleteIds]);
+                    console.log(`[Migration] Removed ${deleteIds.length} duplicate transaction(s) for CODE: ${dup.CODE}`);
+                }
+            }
+        }
+
+        // Step 2: Create unique index on CODE column
+        await pool.query("CREATE UNIQUE INDEX idx_store_transactions_code ON store_transactions(CODE)");
+        console.log("[Migration] Created UNIQUE index on store_transactions.CODE - transaction duplicates will now be prevented!");
+    } catch (err) {
+        if (err.code === 'ER_DUP_KEYNAME') {
+            console.log("[Migration] UNIQUE index on transactions.CODE already exists - good!");
+        } else if (err.code === 'ER_DUP_ENTRY') {
+            console.log("[Migration] Cannot create unique index on transactions - duplicates still exist.");
+        } else {
+            console.log("[Migration] Transactions CODE unique index:", err.message);
+        }
+    }
+})();
+
 // Sync items from POS to Web App
 // NOTE: STOCK column does not exist in store_items table - stock is managed locally on POS
 // This endpoint handles both item updates AND soft deletes (IS_ACTIVE = 0)
@@ -633,6 +679,26 @@ router.post('/api/transactions/sync', async (req, res) => {
     console.log('Transaction sync received:', transaction);
 
     try {
+        const transactionCode = transaction.code || `S${transaction.storeNo}-${Date.now()}`;
+
+        // CHECK FOR DUPLICATE: If transaction with same CODE already exists, return success
+        const [existingTx] = await pool.query(
+            'SELECT TRANSACTION_ID FROM store_transactions WHERE CODE = ? LIMIT 1',
+            [transactionCode]
+        );
+
+        if (existingTx && existingTx.TRANSACTION_ID) {
+            console.log(`[Sync] Transaction ${transactionCode} already exists (ID: ${existingTx.TRANSACTION_ID}) - skipping duplicate`);
+            return res.status(200).json({
+                success: true,
+                message: 'Transaction already synced',
+                transactionId: existingTx.TRANSACTION_ID,
+                duplicate: true,
+                storeNo: transaction.storeNo,
+                syncedAt: new Date().toISOString()
+            });
+        }
+
         // Format dates
         const createdDate = transaction.createdAt ? toMySQLDateTime(transaction.createdAt) : new Date().toISOString().slice(0, 19).replace('T', ' ');
 
@@ -705,7 +771,7 @@ router.post('/api/transactions/sync', async (req, res) => {
                 COMMENTS, CREATED_BY, STORE_NO, CREATED_DATE, IS_ACTIVE, BILL_DATA
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         `, [
-            transaction.code || `S${transaction.storeNo}-${Date.now()}`,
+            transactionCode,
             transaction.type || 'Selling',
             transaction.customerId || null,
             transaction.paymentMethod || 'Cash',
@@ -728,7 +794,7 @@ router.post('/api/transactions/sync', async (req, res) => {
         ]);
 
         const transactionId = result.insertId;
-        console.log(`[Sync] Transaction ${transaction.code} saved with store=${transaction.storeNo}, source=${transaction.sourceType}`);
+        console.log(`[Sync] Transaction ${transactionCode} saved with store=${transaction.storeNo}, source=${transaction.sourceType}`);
 
         // Insert transaction items with proper ITEM_ID lookup
         // Special symbolic codes that are not actual inventory items
