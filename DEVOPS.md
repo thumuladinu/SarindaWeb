@@ -103,3 +103,31 @@ Add these 3 secrets:
 ## 6. Deploy
 1.  Push your code changes to GitHub `main` branch.
 2.  Go to the **Actions** tab in GitHub to watch the deployment proceed.
+
+## 6. Deploy Updates (One-Click)
+
+I have created a simple script to handle updates for both Code and Database.
+
+### **How to Use:**
+
+1.  **Code Changes**:
+    - Just make your changes in VS Code (Frontend, Backend, etc.).
+    - Save your files.
+
+2.  **Database Changes**:
+    - If you added a new column or table locally and want to sync it:
+    - Create a new .sql file in `SarindaWeb/db_updates/`.
+    - Example: `SarindaWeb/db_updates/01_add_new_table.sql`.
+    - Paste your `ALTER TABLE` or `CREATE TABLE` commands there.
+
+3.  **Run the Update Script**:
+    - Open your terminal in the `SarindaWeb/` folder.
+    - Run:
+      ```bash
+      ./publish_update.sh
+      ```
+    - The script will:
+      - Ask to confirm database changes (if any).
+      - Apply them safely to the Production Database.
+      - Commit and Push your code to GitHub.
+      - Trigger the automated deployment pipeline.

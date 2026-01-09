@@ -7,6 +7,7 @@ const InstallPWA = () => {
     const [promptInstall, setPromptInstall] = useState(null);
     const [isIOS, setIsIOS] = useState(false);
     const [isStandalone, setIsStandalone] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
     const { isOpen, onOpen, onOpenChange } = useDisclosure();
 
     useEffect(() => {
@@ -19,8 +20,14 @@ const InstallPWA = () => {
         window.addEventListener("beforeinstallprompt", handler);
 
         // Check for iOS
-        const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        const ios = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
         setIsIOS(ios);
+
+        // Strict Mobile Check (phones/tablets only)
+        // Exclude generic "Macintosh" or "Windows" unless they have touch points (tablets)
+        const mobileCheck = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+        setIsMobile(mobileCheck);
 
         // Check if already in standalone mode
         const checkStandalone = () => {
@@ -53,18 +60,22 @@ const InstallPWA = () => {
         };
     }, []);
 
-    const handleInstallClick = (e) => {
-        e.preventDefault();
+    const handleInstallClick = async (e) => {
+        // e.preventDefault(); // Remove this as it might block touch events on some libs
+
         if (isIOS) {
             onOpen();
         } else if (promptInstall) {
             promptInstall.prompt();
+            const { outcome } = await promptInstall.userChoice;
+            setPromptInstall(null);
         }
     };
 
     // Helper to determine if we should show the button
     // Show if: (Android AND supportsPWA) OR (iOS AND NOT Standalone)
-    const shouldShow = !isStandalone && (supportsPWA || isIOS);
+    // AND must be a mobile device
+    const shouldShow = !isStandalone && isMobile && (supportsPWA || isIOS);
 
     if (!shouldShow) return null;
 
@@ -76,6 +87,7 @@ const InstallPWA = () => {
                 size="sm"
                 startContent={<DownloadOutlined />}
                 onPress={handleInstallClick}
+                onClick={handleInstallClick} // Fallback
                 className="font-medium"
             >
                 Install App

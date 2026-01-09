@@ -67,7 +67,7 @@ export default function Dashboard() {
         <div className="animate-fade-in p-4 pb-24 md:pb-8 max-w-[1600px] mx-auto">
             {/* Header */}
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                <div>
+                <div className="hidden md:block">
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-1">Dashboard</h1>
                     <p className="text-gray-500 dark:text-gray-400">Today's Overview & Active Users</p>
                 </div>
