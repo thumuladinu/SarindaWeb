@@ -42,20 +42,24 @@ jobs:
           mkdir -p /var/www/sarinda-pos
           mkdir -p /var/www/html
 
-          # Pull latest code or Clone if not exists
-          # Note: Initial clone is manual, this assumes repo exists
+          # Pull latest code
           cd /var/www/sarinda-pos
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
+
+          # Install and Build Frontend ON THE SERVER
+          cd frontend-modern
+          npm install
+          npm run build
+
+          # Copy Frontend Build to Nginx Root
+          rm -rf /var/www/html/*
+          cp -r dist/* /var/www/html/
 
           # Install Backend Dependencies
-          cd backend
+          cd ../backend
           npm install
           
           # Restart Backend
-          pm2 restart sarinda-backend || pm2 start devops/ecosystem.config.js
+          pm2 restart sarinda-backend || pm2 start ../devops/ecosystem.config.js
 
-          # Copy Frontend Build to Nginx Root
-          # We assume the repo is at /var/www/sarinda-pos
-          # We copy the dist folder to /var/www/html
-          rm -rf /var/www/html/*
-          cp -r /var/www/sarinda-pos/frontend-modern/dist/* /var/www/html/
