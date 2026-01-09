@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receipt</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Source Sans Pro', sans-serif;
+    }
+
+    .container {
+      display: block;
+      width: 76mm;
+      background: #fff;
+      padding: 10px;
+      margin: 0 0 0 0;
+      /*box-shadow: 0 3px 10px rgb(0 0 0 / 0.2);*/
+    }
+
+    .receipt_header {
+      padding-bottom: 10px;
+      border-bottom: 1px dashed #000;
+      text-align: center;
+      /*bold font*/
+
+    }
+
+    .receipt_header h1 {
+      font-size: 20px;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+    }
+
+    .receipt_header h1 span {
+      display: block;
+      font-size: 25px;
+    }
+
+    .receipt_header h2 {
+      font-size: 14px;
+      color: #000000;
+      font-weight: 300;
+    }
+
+    .receipt_header h2 span {
+      display: block;
+    }
+
+    .receipt_body {
+      margin-top: 10px;
+    }
+
+    table {
+      width: 100%;
+      table-layout: auto; /* Added this line for auto-adjusting column width */
+    }
+
+    thead, tfoot {
+      position: relative;
+    }
+
+    thead th:not(:last-child) {
+      text-align: left;
+      /*font-size: 14px;*/
+    }
+
+    thead th:last-child {
+      text-align: right;
+    }
+
+    thead::after {
+      content: '';
+      width: 100%;
+      border-bottom: 1px dashed #000;
+      display: block;
+      position: absolute;
+    }
+
+    /*table head middle column align center*/
+    /*thead th:nth-child(2) {*/
+    /*  text-align: center;*/
+    /*}*/
+
+    tbody td:not(:last-child), tfoot td:not(:last-child) {
+      text-align: right;
+    }
+
+    tbody td:last-child, tfoot td:last-child{
+      text-align: right;
+    }
+
+    tbody tr:first-child td {
+      padding-top: 15px;
+    }
+
+    tbody tr:last-child td {
+      padding-bottom: 5px;
+    }
+
+    /*tablebody first column align left*/
+    tbody td:first-child {
+      text-align: left;
+    }
+
+    /*tfoot tr:first-child td {*/
+    /*  padding-top: 15px;*/
+    /*  text-align: left;*/
+    /*}*/
+
+    /*tfoot::before {*/
+    /*  content: '';*/
+    /*  width: 100%;*/
+    /*  border-top: 1px dashed #000;*/
+    /*  display: block;*/
+    /*  position: absolute;*/
+    /*}*/
+
+    /*tfoot tr:first-child td:first-child, tfoot tr:first-child td:last-child {*/
+    /*  font-weight: bold;*/
+    /*  font-size: 20px;*/
+    /*}*/
+
+    .date_time_con {
+      display: flex;
+      justify-content: space-between; /* Distribute evenly */
+      /*column-gap: 25px;*/
+      align-items: center;
+      padding-bottom: 10px;
+    }
+
+    .date_time_con .code {
+      float: left;
+    }
+
+    /*.date_time_con .date {*/
+    /*  float:*/
+    /*}*/
+
+    .date_time_con .date-time {
+      float: right;
+    }
+
+
+    .items {
+      margin-top: 25px;
+      border-top: 1px dashed #000; /* Add this line */
+
+    }
+
+    .total {
+      margin-top: 5px;
+      padding-top: 5px;
+      text-align: right;
+    }
+
+    h3 {
+      border-top: 1px dashed #000;
+      padding-top: 5px;
+      margin-top: 5px;
+      text-align: center;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="receipt_header">
+    <h1><span>Ishanka Stores</span></h1>
+    <h2>K.A.Anurarathna Stores</br> Market Road</br>Sooriyawewa.</br>TP: 077 367 7084</h2>
+  </div>
+
+  <div class="receipt_body">
+
+    <div class="date_time_con">
+      <div class="code">{{CODE}}</div>
+      <div class="date-time">{{DATE}} - {{TIME}}</div>
+<!--      <div class="time">{{TIME}}</div>-->
+    </div>
+
+    <div class="items">
+      <table>
+
+        <thead>
+        <tr>
+          <th>ITEM</th>
+          <th>PRICE</th>
+          <th>QTY</th>
+          <th>AMOUNT</th>
+        </tr>
+        </thead>
+
+        <tbody>
+        {{#each ITEMS}}
+        <tr>
+          <td>{{this.ITEM_NAME}}</td>
+          <td>{{this.PRICE}} x</td>
+          <td>{{this.QUANTITY}}</td>
+          <td>{{this.TOTAL}}</td>
+        </tr>
+        {{/each}}
+        </tbody>
+
+<!--        <tfoot>-->
+<!--        <tr>-->
+<!--          <td>Total</td>-->
+<!--          <td></td>-->
+<!--          <td></td>-->
+<!--          <td>රු {{SUB_TOTAL}}</td>-->
+<!--        </tr>-->
+<!--        </tfoot>-->
+
+      </table>
+      <div class="total">
+        <h3>Total: රු {{SUB_TOTAL}}</h3>
+      </div>
+    </div>
+
+  </div>
+
+
+  <h3>ස්තුතියි!</h3>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,60 @@
+name: Deploy to Hetzner VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    # Build Frontend
+    - name: Install Frontend Dependencies
+      run: |
+        cd frontend-modern
+        npm install
+
+    - name: Build Frontend
+      run: |
+        cd frontend-modern
+        npm run build
+
+    # Deploy to Server
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.KEY }}
+        script: |
+          # Create directories if not exist
+          mkdir -p /var/www/sarinda-pos
+          mkdir -p /var/www/html
+
+          # Pull latest code or Clone if not exists
+          # Note: Initial clone is manual, this assumes repo exists
+          cd /var/www/sarinda-pos
+          git pull origin main
+
+          # Install Backend Dependencies
+          cd backend
+          npm install
+          
+          # Restart Backend
+          pm2 restart sarinda-backend || pm2 start devops/ecosystem.config.js
+
+          # Copy Frontend Build to Nginx Root
+          # We assume the repo is at /var/www/sarinda-pos
+          # We copy the dist folder to /var/www/html
+          rm -rf /var/www/html/*
+          cp -r /var/www/sarinda-pos/frontend-modern/dist/* /var/www/html/

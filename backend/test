@@ -1,0 +1,31 @@
+switch (cpType) {
+            case 'Blue Sapphire Natural':
+                code = 'BSN' + filteredNumber + 'CP';
+                break;
+            case 'Blue Sapphire Heated':
+                code = 'BSHCP' + filteredNumber;
+                break;
+            case 'Yellow Sapphire':
+                code = 'YSN' + filteredNumber + 'CP';
+                break;
+            case 'Pink Sapphire Natural':
+                code = 'PISNCP' + filteredNumber;
+                break;
+            case 'Pink Sapphire Treated':
+                code = 'PISHCP' + filteredNumber;
+                break;
+            case 'Purple Sapphire Natural':
+                code = 'PSNCP' + filteredNumber;
+                break;
+            case 'Violet Sapphire Natural':
+                code = 'VSN' + filteredNumber + 'CP';
+                break;
+            case 'Blue Sapphire Treated Lots':
+                code = 'BSHLCP' + filteredNumber;
+                break;
+            case 'Padparadscha Sapphire Natural':
+                code = 'PDSN' + filteredNumber + 'CP';
+                break;
+            default:
+                break;
+        }

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .invoice {
+      width: 100%;
+      max-width: 600px;
+      margin: 20px auto;
+      padding: 20px;
+      border: 1px solid #ccc;
+    }
+    .code {
+      font-weight: bold;
+    }
+    .type {
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+<div class="invoice">
+  <p>Invoice for:</p>
+  <p class="code">Code: {{code}}</p>
+  <p class="type">Type: {{type}}</p>
+</div>
+</body>
+</html>
