@@ -148,9 +148,11 @@ export default function Balance() {
                         popupMatchSelectWidth={false}
                     >
                         <Select.Option value={user?.USER_ID}>Me ({user?.NAME})</Select.Option>
-                        {users.filter(u => u.USER_ID !== user?.USER_ID).map(u => (
-                            <Select.Option key={u.USER_ID} value={u.USER_ID}>{u.NAME}</Select.Option>
-                        ))}
+                        {users
+                            .filter(u => u.USER_ID !== user?.USER_ID && u.ROLE?.toLowerCase() !== 'dev')
+                            .map(u => (
+                                <Select.Option key={u.USER_ID} value={u.USER_ID}>{u.NAME}</Select.Option>
+                            ))}
                     </Select>
                     <Button
                         icon={<ReloadOutlined />}
