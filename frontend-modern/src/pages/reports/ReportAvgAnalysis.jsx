@@ -6,6 +6,7 @@ import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { registerSinhalaFont } from '../../fonts/sinhalaFont';
+import MobileDateRange from '../../components/common/MobileDateRange';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -16,6 +17,7 @@ export default function ReportAvgAnalysis() {
     const [allItems, setAllItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState([]);
+    const [hasSearched, setHasSearched] = useState(false);
 
     useEffect(() => {
         axios.post('/api/getAllItems', { status: 'Active' })
@@ -31,6 +33,7 @@ export default function ReportAvgAnalysis() {
             return;
         }
         setLoading(true);
+        setHasSearched(true);
         try {
             const response = await axios.post('/api/reports/averages', {
                 startDate: dateRange[0].format('YYYY-MM-DD'),
@@ -160,11 +163,10 @@ export default function ReportAvgAnalysis() {
                 </Select>
 
                 <div className="text-xs text-gray-500 mb-2">Period</div>
-                <RangePicker
+                <MobileDateRange
                     value={dateRange}
                     onChange={setDateRange}
                     className="w-full mb-3"
-                    format="YYYY-MM-DD"
                 />
 
                 <div className="flex gap-2">
@@ -189,6 +191,19 @@ export default function ReportAvgAnalysis() {
             {loading && (
                 <div className="flex justify-center py-10">
                     <Spin size="large" />
+                </div>
+            )}
+
+            {/* Empty State */}
+            {!loading && hasSearched && data.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="text-5xl mb-4">📈</div>
+                    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        No Average Price Data Found
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs">
+                        No price data for the selected date range. Try selecting a different period.
+                    </p>
                 </div>
             )}
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, InputNumber, Button, Select, DatePicker, message, Statistic, Spin, Divider } from 'antd';
-import { WalletOutlined, SaveOutlined, ReloadOutlined } from '@ant-design/icons';
+import { WalletOutlined, SaveOutlined, ReloadOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import axios from 'axios';
 import Cookies from 'js-cookie';
@@ -26,6 +26,11 @@ export default function Balance() {
     const [notes, setNotes] = useState({});
     const [openingTotal, setOpeningTotal] = useState(0);
     const [isFloatSet, setIsFloatSet] = useState(false);
+
+    // Multiple floats slider
+    const [floats, setFloats] = useState([]);
+    const [currentFloatIndex, setCurrentFloatIndex] = useState(0);
+    const [isNewEntry, setIsNewEntry] = useState(false); // true when on 'Add New' slot
 
     // Real-time Data
     const [balanceData, setBalanceData] = useState({
@@ -77,12 +82,18 @@ export default function Balance() {
                 const data = res.data.data;
                 setBalanceData(data);
 
-                // If opening float exists, pre-fill notes
-                if (data.opening > 0) {
+                // Handle multiple floats
+                if (data.floats && data.floats.length > 0) {
+                    setFloats(data.floats);
+                    setCurrentFloatIndex(0); // Reset to first
                     setIsFloatSet(true);
-                    setNotes(data.notes || {});
+                    setIsNewEntry(false);
+                    // Set notes from first float for the input form
+                    setNotes(data.floats[0].notes || {});
                 } else {
+                    setFloats([]);
                     setIsFloatSet(false);
+                    setIsNewEntry(true); // Start in new entry mode if no floats
                     setNotes({});
                 }
             }
@@ -102,13 +113,25 @@ export default function Balance() {
 
         setLoading(true);
         try {
-            await axios.post('/api/saveOpeningFloat', {
-                DATE: selectedDate.format('YYYY-MM-DD'),
-                USER_ID: selectedUser,
-                AMOUNT: openingTotal,
-                NOTES: notes
-            });
-            message.success("Opening float saved!");
+            if (isNewEntry) {
+                // CREATE new float
+                await axios.post('/api/saveOpeningFloat', {
+                    DATE: selectedDate.format('YYYY-MM-DD'),
+                    USER_ID: selectedUser,
+                    AMOUNT: openingTotal,
+                    NOTES: notes
+                });
+                message.success("New float entry added!");
+            } else {
+                // UPDATE existing float
+                const currentFloat = floats[currentFloatIndex];
+                await axios.post('/api/updateOpeningFloat', {
+                    FLOAT_ID: currentFloat.id,
+                    AMOUNT: openingTotal,
+                    NOTES: notes
+                });
+                message.success("Float entry updated!");
+            }
             fetchBalanceData(); // Refresh to update status
         } catch (error) {
             console.error("Error saving float:", error);
@@ -120,6 +143,41 @@ export default function Balance() {
 
     const handleNoteChange = (denom, count) => {
         setNotes(prev => ({ ...prev, [denom]: count }));
+    };
+
+    // Slider navigation
+    const handlePrevFloat = () => {
+        if (isNewEntry) {
+            // Go back from 'New Entry' to last existing float
+            setIsNewEntry(false);
+            const lastIndex = floats.length - 1;
+            setCurrentFloatIndex(lastIndex);
+            setNotes(floats[lastIndex]?.notes || {});
+        } else if (currentFloatIndex > 0) {
+            const newIndex = currentFloatIndex - 1;
+            setCurrentFloatIndex(newIndex);
+            setNotes(floats[newIndex].notes || {});
+        }
+    };
+
+    const handleNextFloat = () => {
+        if (currentFloatIndex < floats.length - 1) {
+            const newIndex = currentFloatIndex + 1;
+            setCurrentFloatIndex(newIndex);
+            setNotes(floats[newIndex].notes || {});
+        } else if (!isNewEntry && floats.length > 0) {
+            // Go to 'New Entry' slot after last existing float
+            setIsNewEntry(true);
+            setNotes({});
+        }
+    };
+
+    const currentFloat = floats[currentFloatIndex] || null;
+
+    const formatTime = (dateStr) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     };
 
     return (
@@ -171,16 +229,77 @@ export default function Balance() {
                     {/* LEFT COLUMN: Opening Float (Note Counter) */}
                     <div className="lg:col-span-1">
                         <div className={`glass-card p-5 rounded-2xl h-full border-t-4 ${isFloatSet ? 'border-emerald-500' : 'border-orange-500'}`}>
+                            {/* Header with slider navigation */}
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700 dark:text-gray-200">
-                                    {isFloatSet ? '✅ Opening Float Set' : '⚠️ Set Opening Float'}
-                                </h3>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="font-bold text-gray-700 dark:text-gray-200">
+                                        {isFloatSet ? '✅ Opening Float' : '⚠️ Set Opening Float'}
+                                    </h3>
+                                    {floats.length > 0 && !isNewEntry && (
+                                        <span className="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-full">
+                                            {currentFloatIndex + 1} / {floats.length}
+                                        </span>
+                                    )}
+                                    {isNewEntry && floats.length > 0 && (
+                                        <span className="text-xs bg-blue-200 dark:bg-blue-700 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
+                                            + New
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="text-xl font-mono font-bold text-emerald-600">
-                                    Rs. {openingTotal.toLocaleString()}
+                                    Rs. {(currentFloat?.amount || openingTotal).toLocaleString()}
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            {/* Slider Navigation */}
+                            {floats.length > 0 && (
+                                <div className="flex items-center justify-between mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-2">
+                                    <Button
+                                        icon={<LeftOutlined />}
+                                        onClick={handlePrevFloat}
+                                        disabled={currentFloatIndex === 0 && !isNewEntry}
+                                        size="small"
+                                    />
+                                    <div className="text-center">
+                                        {isNewEntry ? (
+                                            <>
+                                                <div className="text-xs text-blue-500 font-semibold">➕ New Entry</div>
+                                                <div className="text-sm text-gray-400">Enter amounts below</div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="text-xs text-gray-500">Entry #{currentFloatIndex + 1}</div>
+                                                <div className="text-sm font-semibold text-emerald-600">
+                                                    Rs. {currentFloat?.amount?.toLocaleString() || 0}
+                                                </div>
+                                                {currentFloat?.createdAt && (
+                                                    <div className="text-xs text-gray-400">{formatTime(currentFloat.createdAt)}</div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                    <Button
+                                        icon={<RightOutlined />}
+                                        onClick={handleNextFloat}
+                                        disabled={isNewEntry}
+                                        size="small"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Total of all floats */}
+                            {floats.length > 1 && (
+                                <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg border border-emerald-200 dark:border-emerald-700">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-emerald-700 dark:text-emerald-300">Total ({floats.length} entries)</span>
+                                        <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400">
+                                            Rs. {balanceData.opening.toLocaleString()}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                                 {DENOMINATIONS.map(denom => (
                                     <div key={denom} className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 rounded-lg p-2">
                                         <div className="w-14 sm:w-16 text-right font-bold text-gray-600 dark:text-gray-300 text-sm">{denom}</div>
@@ -204,9 +323,9 @@ export default function Balance() {
                                 icon={<SaveOutlined />}
                                 onClick={handleSaveFloat}
                                 loading={loading}
-                                className="bg-emerald-500 hover:bg-emerald-600 border-none h-12 text-lg"
+                                className={`border-none h-12 text-lg ${isNewEntry ? 'bg-blue-500 hover:bg-blue-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                             >
-                                {isFloatSet ? 'Update Float' : 'Set Opening Float'}
+                                {isNewEntry ? '➕ Add New Entry' : '💾 Update This Entry'}
                             </Button>
                         </div>
                     </div>

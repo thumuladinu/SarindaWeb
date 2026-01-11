@@ -3,6 +3,7 @@ import { Table, Button, Input, DatePicker, Tag, Row, Col, Statistic, Card, Spin,
 import { SearchOutlined, ReloadOutlined, DatabaseOutlined, CalendarOutlined, EyeOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import MobileDateRange from '../../components/common/MobileDateRange';
 
 const { RangePicker } = DatePicker;
 
@@ -194,7 +195,8 @@ const Weighting = () => {
                     <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Real-time weight data stream</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                    <RangePicker
+                    <MobileDateRange
+                        value={dateRange}
                         onChange={handleDateChange}
                         className="w-full sm:w-64"
                     />

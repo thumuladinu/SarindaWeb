@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Tabs } from 'antd';
-import { BarChartOutlined, DollarOutlined, LineChartOutlined } from '@ant-design/icons';
+import { BarChartOutlined, DollarOutlined, LineChartOutlined, SwapOutlined } from '@ant-design/icons';
 import ReportTransactions from './ReportTransactions';
 import ReportItemProfit from './ReportItemProfit';
 import ReportAvgAnalysis from './ReportAvgAnalysis';
+import ReportStockMovement from './ReportStockMovement';
 
 export default function Reports() {
     const [activeTab, setActiveTab] = useState('1');
@@ -33,6 +34,17 @@ export default function Reports() {
         },
         {
             key: '3',
+            label: (
+                <span className="flex items-center gap-1 text-xs md:text-sm">
+                    <SwapOutlined />
+                    <span className="hidden md:inline">Stock Movement</span>
+                    <span className="md:hidden">Stock</span>
+                </span>
+            ),
+            children: <ReportStockMovement />
+        },
+        {
+            key: '4',
             label: (
                 <span className="flex items-center gap-1 text-xs md:text-sm">
                     <BarChartOutlined />

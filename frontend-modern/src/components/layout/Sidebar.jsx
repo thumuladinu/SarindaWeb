@@ -37,7 +37,7 @@ export default function Sidebar() {
                     <img src={logo} alt="Logo" className="w-6 h-6 object-contain" onError={(e) => e.target.style.display = 'none'} />
                 </div>
                 <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200">
-                    Sarinda
+                    Ishanka Stores
                 </span>
             </div>
 

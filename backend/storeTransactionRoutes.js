@@ -46,18 +46,15 @@ pool.query = util.promisify(pool.query);
 // ==========================================
 console.log(">>> BACKEND RELOADED: Balance Fix Applied <<<");
 
-// Save or Update Opening Float
+// Save Opening Float - INSERT new record (keeps all records, doesn't replace)
 router.post('/api/saveOpeningFloat', async (req, res) => {
     try {
         const { DATE, USER_ID, AMOUNT, NOTES } = req.body;
 
-        // UPSERT: Insert or Update if exists
+        // INSERT: Always create a new record (multiple floats per day allowed)
         const sql = `
             INSERT INTO cash_floats (USER_ID, DATE, OPENING_AMOUNT, NOTES_BREAKDOWN, STATUS)
             VALUES (?, ?, ?, ?, 'OPEN')
-            ON DUPLICATE KEY UPDATE
-            OPENING_AMOUNT = VALUES(OPENING_AMOUNT),
-            NOTES_BREAKDOWN = VALUES(NOTES_BREAKDOWN)
         `;
 
         await pool.query(sql, [USER_ID, DATE, AMOUNT, JSON.stringify(NOTES || {})]);
@@ -65,6 +62,30 @@ router.post('/api/saveOpeningFloat', async (req, res) => {
         return res.json({ success: true, message: 'Opening float saved successfully' });
     } catch (error) {
         console.error('Error saving opening float:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Update Existing Opening Float - UPDATE by FLOAT_ID (for web app edits)
+router.post('/api/updateOpeningFloat', async (req, res) => {
+    try {
+        const { FLOAT_ID, AMOUNT, NOTES } = req.body;
+
+        if (!FLOAT_ID) {
+            return res.json({ success: false, message: 'FLOAT_ID required for update' });
+        }
+
+        const sql = `
+            UPDATE cash_floats 
+            SET OPENING_AMOUNT = ?, NOTES_BREAKDOWN = ?
+            WHERE FLOAT_ID = ?
+        `;
+
+        await pool.query(sql, [AMOUNT, JSON.stringify(NOTES || {}), FLOAT_ID]);
+
+        return res.json({ success: true, message: 'Opening float updated successfully' });
+    } catch (error) {
+        console.error('Error updating opening float:', error);
         return res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -78,27 +99,43 @@ router.post('/api/getDailyBalance', async (req, res) => {
             return res.json({ success: false, message: 'Date and User required' });
         }
 
-        // 1. Get Opening Float
-        const rows = await pool.query(
-            'SELECT * FROM cash_floats WHERE USER_ID = ? AND DATE = ?',
+        // 1. Get Opening Float(s) - Both SUM and individual records
+        const sumRows = await pool.query(
+            'SELECT SUM(OPENING_AMOUNT) as TOTAL_OPENING FROM cash_floats WHERE USER_ID = ? AND DATE = ?',
             [USER_ID, DATE]
         );
-        const floatParams = rows[0];
+        const individualRows = await pool.query(
+            'SELECT FLOAT_ID, OPENING_AMOUNT, NOTES_BREAKDOWN, CREATED_AT FROM cash_floats WHERE USER_ID = ? AND DATE = ? ORDER BY CREATED_AT ASC',
+            [USER_ID, DATE]
+        );
 
-        const openingAmount = floatParams ? parseFloat(floatParams.OPENING_AMOUNT || 0) : 0;
+        const openingAmount = sumRows[0] ? parseFloat(sumRows[0].TOTAL_OPENING || 0) : 0;
 
-        let notes = {};
-        if (floatParams && floatParams.NOTES_BREAKDOWN) {
-            if (typeof floatParams.NOTES_BREAKDOWN === 'string') {
+        // Build individual floats array for slider UI
+        const floats = individualRows.map(row => {
+            let notes = {};
+            if (row.NOTES_BREAKDOWN) {
                 try {
-                    notes = JSON.parse(floatParams.NOTES_BREAKDOWN);
-                } catch (e) {
-                    console.error("Error parsing float notes", e);
-                }
-            } else if (typeof floatParams.NOTES_BREAKDOWN === 'object') {
-                notes = floatParams.NOTES_BREAKDOWN;
+                    notes = typeof row.NOTES_BREAKDOWN === 'string'
+                        ? JSON.parse(row.NOTES_BREAKDOWN)
+                        : row.NOTES_BREAKDOWN;
+                } catch (e) { /* ignore */ }
             }
-        }
+            return {
+                id: row.FLOAT_ID,
+                amount: parseFloat(row.OPENING_AMOUNT || 0),
+                notes: notes,
+                createdAt: row.CREATED_AT
+            };
+        });
+
+        // Merge notes from all records for summary
+        let mergedNotes = {};
+        floats.forEach(f => {
+            Object.entries(f.notes || {}).forEach(([denom, qty]) => {
+                mergedNotes[denom] = (mergedNotes[denom] || 0) + (parseInt(qty) || 0);
+            });
+        });
 
         // 2. Get Total SALES (Cash In)
         // Note: Assuming 'Selling' is Cash In. Filtering by METHOD='Cash' if available, otherwise assuming all Selling is cash for now or strictly following user request "Selling" as incoming.
@@ -153,7 +190,8 @@ router.post('/api/getDailyBalance', async (req, res) => {
             success: true,
             data: {
                 opening: openingAmount,
-                notes: notes,
+                notes: mergedNotes,
+                floats: floats,  // Individual records for slider UI
                 sales: sales,
                 buying: buying,
                 expenses: expenses,
@@ -2047,6 +2085,99 @@ router.post('/api/reports/items', async (req, res) => {
 
     } catch (error) {
         console.error("Error in Item Report:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Stock Movement Report - Buy/Sell Quantities per Item with Store breakdown
+router.post('/api/reports/stockMovement', async (req, res) => {
+    try {
+        const { startDate, endDate, itemIds, storeNo } = req.body;
+
+        let whereClause = "t.IS_ACTIVE = 1 AND t.TYPE IN ('Selling', 'Buying')";
+        let params = [];
+
+        if (startDate && endDate) {
+            whereClause += " AND DATE(t.CREATED_DATE) BETWEEN ? AND ?";
+            params.push(startDate, endDate);
+        }
+        if (storeNo && storeNo !== 'all') {
+            whereClause += " AND t.STORE_NO = ?";
+            params.push(storeNo);
+        }
+
+        // Query: Get Buy/Sell quantities per Item per Store
+        let sql = `
+            SELECT 
+                si.ITEM_ID,
+                si.CODE,
+                si.NAME,
+                t.TYPE,
+                t.STORE_NO,
+                SUM(sti.QUANTITY) as total_qty
+            FROM store_transactions_items sti
+            JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
+            JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
+            WHERE ${whereClause}
+            GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE, t.STORE_NO
+        `;
+
+        const rows = await pool.query(sql, params);
+
+        // Process in JS to pivot buy/sell per store
+        const reportMap = {};
+
+        rows.forEach(row => {
+            if (!reportMap[row.ITEM_ID]) {
+                reportMap[row.ITEM_ID] = {
+                    id: row.ITEM_ID,
+                    code: row.CODE,
+                    name: row.NAME,
+                    unit: 'KG',
+                    buyQtyS1: 0,
+                    sellQtyS1: 0,
+                    buyQtyS2: 0,
+                    sellQtyS2: 0
+                };
+            }
+            const item = reportMap[row.ITEM_ID];
+            const qty = parseFloat(row.total_qty || 0);
+            const store = String(row.STORE_NO);
+
+            if (row.TYPE === 'Buying') {
+                if (store === '1') item.buyQtyS1 += qty;
+                else if (store === '2') item.buyQtyS2 += qty;
+            } else if (row.TYPE === 'Selling') {
+                if (store === '1') item.sellQtyS1 += qty;
+                else if (store === '2') item.sellQtyS2 += qty;
+            }
+        });
+
+        let results = Object.values(reportMap);
+
+        // Filter by selected items if requested
+        if (itemIds && itemIds.length > 0) {
+            const allowedIds = new Set(itemIds.map(id => parseInt(id)));
+            results = results.filter(r => allowedIds.has(r.id));
+        }
+
+        // Calculate totals and net changes
+        results = results.map(r => ({
+            ...r,
+            buyQty: r.buyQtyS1 + r.buyQtyS2,
+            sellQty: r.sellQtyS1 + r.sellQtyS2,
+            netS1: r.buyQtyS1 - r.sellQtyS1,
+            netS2: r.buyQtyS2 - r.sellQtyS2,
+            netChange: (r.buyQtyS1 + r.buyQtyS2) - (r.sellQtyS1 + r.sellQtyS2)
+        }));
+
+        // Sort by net change (biggest decrease first)
+        results.sort((a, b) => a.netChange - b.netChange);
+
+        return res.json({ success: true, result: results });
+
+    } catch (error) {
+        console.error("Error in Stock Movement Report:", error);
         return res.status(500).json({ success: false, message: error.message });
     }
 });

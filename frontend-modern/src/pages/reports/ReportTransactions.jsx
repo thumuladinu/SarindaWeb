@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import MobileDateRange from '../../components/common/MobileDateRange';
 
 const { RangePicker } = DatePicker;
 
@@ -12,6 +13,7 @@ export default function ReportTransactions() {
     const [dateRange, setDateRange] = useState([dayjs().startOf('month'), dayjs().endOf('month')]);
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState(null);
+    const [hasSearched, setHasSearched] = useState(false);
 
     const fetchReport = async () => {
         if (!dateRange) {
@@ -19,6 +21,7 @@ export default function ReportTransactions() {
             return;
         }
         setLoading(true);
+        setHasSearched(true);
         try {
             const response = await axios.post('/api/reports/transactions', {
                 startDate: dateRange[0].format('YYYY-MM-DD'),
@@ -159,12 +162,10 @@ export default function ReportTransactions() {
             {/* Filter Bar - Same for mobile and desktop */}
             <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3">
                 <div className="text-xs text-gray-500 mb-2">Select Period</div>
-                <RangePicker
+                <MobileDateRange
                     value={dateRange}
                     onChange={setDateRange}
                     className="w-full mb-3"
-                    format="YYYY-MM-DD"
-                    size="middle"
                 />
                 <div className="flex gap-2">
                     <Button
@@ -195,8 +196,21 @@ export default function ReportTransactions() {
                 </div>
             )}
 
+            {/* Empty State */}
+            {!loading && hasSearched && (!data || data.details?.length === 0) && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="text-5xl mb-4">📊</div>
+                    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        No Transactions Found
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs">
+                        No transactions for the selected date range. Try selecting a different period.
+                    </p>
+                </div>
+            )}
+
             {/* Data Display */}
-            {data && !loading && (
+            {data && data.details?.length > 0 && !loading && (
                 <div className="flex flex-col gap-3 animate-fade-in">
                     {/* Stats - 2x2 Grid on Mobile */}
                     <div className="grid grid-cols-2 gap-2">

@@ -408,9 +408,9 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
         const usersQuery = `SELECT USER_ID, NAME, USERNAME, ROLE, PHOTO FROM user_details WHERE IS_ACTIVE=1`;
         const users = await pool.query(usersQuery);
 
-        // 3. Get Opening Floats
+        // 3. Get Opening Floats - SUM all records for same user+date
         console.log("Step 3: Fetching Floats...");
-        const floatsQuery = `SELECT USER_ID, OPENING_AMOUNT FROM cash_floats WHERE DATE = ?`;
+        const floatsQuery = `SELECT USER_ID, SUM(OPENING_AMOUNT) as OPENING_AMOUNT FROM cash_floats WHERE DATE = ? GROUP BY USER_ID`;
         const floats = await pool.query(floatsQuery, [queryDate]);
 
         // 4. Get Transactions Grouped by User
@@ -422,6 +422,61 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             GROUP BY CREATED_BY, TYPE
         `;
         const userTrans = await pool.query(userTransQuery, [queryDate]);
+
+        // 5. Get Today's Stock Movement (Item-wise and Store-wise)
+        console.log("Step 5: Fetching Today's Stock Movement...");
+        const stockMovementQuery = `
+            SELECT 
+                si.ITEM_ID,
+                si.CODE,
+                si.NAME,
+                t.TYPE,
+                t.STORE_NO,
+                SUM(sti.QUANTITY) as total_qty
+            FROM store_transactions_items sti
+            JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
+            JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
+            WHERE t.IS_ACTIVE = 1 
+              AND t.TYPE IN ('Selling', 'Buying')
+              AND DATE(t.CREATED_DATE) = ?
+            GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE, t.STORE_NO
+        `;
+        const stockMovementRows = await pool.query(stockMovementQuery, [queryDate]);
+
+        // Process Stock Movement into item map
+        const stockMap = {};
+        stockMovementRows.forEach(row => {
+            if (!stockMap[row.ITEM_ID]) {
+                stockMap[row.ITEM_ID] = {
+                    id: row.ITEM_ID,
+                    code: row.CODE,
+                    name: row.NAME,
+                    buyQtyS1: 0, sellQtyS1: 0,
+                    buyQtyS2: 0, sellQtyS2: 0
+                };
+            }
+            const item = stockMap[row.ITEM_ID];
+            const qty = parseFloat(row.total_qty || 0);
+            const store = String(row.STORE_NO);
+
+            if (row.TYPE === 'Buying') {
+                if (store === '1') item.buyQtyS1 += qty;
+                else if (store === '2') item.buyQtyS2 += qty;
+            } else if (row.TYPE === 'Selling') {
+                if (store === '1') item.sellQtyS1 += qty;
+                else if (store === '2') item.sellQtyS2 += qty;
+            }
+        });
+
+        // Calculate totals and net changes
+        const stockMovement = Object.values(stockMap).map(r => ({
+            ...r,
+            buyQty: r.buyQtyS1 + r.buyQtyS2,
+            sellQty: r.sellQtyS1 + r.sellQtyS2,
+            netS1: r.buyQtyS1 - r.sellQtyS1,
+            netS2: r.buyQtyS2 - r.sellQtyS2,
+            netChange: (r.buyQtyS1 + r.buyQtyS2) - (r.sellQtyS1 + r.sellQtyS2)
+        })).sort((a, b) => b.sellQty - a.sellQty); // Sort by most sold
 
         console.log("All queries successful. Processing data...");
 
@@ -438,7 +493,7 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
         const userStats = users.map(user => {
             const userId = user.USER_ID;
 
-            // Opening
+            // Opening - now uses SUM from the query
             const userFloat = floats.find(f => f.USER_ID === userId);
             const opening = parseFloat(userFloat?.OPENING_AMOUNT || 0);
 
@@ -465,13 +520,14 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             u.opening > 0 || u.sales > 0 || u.buying > 0 || u.expenses > 0
         );
 
-        console.log("Sending Response. Active Users:", activeUsers.length);
+        console.log("Sending Response. Active Users:", activeUsers.length, "Stock Items:", stockMovement.length);
 
         return res.status(200).json({
             success: true,
             data: {
                 global: globalResult,
-                users: activeUsers
+                users: activeUsers,
+                stockMovement: stockMovement
             }
         });
 

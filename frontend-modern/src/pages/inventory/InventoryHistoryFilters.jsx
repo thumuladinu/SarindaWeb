@@ -1,6 +1,7 @@
 import React from 'react';
 import { Input, Select, DatePicker, Button } from 'antd';
 import { SearchOutlined, FilterOutlined, ClearOutlined } from '@ant-design/icons';
+import MobileDateRange from '../../components/common/MobileDateRange';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -107,9 +108,7 @@ export default function InventoryHistoryFilters({ filters, setFilters, collapsed
 
                     {/* Date Range */}
                     <div className="form-group lg:col-span-4">
-                        <RangePicker
-                            className="w-full h-10 border-gray-300 dark:border-white/10 bg-transparent rounded-xl"
-                            popupClassName="glass-dropdown"
+                        <MobileDateRange
                             value={filters.dateRange}
                             onChange={(val) => handleChange('dateRange', val)}
                         />

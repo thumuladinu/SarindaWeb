@@ -292,6 +292,216 @@ body {
 }
 
 
+/* ========================================
+   MOBILE-FRIENDLY DATE PICKER & RANGE PICKER
+   ======================================== */
+
+/* RangePicker Input - Make it compact on mobile */
+@media (max-width: 640px) {
+
+    /* RangePicker Container */
+    .ant-picker-range {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    /* Make the input text smaller on mobile */
+    .ant-picker-range .ant-picker-input>input {
+        font-size: 12px !important;
+        padding: 0 4px !important;
+    }
+
+    /* Smaller separator */
+    .ant-picker-range .ant-picker-range-separator {
+        padding: 0 4px !important;
+    }
+
+    /* Hide the range separator text on very small screens */
+    .ant-picker-range .ant-picker-separator {
+        padding: 0 2px !important;
+    }
+
+    /* Smaller icons */
+    .ant-picker-range .ant-picker-suffix,
+    .ant-picker-range .ant-picker-clear {
+        font-size: 12px !important;
+    }
+}
+
+/* RangePicker Dropdown Panel - Stack vertically on mobile */
+@media (max-width: 768px) {
+
+    /* Main dropdown container */
+    .ant-picker-dropdown {
+        width: calc(100vw - 16px) !important;
+        max-width: 100vw !important;
+        left: 8px !important;
+        right: 8px !important;
+    }
+
+    /* Panel container - stack calendars vertically */
+    .ant-picker-panel-container {
+        width: 100% !important;
+        max-width: calc(100vw - 16px) !important;
+        overflow-x: hidden !important;
+    }
+
+    .ant-picker-panels {
+        flex-direction: column !important;
+        width: 100% !important;
+    }
+
+    /* Each calendar panel */
+    .ant-picker-panel {
+        width: 100% !important;
+        border-width: 0 !important;
+    }
+
+    /* Add border between stacked panels */
+    .ant-picker-panels>.ant-picker-panel:not(:first-child) {
+        border-top: 1px solid #e5e7eb !important;
+    }
+
+    .dark .ant-picker-panels>.ant-picker-panel:not(:first-child) {
+        border-top-color: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    /* Calendar header */
+    .ant-picker-header {
+        padding: 8px 12px !important;
+    }
+
+    /* Calendar content - ensure full width */
+    .ant-picker-content {
+        width: 100% !important;
+    }
+
+    .ant-picker-content th,
+    .ant-picker-content td {
+        padding: 4px 0 !important;
+    }
+
+    /* Date cells - optimize for touch */
+    .ant-picker-cell {
+        padding: 2px 0 !important;
+    }
+
+    .ant-picker-cell-inner {
+        min-width: 32px !important;
+        height: 32px !important;
+        line-height: 32px !important;
+        border-radius: 8px !important;
+    }
+
+    /* Range quick select - stack vertically */
+    .ant-picker-ranges {
+        flex-wrap: wrap !important;
+        padding: 8px !important;
+        gap: 8px !important;
+    }
+
+    .ant-picker-ranges li {
+        padding: 0 !important;
+    }
+
+    .ant-picker-ranges .ant-btn {
+        padding: 4px 12px !important;
+        height: 32px !important;
+        font-size: 12px !important;
+    }
+
+    /* Time picker column - compact on mobile */
+    .ant-picker-time-panel-column {
+        width: 56px !important;
+    }
+
+    .ant-picker-time-panel-cell-inner {
+        padding: 0 8px !important;
+        height: 28px !important;
+        line-height: 28px !important;
+    }
+
+    /* Footer buttons - full width on mobile */
+    .ant-picker-footer {
+        padding: 8px !important;
+    }
+
+    .ant-picker-footer-extra {
+        padding: 8px !important;
+        border-top: 1px solid #e5e7eb !important;
+    }
+
+    .dark .ant-picker-footer-extra {
+        border-top-color: rgba(255, 255, 255, 0.1) !important;
+    }
+}
+
+/* Single DatePicker on mobile */
+@media (max-width: 640px) {
+    .ant-picker:not(.ant-picker-range) {
+        width: 100% !important;
+    }
+}
+
+/* Glass styling for picker dropdown in dark mode */
+.dark .ant-picker-dropdown .ant-picker-panel-container {
+    background: rgba(24, 24, 27, 0.95) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-header {
+    border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+    color: #e5e7eb !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-header button {
+    color: #9ca3af !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-header button:hover {
+    color: #fff !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-content th {
+    color: #9ca3af !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-cell {
+    color: #e5e7eb !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-cell-disabled {
+    color: #4b5563 !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-today .ant-picker-cell-inner::before {
+    border-color: #10b981 !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-selected .ant-picker-cell-inner {
+    background: #10b981 !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-range-start .ant-picker-cell-inner,
+.dark .ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-range-end .ant-picker-cell-inner {
+    background: #10b981 !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-in-range::before {
+    background: rgba(16, 185, 129, 0.2) !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-footer {
+    border-top-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .ant-picker-dropdown .ant-picker-today-btn {
+    color: #10b981 !important;
+}
+
+
 /* Custom Animations */
 @keyframes fadeIn {
     from {

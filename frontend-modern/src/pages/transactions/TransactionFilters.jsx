@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Input, Select, DatePicker, Button, Collapse, Badge, theme } from 'antd';
 import { SearchOutlined, FilterOutlined, ClearOutlined, DownOutlined, UpOutlined, CaretRightOutlined } from '@ant-design/icons';
+import MobileDateRange from '../../components/common/MobileDateRange';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -156,9 +157,7 @@ export default function TransactionFilters({ filters, setFilters }) {
                         {/* Date Range */}
                         <div className="form-group">
                             <label className="text-xs font-medium text-gray-500 mb-1 block">Date Range</label>
-                            <RangePicker
-                                className="w-full h-10 border-gray-300 dark:border-white/10 bg-transparent rounded-xl"
-                                popupClassName="glass-dropdown"
+                            <MobileDateRange
                                 value={filters.dateRange}
                                 onChange={(val) => handleChange('dateRange', val)}
                             />
