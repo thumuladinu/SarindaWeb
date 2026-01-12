@@ -311,7 +311,7 @@ const TransactionView = ({ open, onClose, transactionId }) => {
                         {transaction.COMMENTS && (
                             <>
                                 <Divider orientation="left" className="!my-2 !text-gray-400 !text-xs">
-                                    COMMENTS
+                                    {transaction.TYPE === 'Expenses' ? 'REASON' : 'COMMENTS'}
                                 </Divider>
                                 <div className="p-3 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/20 rounded-lg text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
                                     {transaction.COMMENTS}
@@ -325,23 +325,27 @@ const TransactionView = ({ open, onClose, transactionId }) => {
                         </Divider>
                         <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-zinc-900 dark:to-zinc-800 rounded-lg">
                             <div className="flex flex-col gap-2">
-                                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                                    <span>Sub Total</span>
-                                    <span>{formatCurrency(transaction.SUB_TOTAL)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                                    <span>Amount Paid</span>
-                                    <span className="text-green-600">{formatCurrency(transaction.AMOUNT_SETTLED)}</span>
-                                </div>
+                                {transaction.TYPE !== 'Expenses' && (
+                                    <>
+                                        <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                                            <span>Sub Total</span>
+                                            <span>{formatCurrency(transaction.SUB_TOTAL)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                                            <span>Amount Paid</span>
+                                            <span className="text-green-600">{formatCurrency(transaction.AMOUNT_SETTLED)}</span>
+                                        </div>
+                                    </>
+                                )}
                                 {(transaction.DUE_AMOUNT > 0) && (
                                     <div className="flex justify-between text-sm font-medium text-red-600">
                                         <span>Due Amount</span>
                                         <span>{formatCurrency(transaction.DUE_AMOUNT)}</span>
                                     </div>
                                 )}
-                                <Divider className="!my-2" />
+                                {/* <Divider className="!my-2" /> */}
                                 <div className="flex justify-between text-lg font-bold text-gray-800 dark:text-gray-200">
-                                    <span>Total</span>
+                                    <span>{transaction.TYPE === 'Expenses' ? 'Amount' : 'Total'}</span>
                                     <span>{formatCurrency(transaction.SUB_TOTAL)}</span>
                                 </div>
                             </div>

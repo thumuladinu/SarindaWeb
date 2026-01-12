@@ -199,6 +199,13 @@ export default function Transactions() {
 
     // View Bill Handler - Opens receipt in modal popup (exactly like 'View Original Bill' button in edit form)
     const handleViewBill = async (record) => {
+        // For expenses, use the TransactionView modal
+        if (record.TYPE === 'Expenses') {
+            setViewTransactionId(record.TRANSACTION_ID);
+            setViewModalOpen(true);
+            return;
+        }
+
         setReceiptLoading(true);
         setReceiptModalOpen(true);
         try {
@@ -439,6 +446,13 @@ export default function Transactions() {
                 onClose={() => setEditDrawerOpen(false)}
                 transactionId={selectedTransactionId}
                 onSuccess={handleEditSuccess}
+            />
+
+            {/* View Transaction Modal */}
+            <TransactionView
+                open={viewModalOpen}
+                onClose={() => setViewModalOpen(false)}
+                transactionId={viewTransactionId}
             />
 
             {/* Add Expense Modal */}
