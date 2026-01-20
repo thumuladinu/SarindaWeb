@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Input, Tooltip, App, Form, Popconfirm, Drawer, Spin } from 'antd';
+import { Table, Button, Input, Tooltip, App, Form, Popconfirm, Drawer, Spin, Switch } from 'antd';
 import { EditOutlined, DeleteOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
@@ -65,6 +65,7 @@ export default function Items() {
             ...record,
             BUYING_PRICE: parseFloat(record.BUYING_PRICE || 0),
             SELLING_PRICE: parseFloat(record.SELLING_PRICE || 0),
+            SHOW_IN_WEIGHING: record.SHOW_IN_WEIGHING === 1 || record.SHOW_IN_WEIGHING === true || record.SHOW_IN_WEIGHING === '1' || record.SHOW_IN_WEIGHING === undefined,
         });
         setDrawerOpen(true);
     };
@@ -86,6 +87,34 @@ export default function Items() {
         }
     };
 
+    // Toggle Weighing Station Visibility
+    const handleWeighingToggle = async (record, checked) => {
+        try {
+            const response = await axios.post('/api/updateItem', {
+                ITEM_ID: record.ITEM_ID,
+                SHOW_IN_WEIGHING: checked ? 1 : 0
+            });
+            if (response.data.success) {
+                message.success(`${record.NAME} ${checked ? 'visible' : 'hidden'} in Weighing Station`);
+                // Update local state
+                const updatedData = data.map(item =>
+                    item.ITEM_ID === record.ITEM_ID ? { ...item, SHOW_IN_WEIGHING: checked ? 1 : 0 } : item
+                );
+                setData(updatedData);
+                setFilteredData(updatedData.filter(item =>
+                    !searchText ||
+                    (item.CODE && item.CODE.toLowerCase().includes(searchText)) ||
+                    (item.NAME && item.NAME.toLowerCase().includes(searchText))
+                ));
+            } else {
+                message.error('Failed to update');
+            }
+        } catch (error) {
+            console.error('Error toggling weighing visibility:', error);
+            message.error('Failed to update');
+        }
+    };
+
     const handleFormSubmit = async (values) => {
         setSubmitting(true);
         try {
@@ -96,6 +125,7 @@ export default function Items() {
                     NAME: values.NAME,
                     BUYING_PRICE: values.BUYING_PRICE,
                     SELLING_PRICE: values.SELLING_PRICE,
+                    SHOW_IN_WEIGHING: values.SHOW_IN_WEIGHING ? 1 : 0,
                 };
                 const checkDup = await axios.post('/api/checkForDuplicateNameUpdate', { CODE: values.CODE, ITEM_ID: editingItem.ITEM_ID });
                 if (checkDup.data.duplicate) {
@@ -122,7 +152,8 @@ export default function Items() {
                     BUYING_PRICE: values.BUYING_PRICE,
                     SELLING_PRICE: values.SELLING_PRICE,
                     STOCK: JSON.stringify({ "1": 0, "2": 0 }),
-                    IS_ACTIVE: 1
+                    IS_ACTIVE: 1,
+                    SHOW_IN_WEIGHING: values.SHOW_IN_WEIGHING !== false ? 1 : 0,
                 };
                 const response = await axios.post('/api/addItem', payload);
                 if (response.data.success) {
@@ -180,6 +211,23 @@ export default function Items() {
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">
                     Rs. {parseFloat(price || 0).toFixed(2)}
                 </span>
+            )
+        },
+        {
+            title: 'Weighing',
+            dataIndex: 'SHOW_IN_WEIGHING',
+            key: 'SHOW_IN_WEIGHING',
+            align: 'center',
+            width: 100,
+            render: (value, record) => (
+                <Tooltip title={value ? 'Visible in Weighing Station' : 'Hidden from Weighing Station'}>
+                    <Switch
+                        size="small"
+                        checked={value === 1 || value === true || value === '1'}
+                        onChange={(checked) => handleWeighingToggle(record, checked)}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </Tooltip>
             )
         },
 
@@ -292,7 +340,15 @@ export default function Items() {
 
 
                                 <div className="flex justify-between items-center pt-2 mt-1 border-t border-gray-100 dark:border-white/5">
-                                    <span className="text-xs text-gray-400">Manage Item</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-gray-400">Weighing:</span>
+                                        <Switch
+                                            size="small"
+                                            checked={item.SHOW_IN_WEIGHING === 1 || item.SHOW_IN_WEIGHING === true || item.SHOW_IN_WEIGHING === '1'}
+                                            onChange={(checked) => handleWeighingToggle(item, checked)}
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    </div>
                                     <div className="flex gap-2">
                                         <Popconfirm
                                             title="Delete Item"
@@ -366,6 +422,14 @@ export default function Items() {
                         </Form.Item>
                     </div>
 
+                    <Form.Item
+                        name="SHOW_IN_WEIGHING"
+                        label="Show in Weighing Station"
+                        valuePropName="checked"
+                        initialValue={true}
+                    >
+                        <Switch checkedChildren="Yes" unCheckedChildren="No" />
+                    </Form.Item>
 
 
                     <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100 dark:border-white/10">

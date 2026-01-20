@@ -640,6 +640,7 @@ router.get('/api/items/all', async (req, res) => {
 
 // Get all items (items are shared across stores, STOCK is JSON: {"1": qty, "2": qty})
 // NOTE: This endpoint only returns ACTIVE items for display purposes
+// For Store 2 (Weighing Station), also filter by SHOW_IN_WEIGHING=1
 router.get('/api/items/store/:storeNo', async (req, res) => {
     try {
         const storeNo = req.params.storeNo;
@@ -648,9 +649,14 @@ router.get('/api/items/store/:storeNo', async (req, res) => {
         // These are handled by POS logic and should not be in the database
         await pool.query("DELETE FROM store_items WHERE CODE IN ('RETURN', 'CONTAINER', 'TARE')");
 
-        const queryResult = await pool.query(
-            'SELECT * FROM store_items WHERE IS_ACTIVE = 1 ORDER BY NAME'
-        );
+        // For Store 2 (Weighing Station), only show items with SHOW_IN_WEIGHING=1
+        let query = 'SELECT * FROM store_items WHERE IS_ACTIVE = 1';
+        if (storeNo === '2') {
+            query += ' AND (SHOW_IN_WEIGHING = 1 OR SHOW_IN_WEIGHING IS NULL)';
+        }
+        query += ' ORDER BY NAME';
+
+        const queryResult = await pool.query(query);
 
         if (Array.isArray(queryResult)) {
             // Transform STOCK JSON to include storeNo-specific stock for backward compatibility

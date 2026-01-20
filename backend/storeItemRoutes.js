@@ -93,24 +93,27 @@ router.post('/api/addItem', async (req, res) => {
         // UPSERT: Insert item or update if CODE already exists (prevents duplicates atomically)
         const editedDate = req.body.EDITED_DATE || new Date().toISOString().slice(0, 19).replace('T', ' ');
         const createdBy = req.body.CREATED_BY || null;
+        const showInWeighing = req.body.SHOW_IN_WEIGHING !== undefined ? req.body.SHOW_IN_WEIGHING : 1;
 
         const upsertResult = await pool.query(`
-            INSERT INTO store_items (CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE, CREATED_BY)
-            VALUES (?, ?, ?, ?, 1, ?, ?)
+            INSERT INTO store_items (CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE, CREATED_BY, SHOW_IN_WEIGHING)
+            VALUES (?, ?, ?, ?, 1, ?, ?, ?)
             ON DUPLICATE KEY UPDATE 
                 NAME = VALUES(NAME),
                 BUYING_PRICE = VALUES(BUYING_PRICE),
                 SELLING_PRICE = VALUES(SELLING_PRICE),
                 IS_ACTIVE = 1,
                 EDITED_DATE = VALUES(EDITED_DATE),
-                CREATED_BY = VALUES(CREATED_BY)
+                CREATED_BY = VALUES(CREATED_BY),
+                SHOW_IN_WEIGHING = VALUES(SHOW_IN_WEIGHING)
         `, [
             req.body.CODE,
             req.body.NAME,
             req.body.BUYING_PRICE,
             req.body.SELLING_PRICE,
             editedDate,
-            createdBy
+            createdBy,
+            showInWeighing
         ]);
 
         // insertId is 0 if it was an update (duplicate key), otherwise it's the new ID
@@ -272,7 +275,7 @@ router.post('/api/updateItem', async (req, res) => {
         }
 
         // Sanitize: Only allow valid columns to be updated
-        const allowedFields = ['CODE', 'NAME', 'BUYING_PRICE', 'SELLING_PRICE', 'IS_ACTIVE', 'CREATED_BY'];
+        const allowedFields = ['CODE', 'NAME', 'BUYING_PRICE', 'SELLING_PRICE', 'IS_ACTIVE', 'CREATED_BY', 'SHOW_IN_WEIGHING'];
         const setClauses = [];
         const values = [];
 
