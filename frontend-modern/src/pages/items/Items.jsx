@@ -225,7 +225,7 @@ export default function Items() {
                         size="small"
                         checked={value === 1 || value === true || value === '1'}
                         onChange={(checked) => handleWeighingToggle(record, checked)}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(checked, e) => e && e.stopPropagation()}
                     />
                 </Tooltip>
             )
@@ -346,7 +346,7 @@ export default function Items() {
                                             size="small"
                                             checked={item.SHOW_IN_WEIGHING === 1 || item.SHOW_IN_WEIGHING === true || item.SHOW_IN_WEIGHING === '1'}
                                             onChange={(checked) => handleWeighingToggle(item, checked)}
-                                            onClick={(e) => e.stopPropagation()}
+                                            onClick={(checked, e) => e && e.stopPropagation()}
                                         />
                                     </div>
                                     <div className="flex gap-2">
