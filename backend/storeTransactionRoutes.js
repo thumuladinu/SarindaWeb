@@ -1640,9 +1640,10 @@ router.post('/api/adjustInventory', async (req, res) => {
 
 
         // 2. Create Transaction Record (The Ledger Entry)
-        const codeRes = await pool.query('SELECT COUNT(*) as count FROM store_transactions WHERE TYPE = ?', [transactionType]);
-        const nextId = (codeRes[0].count || 0) + 1;
-        const txCode = `${transactionType.toUpperCase().substring(0, 3)}-${String(nextId).padStart(6, '0')}`;
+        // Use timestamp + random suffix for globally unique code (avoids duplicate key errors)
+        const timestamp = Date.now();
+        const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const txCode = `ADJ-${timestamp}-${randomSuffix}`;
 
         const txObj = {
             CODE: txCode,
