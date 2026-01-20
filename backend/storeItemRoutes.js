@@ -303,9 +303,14 @@ router.post('/api/updateItem', async (req, res) => {
         const updateResult = await pool.query(sql, values);
 
         if (updateResult.affectedRows > 0) {
-            // Emit real-time event
+            // Emit real-time event with all updated fields
             if (global.io) {
-                global.io.emit('item:updated', { id: id, code: req.body.CODE, action: 'updated' });
+                global.io.emit('item:updated', {
+                    id: id,
+                    code: req.body.CODE,
+                    action: 'updated',
+                    showInWeighing: req.body.SHOW_IN_WEIGHING
+                });
             }
             return res.status(200).json({ success: true, message: 'Item updated successfully' });
         } else {
