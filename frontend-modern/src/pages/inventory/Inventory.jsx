@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Input, Tag, Spin, App, Tabs, Form, Drawer, Radio, Select, InputNumber, DatePicker, Popconfirm } from 'antd';
-import { SearchOutlined, StockOutlined, HistoryOutlined, FallOutlined, RiseOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Input, Tag, Spin, App, Tabs, Form, Drawer, Radio, Select, InputNumber, DatePicker, Popconfirm, Modal, Descriptions } from 'antd';
+import { SearchOutlined, StockOutlined, HistoryOutlined, FallOutlined, RiseOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import Cookies from 'js-cookie';
 
 import InventoryHistoryFilters from './InventoryHistoryFilters';
 
@@ -41,6 +42,14 @@ export default function Inventory() {
     const [selectedItem, setSelectedItem] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [form] = Form.useForm();
+
+    // History View Modal State
+    const [viewRecord, setViewRecord] = useState(null);
+    const [viewModalOpen, setViewModalOpen] = useState(false);
+    const openHistoryDetail = (record) => {
+        setViewRecord(record);
+        setViewModalOpen(true);
+    };
 
     // Fetch Initial Data
     useEffect(() => {
@@ -173,13 +182,19 @@ export default function Inventory() {
     const handleAdjustmentSubmit = async (values) => {
         setSubmitting(true);
         try {
+            // Get current user (from Cookies)
+            const userStr = Cookies.get('rememberedUser');
+            const user = userStr ? JSON.parse(userStr) : null;
+            const userId = user ? (user.USER_ID || user.id) : null;
+
             const payload = {
                 ITEM_ID: selectedItem.ITEM_ID,
                 STORE_NO: values.STORE_NO,
                 TYPE: values.ACTION_TYPE,
-                QUANTITY: values.ACTION_TYPE === 'StockClear' ? 0 : values.QUANTITY,
+                QUANTITY: values.QUANTITY,
                 REASON: values.REASON,
-                DATE: values.DATE ? values.DATE.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD')
+                DATE: values.DATE ? values.DATE.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+                CREATED_BY: userId
             };
             console.log('[Inventory] Submitting adjustment:', payload);
 
@@ -273,7 +288,19 @@ export default function Inventory() {
                 {activeTab === '1' ? (
                     <Table columns={stockColumns} dataSource={filteredStock} rowKey="ITEM_ID" loading={loading} pagination={{ pageSize: 12 }} size="middle" />
                 ) : (
-                    <Table columns={historyColumns} dataSource={filteredHistory} rowKey="TRANSACTION_ID" loading={loading} pagination={{ pageSize: 12 }} size="middle" scroll={{ x: 900 }} />
+                    <Table
+                        columns={historyColumns}
+                        dataSource={filteredHistory}
+                        rowKey="TRANSACTION_ID"
+                        loading={loading}
+                        pagination={{ pageSize: 12 }}
+                        size="middle"
+                        scroll={{ x: 900 }}
+                        onRow={(record) => ({
+                            onClick: () => openHistoryDetail(record),
+                            className: 'cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors'
+                        })}
+                    />
                 )}
             </div>
 
@@ -316,11 +343,13 @@ export default function Inventory() {
             {activeTab === '2' && (
                 <div className="md:hidden flex flex-col gap-4">
                     {loading ? <div className="flex justify-center p-8"><Spin /></div> : filteredHistory.map(item => (
-                        <div key={item.TRANSACTION_ID} className="glass-card p-4 rounded-xl flex flex-col gap-3 relative">
+                        <div key={item.TRANSACTION_ID} onClick={() => openHistoryDetail(item)} className="glass-card p-4 rounded-xl flex flex-col gap-3 relative cursor-pointer active:scale-95 transition-transform">
                             {/* Delete Button */}
-                            <Popconfirm title="Delete?" description="Stock will recalculate" onConfirm={() => handleDeleteTransaction(item.TRANSACTION_ID)} okText="Yes" cancelText="No" okButtonProps={{ danger: true }}>
-                                <Button type="text" danger size="small" icon={<DeleteOutlined />} className="absolute top-3 right-3" />
-                            </Popconfirm>
+                            <div onClick={(e) => e.stopPropagation()} className="absolute top-3 right-3 z-10">
+                                <Popconfirm title="Delete?" description="Stock will recalculate" onConfirm={() => handleDeleteTransaction(item.TRANSACTION_ID)} okText="Yes" cancelText="No" okButtonProps={{ danger: true }}>
+                                    <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+                                </Popconfirm>
+                            </div>
 
                             <div className="flex justify-between items-start pr-8">
                                 <div className="flex flex-col">
@@ -389,9 +418,23 @@ export default function Inventory() {
                                 const actionType = getFieldValue('ACTION_TYPE');
                                 if (actionType === 'StockClear') {
                                     return (
-                                        <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg mb-4 text-sm text-red-700 dark:text-red-300">
-                                            ⚠️ This will <b>reset stock to 0</b> for the selected store. No quantity needed.
-                                        </div>
+                                        <>
+                                            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg mb-4 text-sm text-red-700 dark:text-red-300">
+                                                ⚠️ This will <b>reset stock to 0</b> for the selected store.
+                                            </div>
+                                            <Form.Item
+                                                name="QUANTITY"
+                                                label="Good/Accounted Quantity (Optional)"
+                                                help="Enter amount successfully sold/used. Remaining stock will be recorded as waste."
+                                            >
+                                                <InputNumber
+                                                    className="w-full"
+                                                    min={0}
+                                                    step={0.01}
+                                                    placeholder="Enter valid quantity (optional)"
+                                                />
+                                            </Form.Item>
+                                        </>
                                     );
                                 }
                                 return (
@@ -421,6 +464,53 @@ export default function Inventory() {
                     </Form>
                 )}
             </Drawer>
-        </div>
+
+            {/* View History Detail Modal */}
+            <Modal
+                title={<div className="flex items-center gap-2"><EyeOutlined className="text-blue-500" /> Transaction Details</div>}
+                open={viewModalOpen}
+                onCancel={() => setViewModalOpen(false)}
+                footer={[<Button key="close" onClick={() => setViewModalOpen(false)}>Close</Button>]}
+                width={500}
+            >
+                {viewRecord && (
+                    <div className="flex flex-col gap-4">
+                        {/* Header */}
+                        <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-white/5 rounded-lg border border-gray-100 dark:border-white/10">
+                            <div className="flex gap-2 items-center">
+                                <Tag icon={['AdjIn', 'Opening'].includes(viewRecord.DISPLAY_TYPE) ? <RiseOutlined /> : <FallOutlined />} color={['AdjIn', 'Opening'].includes(viewRecord.DISPLAY_TYPE) ? 'success' : 'error'}>
+                                    {viewRecord.DISPLAY_TYPE}
+                                </Tag>
+                                <Tag>Store {viewRecord.STORE_NO}</Tag>
+                            </div>
+                            <div className="text-gray-500 text-sm">
+                                {dayjs(viewRecord.CREATED_DATE).format('DD MMM YYYY, hh:mm A')}
+                            </div>
+                        </div>
+
+                        <Descriptions bordered size="small" column={1} className="mt-2" labelStyle={{ width: '150px', fontWeight: 500 }}>
+                            <Descriptions.Item label="Transaction Code">
+                                <span className="font-mono text-gray-600">{viewRecord.CODE}</span>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Item">
+                                <span className="font-medium">{viewRecord.ITEM_NAME}</span>
+                                <div className="text-xs text-gray-400">{viewRecord.ITEM_CODE}</div>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Adjustment">
+                                <span className={`font-bold text-lg ${['AdjOut', 'StockClear'].includes(viewRecord.DISPLAY_TYPE) ? 'text-red-500' : 'text-emerald-600'}`}>
+                                    {['AdjOut', 'StockClear'].includes(viewRecord.DISPLAY_TYPE) ? '-' : '+'}{Number(viewRecord.ITEM_QTY).toFixed(1)} Kg
+                                </span>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Reason / Notes">
+                                <span className="whitespace-pre-wrap">{viewRecord.COMMENTS || '-'}</span>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Action By">
+                                {viewRecord.CREATED_BY_NAME || `User ${viewRecord.CREATED_BY || '-'}`}
+                            </Descriptions.Item>
+                        </Descriptions>
+                    </div>
+                )}
+            </Modal>
+        </div >
     );
 }

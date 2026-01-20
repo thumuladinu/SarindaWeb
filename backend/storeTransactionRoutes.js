@@ -1562,6 +1562,11 @@ router.post('/api/adjustInventory', async (req, res) => {
         let transactionType = TYPE;
         let comment = REASON || 'Manual Adjustment';
 
+        // Fetch Cache Stock (Store Items) - REMOVED due to STOCK column issues
+        let cacheStock = 0;
+        // Logic relying on cacheStock for 'StockClear' fallback is now disabled
+        // relying solely on Ledger calculation below.
+
         // Get current stock from LEDGER (not cache) for accurate calculations
         let currentStock = 0;
         try {
@@ -1595,6 +1600,13 @@ router.post('/api/adjustInventory', async (req, res) => {
             console.log('[adjustInventory] Error calculating current stock from ledger:', e);
             currentStock = 0;
         }
+
+        // Fallback: For StockClear, if Ledger says 0 but Cache shows stock, assume Cache is correct (Ghost Stock)
+        if (TYPE === 'StockClear' && currentStock === 0 && cacheStock > 0) {
+            console.log('[adjustInventory] Using Cache Stock as Ledger is 0. Cache:', cacheStock);
+            currentStock = cacheStock;
+        }
+
         console.log('[adjustInventory] Current stock:', currentStock, 'Target qty:', qty, 'Type:', TYPE);
 
         if (TYPE === 'AdjIn') {
@@ -1619,7 +1631,33 @@ router.post('/api/adjustInventory', async (req, res) => {
         } else if (TYPE === 'StockClear') {
             // Stock Clearance: Set stock to 0 (delta = 0 - current = -current)
             delta = -currentStock;
-            comment = `Stock Cleared (was ${currentStock}): ${comment}`;
+
+            // Check if user provided a specific "Cleared/Valid" quantity
+            // QUANTITY here represents the "Good" stock we accounted for. The rest is waste.
+            const hasUserQty = QUANTITY !== undefined && QUANTITY !== null && QUANTITY !== '';
+
+            if (hasUserQty) {
+                const validQty = parseFloat(QUANTITY) || 0;
+
+                // Calculate waste
+                // Waste = Current Stock - Valid Qty
+                // Only relevant if current stock is positive
+                if (currentStock > 0) {
+                    const waste = currentStock - validQty;
+                    // Prevent division by zero if currentStock is somehow 0 (though logic prevents this block)
+                    const wastePerc = currentStock > 0 ? (waste / currentStock) * 100 : 0;
+
+                    const percentStr = isFinite(wastePerc) ? wastePerc.toFixed(1) : '0.0';
+                    const wasteStr = waste.toFixed(2);
+
+                    comment = `Stock Cleared (was ${currentStock}). Valid: ${validQty}. Waste: ${wasteStr}kg (${percentStr}%): ${comment}`;
+                } else {
+                    // If stock is negative or zero, 'waste' calc is ambiguous, just log clear
+                    comment = `Stock Cleared (was ${currentStock}): ${comment}`;
+                }
+            } else {
+                comment = `Stock Cleared (was ${currentStock}): ${comment}`;
+            }
 
             // Fix: Handle negative stock clearing (-10 -> 0 requires +10, aka AdjIn)
             if (delta >= 0) {
@@ -1640,10 +1678,15 @@ router.post('/api/adjustInventory', async (req, res) => {
 
 
         // 2. Create Transaction Record (The Ledger Entry)
-        // Use timestamp + random suffix for globally unique code (avoids duplicate key errors)
-        const timestamp = Date.now();
+        // Use Date (DDMMYY) + random suffix for unique code
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+        const dateStr = `${day}${month}${year}`;
+
         const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const txCode = `ADJ-${timestamp}-${randomSuffix}`;
+        const txCode = `ADJ-${dateStr}-${randomSuffix}`;
 
         const txObj = {
             CODE: txCode,
@@ -1793,7 +1836,7 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
             let change = 0;
             if (['Buying', 'Opening', 'AdjIn'].includes(type)) {
                 change = qty;
-            } else if (['Selling', 'AdjOut'].includes(type)) {
+            } else if (['Selling', 'AdjOut', 'StockClear'].includes(type)) {
                 change = -qty;
             }
 
@@ -1833,10 +1876,12 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 sti.ITEM_ID,
                 sti.QUANTITY as ITEM_QTY,
                 i.NAME as ITEM_NAME,
-                i.CODE as ITEM_CODE
+                i.CODE as ITEM_CODE,
+                u.NAME as CREATED_BY_NAME
             FROM store_transactions st
             JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
             LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
+            LEFT JOIN user_details u ON st.CREATED_BY = u.USER_ID
             WHERE st.IS_ACTIVE = 1 
               AND st.TYPE IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'StockClear')
               ${req.body.startDate ? `AND st.CREATED_DATE >= '${req.body.startDate}'` : ''}
