@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Table, Button, Input, Modal, App, Tag, Tooltip, Row, Col, Popconfirm } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, UserOutlined } from '@ant-design/icons';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 import CustomerForm from './CustomerForm';
 
 const Customers = () => {
@@ -15,6 +16,9 @@ const Customers = () => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [formMode, setFormMode] = useState('add');
     const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+    // Current User Logic
+    const currentUser = JSON.parse(Cookies.get('rememberedUser') || '{}');
 
     const fetchCustomers = async () => {
         setLoading(true);
@@ -159,7 +163,10 @@ const Customers = () => {
                 </div>
             )
         }
-    ];
+    ].filter(col => {
+        if (currentUser?.ROLE === 'MONITOR' && col.key === 'actions') return false;
+        return true;
+    });
 
     return (
         <div className="animate-fade-in p-4 pb-24 md:pb-8 max-w-[1600px] mx-auto">
@@ -178,9 +185,11 @@ const Customers = () => {
                         className="w-full md:w-64"
                         prefix={<SearchOutlined className="text-gray-400" />}
                     />
-                    <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} className="bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-500/30">
-                        Add Customer
-                    </Button>
+                    {currentUser?.ROLE !== 'MONITOR' && (
+                        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} className="bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-500/30">
+                            Add Customer
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -210,9 +219,11 @@ const Customers = () => {
                 ) : (
                     filteredCustomers.map(record => (
                         <div key={record.CUSTOMER_ID} className="glass-card p-4 rounded-xl flex flex-col gap-3 relative border border-gray-100 dark:border-white/5">
-                            <div className="absolute top-2 right-2 flex gap-1 z-10">
-                                <Button onClick={(e) => { e.stopPropagation(); handleEdit(record); }} size="small" type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:text-blue-600 bg-transparent border-none shadow-none" />
-                            </div>
+                            {currentUser?.ROLE !== 'MONITOR' && (
+                                <div className="absolute top-2 right-2 flex gap-1 z-10">
+                                    <Button onClick={(e) => { e.stopPropagation(); handleEdit(record); }} size="small" type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:text-blue-600 bg-transparent border-none shadow-none" />
+                                </div>
+                            )}
 
                             <div className="flex justify-between items-start pr-8">
                                 <div className="flex flex-col">
@@ -229,16 +240,18 @@ const Customers = () => {
 
                             {record.ADDRESS && <div className="text-xs text-gray-500 dark:text-gray-500 border-t border-gray-100 dark:border-white/5 pt-2 mt-1">{record.ADDRESS}</div>}
 
-                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-gray-100 dark:border-white/5">
-                                <span className="text-xs text-gray-400">Manage Customer</span>
-                                <Popconfirm
-                                    title="Delete?"
-                                    onConfirm={() => handleDelete(record.CUSTOMER_ID)}
-                                    okButtonProps={{ danger: true }}
-                                >
-                                    <Button size="small" danger icon={<DeleteOutlined />} className="border-red-500/20 hover:border-red-500/50 bg-red-500/5">Delete</Button>
-                                </Popconfirm>
-                            </div>
+                            {currentUser?.ROLE !== 'MONITOR' && (
+                                <div className="flex justify-between items-center pt-2 mt-1 border-t border-gray-100 dark:border-white/5">
+                                    <span className="text-xs text-gray-400">Manage Customer</span>
+                                    <Popconfirm
+                                        title="Delete?"
+                                        onConfirm={() => handleDelete(record.CUSTOMER_ID)}
+                                        okButtonProps={{ danger: true }}
+                                    >
+                                        <Button size="small" danger icon={<DeleteOutlined />} className="border-red-500/20 hover:border-red-500/50 bg-red-500/5">Delete</Button>
+                                    </Popconfirm>
+                                </div>
+                            )}
                         </div>
                     ))
                 )}

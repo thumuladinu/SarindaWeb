@@ -18,8 +18,8 @@ const Login = () => {
             if (response.status === 200) {
                 const { USER_ID, NAME, EMAIL, ROLE, PHOTO } = response.data.user;
 
-                // Enforce Admin/Dev Access Only
-                const allowedRoles = ['admin', 'dev'];
+                // Enforce Admin/Dev/Monitor Access
+                const allowedRoles = ['admin', 'dev', 'monitor'];
                 if (!allowedRoles.includes((ROLE || '').toLowerCase())) {
                     message.error('Access Denied: Application restricted to Admins.');
                     return;

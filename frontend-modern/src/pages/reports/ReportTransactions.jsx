@@ -6,6 +6,7 @@ import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import MobileDateRange from '../../components/common/MobileDateRange';
+import CollapsibleReportFilters from '../../components/common/CollapsibleReportFilters';
 
 const { RangePicker } = DatePicker;
 
@@ -134,60 +135,71 @@ export default function ReportTransactions() {
         </div>
     );
 
-    // Mobile Transaction Card
+    // Mobile TransactionCard
     const TransactionCard = ({ item }) => (
-        <div className="flex items-center justify-between p-3 bg-white/50 dark:bg-white/5 rounded-lg">
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+        <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 border border-gray-100 dark:border-white/5 shadow-sm flex items-center justify-between">
+            <div className="flex-1 min-w-0 pr-3">
+                <div className="flex items-center gap-2 mb-1">
                     <Tag
                         color={item.TYPE === 'Selling' ? 'success' : item.TYPE === 'Buying' ? 'error' : 'warning'}
-                        className="text-[10px] m-0"
+                        className="text-[10px] m-0 font-bold px-1.5 py-0.5"
                     >
                         {item.TYPE === 'Selling' ? 'IN' : item.TYPE === 'Buying' ? 'OUT' : 'EXP'}
                     </Tag>
-                    <span className="text-xs text-gray-500">{dayjs(item.CREATED_DATE).format('MM-DD HH:mm')}</span>
+                    <span className="text-[10px] text-gray-400">{dayjs(item.CREATED_DATE).format('MMM DD, HH:mm')}</span>
                 </div>
-                <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate mt-1">
+                <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate font-mono tracking-wide">
                     {item.CODE}
                 </div>
+                {item.C_NAME && (
+                    <div className="text-[10px] text-gray-500 mt-0.5 truncate">
+                        👤 {item.C_NAME}
+                    </div>
+                )}
             </div>
-            <div className={`text-right font-bold ${item.TYPE === 'Selling' ? 'text-emerald-600' : 'text-red-500'}`}>
+            <div className={`text-right font-bold text-base ${item.TYPE === 'Selling' ? 'text-emerald-600' : 'text-red-500'}`}>
                 {item.TYPE === 'Selling' ? '+' : '-'}Rs.{Number(item.SUB_TOTAL).toFixed(0)}
             </div>
         </div>
     );
 
+
+
     return (
-        <div className="flex flex-col gap-3">
-            {/* Filter Bar - Same for mobile and desktop */}
-            <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3">
-                <div className="text-xs text-gray-500 mb-2">Select Period</div>
+        <div className="flex flex-col gap-4">
+            {/* Filter Bar */}
+            <CollapsibleReportFilters
+                title="Filter Transactions"
+                activeFilterCount={dateRange ? 1 : 0}
+                onClear={() => setDateRange([dayjs().startOf('month'), dayjs().endOf('month')])}
+                defaultCollapsed={false}
+            >
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Select Period</div>
                 <MobileDateRange
                     value={dateRange}
                     onChange={setDateRange}
-                    className="w-full mb-3"
+                    className="w-full mb-4"
                 />
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                     <Button
                         type="primary"
                         icon={<SearchOutlined />}
                         onClick={fetchReport}
                         loading={loading}
-                        className="bg-emerald-600 hover:bg-emerald-500 flex-1"
+                        className="bg-emerald-600 hover:bg-emerald-500 flex-1 h-10 text-sm font-medium rounded-xl border-none shadow-md shadow-emerald-500/20"
                     >
-                        Generate
+                        Generate Report
                     </Button>
                     {data && (
                         <Button
                             icon={<FilePdfOutlined />}
                             onClick={generatePDF}
                             danger
-                        >
-                            PDF
-                        </Button>
+                            className="h-10 w-12 flex items-center justify-center rounded-xl"
+                        />
                     )}
                 </div>
-            </div>
+            </CollapsibleReportFilters>
 
             {/* Loading State */}
             {loading && (
@@ -259,15 +271,10 @@ export default function ReportTransactions() {
                         <div className="text-xs text-gray-500 mb-2 flex justify-between items-center">
                             <span>Transactions ({data.details.length})</span>
                         </div>
-                        <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto pr-1">
-                            {data.details.slice(0, 20).map((item, index) => (
+                        <div className="flex flex-col gap-2">
+                            {data.details.map((item, index) => (
                                 <TransactionCard key={item.TRANSACTION_ID || index} item={item} />
                             ))}
-                            {data.details.length > 20 && (
-                                <div className="text-center text-xs text-gray-400 py-2">
-                                    + {data.details.length - 20} more (Download PDF for full list)
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>

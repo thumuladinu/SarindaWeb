@@ -240,7 +240,7 @@ export default function Balance() {
                                             {currentFloatIndex + 1} / {floats.length}
                                         </span>
                                     )}
-                                    {isNewEntry && floats.length > 0 && (
+                                    {isNewEntry && floats.length > 0 && user?.ROLE !== 'MONITOR' && (
                                         <span className="text-xs bg-blue-200 dark:bg-blue-700 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
                                             + New
                                         </span>
@@ -281,7 +281,7 @@ export default function Balance() {
                                     <Button
                                         icon={<RightOutlined />}
                                         onClick={handleNextFloat}
-                                        disabled={isNewEntry}
+                                        disabled={isNewEntry || (user?.ROLE === 'MONITOR' && currentFloatIndex >= floats.length - 1)}
                                         size="small"
                                     />
                                 </div>
@@ -311,22 +311,25 @@ export default function Balance() {
                                             className="flex-1"
                                             placeholder="0"
                                             controls={false}
+                                            disabled={user?.ROLE === 'MONITOR'}
                                         />
                                     </div>
                                 ))}
                             </div>
 
-                            <Button
-                                type="primary"
-                                block
-                                size="large"
-                                icon={<SaveOutlined />}
-                                onClick={handleSaveFloat}
-                                loading={loading}
-                                className={`border-none h-12 text-lg ${isNewEntry ? 'bg-blue-500 hover:bg-blue-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
-                            >
-                                {isNewEntry ? '➕ Add New Entry' : '💾 Update This Entry'}
-                            </Button>
+                            {user?.ROLE !== 'MONITOR' && (
+                                <Button
+                                    type="primary"
+                                    block
+                                    size="large"
+                                    icon={<SaveOutlined />}
+                                    onClick={handleSaveFloat}
+                                    loading={loading}
+                                    className={`border-none h-12 text-lg ${isNewEntry ? 'bg-blue-500 hover:bg-blue-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+                                >
+                                    {isNewEntry ? '➕ Add New Entry' : '💾 Update This Entry'}
+                                </Button>
+                            )}
                         </div>
                     </div>
 

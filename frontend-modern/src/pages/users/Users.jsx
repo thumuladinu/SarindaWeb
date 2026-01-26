@@ -197,7 +197,10 @@ const Users = () => {
                 </div>
             )
         }
-    ];
+    ].filter(col => {
+        if (currentUser?.ROLE === 'MONITOR' && col.key === 'actions') return false;
+        return true;
+    });
 
     return (
         <div className="animate-fade-in p-4 pb-24 md:pb-8 max-w-[1600px] mx-auto">
@@ -216,9 +219,11 @@ const Users = () => {
                         className="w-full md:w-64"
                         prefix={<SearchOutlined className="text-gray-400" />}
                     />
-                    <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} className="bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-500/30">
-                        Add User
-                    </Button>
+                    {currentUser?.ROLE !== 'MONITOR' && (
+                        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} className="bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-500/30">
+                            Add User
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -248,9 +253,11 @@ const Users = () => {
                 ) : (
                     filteredUsers.map(record => (
                         <div key={record.USER_ID} className={`glass-card p-4 rounded-xl flex flex-col gap-3 relative border ${!record.IS_ACTIVE ? 'opacity-75 grayscale' : 'border-gray-100 dark:border-white/5'}`}>
-                            <div className="absolute top-2 right-2 flex gap-1 z-10">
-                                <Button onClick={(e) => { e.stopPropagation(); handleEdit(record); }} size="small" type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:text-blue-600 bg-transparent border-none shadow-none" />
-                            </div>
+                            {currentUser?.ROLE !== 'MONITOR' && (
+                                <div className="absolute top-2 right-2 flex gap-1 z-10">
+                                    <Button onClick={(e) => { e.stopPropagation(); handleEdit(record); }} size="small" type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:text-blue-600 bg-transparent border-none shadow-none" />
+                                </div>
+                            )}
 
                             <div className="flex items-start gap-3 pr-8">
                                 {/* Profile Image */}
@@ -280,25 +287,27 @@ const Users = () => {
                                 </Tag>
                             </div>
 
-                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-gray-100 dark:border-white/5">
-                                <span className="text-xs text-gray-400">Manage Status</span>
-                                {record.USER_ID !== currentUser?.USER_ID && (
-                                    <Popconfirm
-                                        title={record.IS_ACTIVE ? "Deactivate User?" : "Activate User?"}
-                                        onConfirm={() => handleToggleStatus(record)}
-                                        okButtonProps={{ danger: record.IS_ACTIVE }}
-                                    >
-                                        <Button
-                                            size="small"
-                                            danger={record.IS_ACTIVE}
-                                            className={!record.IS_ACTIVE ? "text-emerald-500 border-emerald-500/20 hover:border-emerald-500" : ""}
-                                            icon={record.IS_ACTIVE ? <LockOutlined /> : <UnlockOutlined />}
+                            {currentUser?.ROLE !== 'MONITOR' && (
+                                <div className="flex justify-between items-center pt-2 mt-1 border-t border-gray-100 dark:border-white/5">
+                                    <span className="text-xs text-gray-400">Manage Status</span>
+                                    {record.USER_ID !== currentUser?.USER_ID && (
+                                        <Popconfirm
+                                            title={record.IS_ACTIVE ? "Deactivate User?" : "Activate User?"}
+                                            onConfirm={() => handleToggleStatus(record)}
+                                            okButtonProps={{ danger: record.IS_ACTIVE }}
                                         >
-                                            {record.IS_ACTIVE ? "Deactivate" : "Activate"}
-                                        </Button>
-                                    </Popconfirm>
-                                )}
-                            </div>
+                                            <Button
+                                                size="small"
+                                                danger={record.IS_ACTIVE}
+                                                className={!record.IS_ACTIVE ? "text-emerald-500 border-emerald-500/20 hover:border-emerald-500" : ""}
+                                                icon={record.IS_ACTIVE ? <LockOutlined /> : <UnlockOutlined />}
+                                            >
+                                                {record.IS_ACTIVE ? "Deactivate" : "Activate"}
+                                            </Button>
+                                        </Popconfirm>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ))
                 )}

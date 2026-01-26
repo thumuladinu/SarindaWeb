@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, Input, Tooltip, App, Form, Popconfirm, Drawer, Spin, Switch } from 'antd';
 import { EditOutlined, DeleteOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 
 export default function Items() {
     const { message } = App.useApp();
@@ -11,6 +12,9 @@ export default function Items() {
     const [searchText, setSearchText] = useState('');
 
     // Form / Drawer State
+    // Current User Logic
+    const currentUser = JSON.parse(Cookies.get('rememberedUser') || '{}');
+
     // Form / Drawer State
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
@@ -226,6 +230,7 @@ export default function Items() {
                         checked={value === 1 || value === true || value === '1'}
                         onChange={(checked) => handleWeighingToggle(record, checked)}
                         onClick={(checked, e) => e && e.stopPropagation()}
+                        disabled={currentUser?.ROLE === 'MONITOR'}
                     />
                 </Tooltip>
             )
@@ -257,7 +262,10 @@ export default function Items() {
                 </div>
             )
         }
-    ];
+    ].filter(col => {
+        if (currentUser?.ROLE === 'MONITOR' && col.key === 'actions') return false;
+        return true;
+    });
 
     return (
         <div className="animate-fade-in p-4 pb-24 md:pb-8 max-w-[1600px] mx-auto">
@@ -276,9 +284,11 @@ export default function Items() {
                         className="w-full md:w-64"
                         allowClear
                     />
-                    <Button type="primary" icon={<PlusOutlined />} onClick={handleAddNew} className="bg-blue-600">
-                        Add Item
-                    </Button>
+                    {currentUser?.ROLE !== 'MONITOR' && (
+                        <Button type="primary" icon={<PlusOutlined />} onClick={handleAddNew} className="bg-blue-600">
+                            Add Item
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -316,9 +326,11 @@ export default function Items() {
 
                         return (
                             <div key={item.ITEM_ID} className="glass-card p-4 rounded-xl flex flex-col gap-3 relative">
-                                <div className="absolute top-2 right-2 flex gap-1 z-10">
-                                    <Button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} size="small" type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:text-blue-600 bg-transparent border-none shadow-none" />
-                                </div>
+                                {currentUser?.ROLE !== 'MONITOR' && (
+                                    <div className="absolute top-2 right-2 flex gap-1 z-10">
+                                        <Button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} size="small" type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:text-blue-600 bg-transparent border-none shadow-none" />
+                                    </div>
+                                )}
 
                                 <div className="flex justify-between items-start pr-12">
                                     <div className="flex flex-col">
@@ -347,21 +359,24 @@ export default function Items() {
                                             checked={item.SHOW_IN_WEIGHING === 1 || item.SHOW_IN_WEIGHING === true || item.SHOW_IN_WEIGHING === '1'}
                                             onChange={(checked) => handleWeighingToggle(item, checked)}
                                             onClick={(checked, e) => e && e.stopPropagation()}
+                                            disabled={currentUser?.ROLE === 'MONITOR'}
                                         />
                                     </div>
-                                    <div className="flex gap-2">
-                                        <Popconfirm
-                                            title="Delete Item"
-                                            description={`Delete ${item.NAME}?`}
-                                            onConfirm={(e) => { e.stopPropagation(); handleDelete(item); }}
-                                            onCancel={(e) => e.stopPropagation()}
-                                            okText="Yes"
-                                            cancelText="No"
-                                            okButtonProps={{ danger: true }}
-                                        >
-                                            <Button onClick={(e) => e.stopPropagation()} size="small" danger icon={<DeleteOutlined />} className="border-red-500/20 hover:border-red-500/50 bg-red-500/5">Delete</Button>
-                                        </Popconfirm>
-                                    </div>
+                                    {currentUser?.ROLE !== 'MONITOR' && (
+                                        <div className="flex gap-2">
+                                            <Popconfirm
+                                                title="Delete Item"
+                                                description={`Delete ${item.NAME}?`}
+                                                onConfirm={(e) => { e.stopPropagation(); handleDelete(item); }}
+                                                onCancel={(e) => e.stopPropagation()}
+                                                okText="Yes"
+                                                cancelText="No"
+                                                okButtonProps={{ danger: true }}
+                                            >
+                                                <Button onClick={(e) => e.stopPropagation()} size="small" danger icon={<DeleteOutlined />} className="border-red-500/20 hover:border-red-500/50 bg-red-500/5">Delete</Button>
+                                            </Popconfirm>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -436,15 +451,17 @@ export default function Items() {
                         <Button onClick={() => setDrawerOpen(false)} size="large" className="rounded-xl">
                             Cancel
                         </Button>
-                        <Button
-                            type="primary"
-                            htmlType="submit"
-                            loading={submitting}
-                            size="large"
-                            className="rounded-xl px-8 bg-emerald-500 hover:bg-emerald-600 border-none shadow-lg shadow-emerald-500/30"
-                        >
-                            {editingItem ? 'Update Item' : 'Create Item'}
-                        </Button>
+                        {currentUser?.ROLE !== 'MONITOR' && (
+                            <Button
+                                type="primary"
+                                htmlType="submit"
+                                loading={submitting}
+                                size="large"
+                                className="rounded-xl px-8 bg-emerald-500 hover:bg-emerald-600 border-none shadow-lg shadow-emerald-500/30"
+                            >
+                                {editingItem ? 'Update Item' : 'Create Item'}
+                            </Button>
+                        )}
                     </div>
                 </Form>
             </Drawer>

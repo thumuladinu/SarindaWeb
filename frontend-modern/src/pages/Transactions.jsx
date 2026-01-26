@@ -15,6 +15,19 @@ export default function Transactions() {
     const [users, setUsers] = useState({}); // Map ID -> Name
     const [pagination, setPagination] = useState({ current: 1, pageSize: 50, total: 0 });
 
+    // Current User Logic
+    const [currentUser, setCurrentUser] = useState(null);
+    useEffect(() => {
+        const importCookies = async () => {
+            const Cookies = (await import('js-cookie')).default;
+            const userStr = Cookies.get('rememberedUser');
+            if (userStr) {
+                setCurrentUser(JSON.parse(userStr));
+            }
+        };
+        importCookies();
+    }, []);
+
     // Edit Drawer State
     const [editDrawerOpen, setEditDrawerOpen] = useState(false);
     const [selectedTransactionId, setSelectedTransactionId] = useState(null);
@@ -39,7 +52,8 @@ export default function Transactions() {
         type: null,
         minAmount: '',
         maxAmount: '',
-        dateRange: null
+        dateRange: null,
+        item: null
     });
 
     // Fetch Users Mapping
@@ -74,7 +88,8 @@ export default function Transactions() {
                 minAmount: filters.minAmount || null,
                 maxAmount: filters.maxAmount || null,
                 startDate: filters.dateRange ? filters.dateRange[0].format('YYYY-MM-DD') : null,
-                endDate: filters.dateRange ? filters.dateRange[1].format('YYYY-MM-DD') : null
+                endDate: filters.dateRange ? filters.dateRange[1].format('YYYY-MM-DD') : null,
+                itemIds: filters.item || []
             };
 
             const response = await axios.post('/api/getAllTransactionsCashBook', payload);
@@ -316,12 +331,16 @@ export default function Transactions() {
                     <Tooltip title="View Bill">
                         <Button onClick={() => handleViewBill(record)} type="text" shape="circle" icon={<EyeOutlined />} className="text-green-500 hover:bg-green-50 dark:hover:bg-green-500/10" />
                     </Tooltip>
-                    <Tooltip title="Edit">
-                        <Button onClick={() => handleEdit(record.TRANSACTION_ID)} type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10" />
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                        <Button onClick={() => handleDelete(record)} type="text" shape="circle" icon={<DeleteOutlined />} danger className="hover:bg-red-50 dark:hover:bg-red-500/10" />
-                    </Tooltip>
+                    {currentUser?.ROLE !== 'MONITOR' && (
+                        <>
+                            <Tooltip title="Edit">
+                                <Button onClick={() => handleEdit(record.TRANSACTION_ID)} type="text" shape="circle" icon={<EditOutlined />} className="text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10" />
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                                <Button onClick={() => handleDelete(record)} type="text" shape="circle" icon={<DeleteOutlined />} danger className="hover:bg-red-50 dark:hover:bg-red-500/10" />
+                            </Tooltip>
+                        </>
+                    )}
                 </div>
             )
         }
@@ -334,16 +353,18 @@ export default function Transactions() {
             <TransactionFilters filters={filters} setFilters={setFilters} />
 
             {/* Add Expense Button */}
-            <div className="flex justify-end mb-4">
-                <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={openExpenseModal}
-                    className="bg-orange-500 hover:bg-orange-600 border-orange-500"
-                >
-                    Add Expense
-                </Button>
-            </div>
+            {currentUser?.ROLE !== 'MONITOR' && (
+                <div className="flex justify-end mb-4">
+                    <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={openExpenseModal}
+                        className="bg-orange-500 hover:bg-orange-600 border-orange-500"
+                    >
+                        Add Expense
+                    </Button>
+                </div>
+            )}
 
             {/* Desktop Table */}
             <div className="hidden md:block glass-card rounded-2xl overflow-hidden p-1">
@@ -397,8 +418,12 @@ export default function Transactions() {
 
                         <div className="mt-2 flex justify-end gap-3 pt-2 border-t border-white/5">
                             <Button onClick={() => handleViewBill(item)} size="small" icon={<EyeOutlined />} className="dark:text-green-400 border-green-500/20 hover:border-green-500/50 bg-green-500/5">View</Button>
-                            <Button onClick={() => handleEdit(item.TRANSACTION_ID)} size="small" icon={<EditOutlined />} className="dark:text-blue-400 border-blue-500/20 hover:border-blue-500/50 bg-blue-500/5">Edit</Button>
-                            <Button onClick={() => handleDelete(item)} size="small" danger icon={<DeleteOutlined />} className="border-red-500/20 hover:border-red-500/50 bg-red-500/5">Delete</Button>
+                            {currentUser?.ROLE !== 'MONITOR' && (
+                                <>
+                                    <Button onClick={() => handleEdit(item.TRANSACTION_ID)} size="small" icon={<EditOutlined />} className="dark:text-blue-400 border-blue-500/20 hover:border-blue-500/50 bg-blue-500/5">Edit</Button>
+                                    <Button onClick={() => handleDelete(item)} size="small" danger icon={<DeleteOutlined />} className="border-red-500/20 hover:border-red-500/50 bg-red-500/5">Delete</Button>
+                                </>
+                            )}
                         </div>
                     </div>
                 ))}

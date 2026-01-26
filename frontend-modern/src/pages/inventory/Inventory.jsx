@@ -214,6 +214,9 @@ export default function Inventory() {
         }
     };
 
+    // Current User Logic
+    const currentUser = JSON.parse(Cookies.get('rememberedUser') || '{}');
+
     // Desktop Columns - Stock Status
     const stockColumns = [
         { title: 'Code', dataIndex: 'CODE', key: 'CODE', render: (code) => <span className="font-mono font-medium">{code}</span> },
@@ -221,7 +224,16 @@ export default function Inventory() {
         { title: 'Store 1', dataIndex: 'STOCK_S1', key: 'STOCK_S1', align: 'center', render: (val) => <Tag color={val > 0 ? 'blue' : val < 0 ? 'red' : 'default'} className="font-bold">{Number(val).toFixed(1)} Kg</Tag> },
         { title: 'Store 2', dataIndex: 'STOCK_S2', key: 'STOCK_S2', align: 'center', render: (val) => <Tag color={val > 0 ? 'purple' : val < 0 ? 'red' : 'default'} className="font-bold">{Number(val).toFixed(1)} Kg</Tag> },
         { title: 'Total', dataIndex: 'TOTAL_STOCK', key: 'TOTAL', align: 'center', render: (val) => <span className="font-bold">{Number(val).toFixed(1)} Kg</span> },
-        { title: 'Action', key: 'action', align: 'center', render: (_, record) => <Button type="primary" size="small" ghost icon={<StockOutlined />} onClick={() => openAdjustment(record)}>Adjust</Button> }
+        {
+            title: 'Action',
+            key: 'action',
+            align: 'center',
+            render: (_, record) => (
+                currentUser?.ROLE !== 'MONITOR' ? (
+                    <Button type="primary" size="small" ghost icon={<StockOutlined />} onClick={() => openAdjustment(record)}>Adjust</Button>
+                ) : null
+            )
+        }
     ];
 
     // Desktop Columns - History
@@ -235,9 +247,11 @@ export default function Inventory() {
         { title: 'Reason', dataIndex: 'COMMENTS', key: 'NOTE', ellipsis: true, className: 'text-xs text-gray-500' },
         {
             title: '', key: 'action', width: 50, render: (_, record) => (
-                <Popconfirm title="Delete this record?" description="Stock will be recalculated" onConfirm={() => handleDeleteTransaction(record.TRANSACTION_ID)} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
-                    <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-                </Popconfirm>
+                currentUser?.ROLE !== 'MONITOR' ? (
+                    <Popconfirm title="Delete this record?" description="Stock will be recalculated" onConfirm={() => handleDeleteTransaction(record.TRANSACTION_ID)} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
+                        <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                ) : null
             )
         }
     ];
@@ -314,7 +328,9 @@ export default function Inventory() {
                                     <span className="text-xs text-gray-500 font-mono">{item.CODE}</span>
                                     <span className="text-gray-800 dark:text-white font-semibold text-lg">{item.NAME}</span>
                                 </div>
-                                <Button type="primary" size="small" icon={<StockOutlined />} className="bg-emerald-600 border-emerald-600" onClick={() => openAdjustment(item)}>Adjust</Button>
+                                {currentUser?.ROLE !== 'MONITOR' && (
+                                    <Button type="primary" size="small" icon={<StockOutlined />} className="bg-emerald-600 border-emerald-600" onClick={() => openAdjustment(item)}>Adjust</Button>
+                                )}
                             </div>
 
                             <div className="flex justify-between items-end border-t border-gray-200 dark:border-white/5 pt-3">
@@ -345,11 +361,13 @@ export default function Inventory() {
                     {loading ? <div className="flex justify-center p-8"><Spin /></div> : filteredHistory.map(item => (
                         <div key={item.TRANSACTION_ID} onClick={() => openHistoryDetail(item)} className="glass-card p-4 rounded-xl flex flex-col gap-3 relative cursor-pointer active:scale-95 transition-transform">
                             {/* Delete Button */}
-                            <div onClick={(e) => e.stopPropagation()} className="absolute top-3 right-3 z-10">
-                                <Popconfirm title="Delete?" description="Stock will recalculate" onConfirm={() => handleDeleteTransaction(item.TRANSACTION_ID)} okText="Yes" cancelText="No" okButtonProps={{ danger: true }}>
-                                    <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-                                </Popconfirm>
-                            </div>
+                            {currentUser?.ROLE !== 'MONITOR' && (
+                                <div onClick={(e) => e.stopPropagation()} className="absolute top-3 right-3 z-10">
+                                    <Popconfirm title="Delete?" description="Stock will recalculate" onConfirm={() => handleDeleteTransaction(item.TRANSACTION_ID)} okText="Yes" cancelText="No" okButtonProps={{ danger: true }}>
+                                        <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+                                    </Popconfirm>
+                                </div>
+                            )}
 
                             <div className="flex justify-between items-start pr-8">
                                 <div className="flex flex-col">

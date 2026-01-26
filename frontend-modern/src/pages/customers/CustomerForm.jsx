@@ -137,15 +137,17 @@ const CustomerForm = ({ open, onClose, onSuccess, initialValues, mode = 'add' })
                         <Button onClick={onClose} size="large" className="rounded-xl" disabled={loading}>
                             Cancel
                         </Button>
-                        <Button
-                            type="primary"
-                            htmlType="submit"
-                            loading={loading}
-                            size="large"
-                            className="rounded-xl px-8 bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-500/30"
-                        >
-                            {mode === 'edit' ? 'Update Customer' : 'Add Customer'}
-                        </Button>
+                        {user?.ROLE !== 'MONITOR' && (
+                            <Button
+                                type="primary"
+                                htmlType="submit"
+                                loading={loading}
+                                size="large"
+                                className="rounded-xl px-8 bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-500/30"
+                            >
+                                {mode === 'edit' ? 'Update Customer' : 'Add Customer'}
+                            </Button>
+                        )}
                     </div>
                 </Form>
             </Spin>

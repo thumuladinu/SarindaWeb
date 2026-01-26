@@ -7,6 +7,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { registerSinhalaFont } from '../../fonts/sinhalaFont';
 import MobileDateRange from '../../components/common/MobileDateRange';
+import CollapsibleReportFilters from '../../components/common/CollapsibleReportFilters';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -174,78 +175,102 @@ export default function ReportStockMovement() {
 
     // Mobile Item Card with store breakdown
     const ItemCard = ({ item }) => (
-        <div className="bg-white/50 dark:bg-white/5 rounded-lg p-3">
+        <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 border border-gray-100 dark:border-white/5 shadow-sm">
             <div className="flex justify-between items-start mb-2">
-                <div className="flex-1 min-w-0">
-                    <div className="text-[10px] text-gray-400">{item.code}</div>
-                    <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
+                <div className="flex-1 min-w-0 pr-2">
+                    <div className="text-[10px] text-gray-400 font-mono tracking-wide">{item.code}</div>
+                    <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
                 </div>
-                <div className={`text-right font-bold ${item.netChange >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
+                <div className={`text-right font-bold text-base ${item.netChange >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
+                    <span className="text-[10px] text-gray-400 font-normal block">Net Change</span>
                     {item.netChange >= 0 ? '+' : ''}{Number(item.netChange).toFixed(2)}
-                    <div className="text-[10px] text-gray-400">KG Total</div>
                 </div>
             </div>
+
             {/* Store breakdown when showing all stores */}
             {selectedStore === 'all' && (
-                <div className="text-[10px] mb-2 space-y-1">
+                <div className="space-y-2 mb-2">
                     {/* Store 1 Row */}
-                    <div className="flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 rounded px-2 py-1">
-                        <span className="font-medium text-gray-600 dark:text-gray-300">🏪 Store 1</span>
-                        <div className="flex gap-3">
-                            <span className="text-red-500">Buy: {Number(item.buyQtyS1).toFixed(1)}</span>
-                            <span className="text-emerald-600">Sell: {Number(item.sellQtyS1).toFixed(1)}</span>
-                            <span className={`font-bold ${item.netS1 >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
+                    <div className="flex flex-col bg-blue-50/50 dark:bg-blue-900/10 rounded-lg p-2">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">🏪 Store 1</span>
+                            <span className={`text-xs font-bold ${item.netS1 >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
                                 Net: {item.netS1 >= 0 ? '+' : ''}{Number(item.netS1).toFixed(1)}
                             </span>
                         </div>
+                        <div className="flex justify-between text-[10px]">
+                            <span className="text-red-500">Buy: {Number(item.buyQtyS1).toFixed(1)}</span>
+                            <span className="text-emerald-600">Sell: {Number(item.sellQtyS1).toFixed(1)}</span>
+                        </div>
                     </div>
                     {/* Store 2 Row */}
-                    <div className="flex justify-between items-center bg-purple-50 dark:bg-purple-900/20 rounded px-2 py-1">
-                        <span className="font-medium text-gray-600 dark:text-gray-300">🏪 Store 2</span>
-                        <div className="flex gap-3">
-                            <span className="text-red-500">Buy: {Number(item.buyQtyS2).toFixed(1)}</span>
-                            <span className="text-emerald-600">Sell: {Number(item.sellQtyS2).toFixed(1)}</span>
-                            <span className={`font-bold ${item.netS2 >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
+                    <div className="flex flex-col bg-purple-50/50 dark:bg-purple-900/10 rounded-lg p-2">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-semibold text-purple-700 dark:text-purple-300">🏪 Store 2</span>
+                            <span className={`text-xs font-bold ${item.netS2 >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
                                 Net: {item.netS2 >= 0 ? '+' : ''}{Number(item.netS2).toFixed(1)}
                             </span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                            <span className="text-red-500">Buy: {Number(item.buyQtyS2).toFixed(1)}</span>
+                            <span className="text-emerald-600">Sell: {Number(item.sellQtyS2).toFixed(1)}</span>
                         </div>
                     </div>
                 </div>
             )}
-            {/* Total row - only when single store or as summary */}
-            <div className="flex justify-between text-xs pt-2 border-t border-gray-100 dark:border-white/10">
-                <span className="text-red-500">📥 Total Buy: {Number(item.buyQty).toFixed(2)}</span>
-                <span className="text-emerald-600">📤 Total Sell: {Number(item.sellQty).toFixed(2)}</span>
+
+            {/* Total row */}
+            <div className="flex justify-between items-center text-xs bg-gray-50 dark:bg-black/20 rounded-lg p-2">
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-400">Total Buy</span>
+                    <span className="text-red-500 font-medium">{Number(item.buyQty).toFixed(2)}</span>
+                </div>
+                <div className="h-6 w-px bg-gray-200 dark:bg-white/10 mx-2"></div>
+                <div className="flex flex-col text-right">
+                    <span className="text-[10px] text-gray-400">Total Sell</span>
+                    <span className="text-emerald-600 font-medium">{Number(item.sellQty).toFixed(2)}</span>
+                </div>
             </div>
         </div>
     );
 
     return (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
             {/* Filter Bar */}
-            <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3">
-                <div className="text-xs text-gray-500 mb-2">Filter Items (Optional)</div>
+            {/* Filter Bar */}
+            <CollapsibleReportFilters
+                title="Filter Stock Movement"
+                activeFilterCount={(selectedItems.length > 0 || selectedStore !== 'all') ? 1 : 0}
+                onClear={() => {
+                    setSelectedItems([]);
+                    setSelectedStore('all');
+                }}
+                defaultCollapsed={false}
+            >
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Filter Items</div>
                 <Select
                     mode="multiple"
-                    placeholder="All Items"
+                    placeholder="Search & Select Items"
                     value={selectedItems}
                     onChange={setSelectedItems}
-                    className="w-full mb-3"
+                    className="w-full mb-4"
                     optionFilterProp="children"
-                    maxTagCount={2}
+                    maxTagCount="responsive"
+                    size="large"
                 >
                     {allItems.map(item => (
                         <Option key={item.ITEM_ID} value={item.ITEM_ID}>{item.NAME}</Option>
                     ))}
                 </Select>
 
-                {/* Store Filter - Full width on mobile, grid on desktop */}
-                <div className="mb-3">
-                    <div className="text-xs text-gray-500 mb-1">Store</div>
+                {/* Store Filter */}
+                <div className="mb-4">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Store</div>
                     <Select
                         value={selectedStore}
                         onChange={setSelectedStore}
                         className="w-full"
+                        size="large"
                     >
                         <Option value="all">All Stores</Option>
                         <Option value="1">Store 1</Option>
@@ -253,11 +278,12 @@ export default function ReportStockMovement() {
                     </Select>
                 </div>
 
-                <div className="mb-3">
-                    <div className="text-xs text-gray-500 mb-1">Period</div>
+                <div className="mb-4">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Period</div>
                     <MobileDateRange
                         value={dateRange}
                         onChange={setDateRange}
+                        className="w-full"
                     />
                 </div>
 
@@ -267,17 +293,15 @@ export default function ReportStockMovement() {
                         icon={<SwapOutlined />}
                         onClick={fetchReport}
                         loading={loading}
-                        className="bg-blue-600 hover:bg-blue-500 flex-1"
+                        className="bg-blue-600 hover:bg-blue-500 flex-1 h-10 text-sm font-medium rounded-xl border-none shadow-md shadow-blue-500/20"
                     >
-                        Generate
+                        Generate Report
                     </Button>
                     {data.length > 0 && (
-                        <Button icon={<FilePdfOutlined />} onClick={generatePDF} danger>
-                            PDF
-                        </Button>
+                        <Button icon={<FilePdfOutlined />} onClick={generatePDF} danger className="h-10 w-12 flex items-center justify-center rounded-xl" />
                     )}
                 </div>
-            </div>
+            </CollapsibleReportFilters>
 
             {/* Loading */}
             {loading && (
@@ -343,7 +367,7 @@ export default function ReportStockMovement() {
                         <div className="text-xs text-gray-500 mb-2">
                             Items ({data.length})
                         </div>
-                        <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto pr-1">
+                        <div className="flex flex-col gap-2">
                             {data.map((item, index) => (
                                 <ItemCard key={item.id || index} item={item} />
                             ))}

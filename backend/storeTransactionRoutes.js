@@ -275,6 +275,7 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
         const maxAmount = req.body.maxAmount || null;
         const startDate = req.body.startDate || null;
         const endDate = req.body.endDate || null;
+        const itemIds = req.body.itemIds || (req.body.itemId ? [req.body.itemId] : []);
 
         // Build WHERE clause dynamically
         // STRICT FILTER: Only show Buying, Selling, and Expenses (Financials)
@@ -311,6 +312,12 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
         if (endDate) {
             whereConditions.push('DATE(st.CREATED_DATE) <= ?');
             queryParams.push(endDate);
+        }
+        if (itemIds && itemIds.length > 0) {
+            // Create placeholders for IN clause: ?,?,?
+            const placeholders = itemIds.map(() => '?').join(',');
+            whereConditions.push(`st.TRANSACTION_ID IN (SELECT TRANSACTION_ID FROM store_transactions_items WHERE ITEM_ID IN (${placeholders}) AND IS_ACTIVE = 1)`);
+            queryParams.push(...itemIds);
         }
 
         const whereClause = whereConditions.join(' AND ');
@@ -1575,7 +1582,7 @@ router.post('/api/adjustInventory', async (req, res) => {
                 SELECT st.TYPE, SUM(sti.QUANTITY) as total_qty
                 FROM store_transactions st
                 JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
-                WHERE st.IS_ACTIVE = 1 
+                WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
                   AND sti.ITEM_ID = ?
                   AND st.STORE_NO = ?
                 GROUP BY st.TYPE
@@ -1746,7 +1753,7 @@ router.post('/api/getItemStockLedger', async (req, res) => {
                 SUM(sti.QUANTITY) as total_qty
             FROM store_transactions st
             JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
-            WHERE sti.ITEM_ID = ? AND st.STORE_NO = ? AND st.IS_ACTIVE = 1
+            WHERE sti.ITEM_ID = ? AND st.STORE_NO = ? AND st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1
             GROUP BY st.TYPE
         `;
 
@@ -1808,7 +1815,7 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
                 st.TYPE,
                 SUM(sti.QUANTITY) as total_qty
             FROM store_items si
-            LEFT JOIN store_transactions_items sti ON si.ITEM_ID = sti.ITEM_ID
+            LEFT JOIN store_transactions_items sti ON si.ITEM_ID = sti.ITEM_ID AND sti.IS_ACTIVE = 1
             LEFT JOIN store_transactions st ON sti.TRANSACTION_ID = st.TRANSACTION_ID AND st.IS_ACTIVE = 1
             WHERE si.IS_ACTIVE = 1
             GROUP BY si.ITEM_ID, si.CODE, si.NAME, st.STORE_NO, st.TYPE
@@ -1882,7 +1889,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
             JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
             LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
             LEFT JOIN user_details u ON st.CREATED_BY = u.USER_ID
-            WHERE st.IS_ACTIVE = 1 
+            WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
               AND st.TYPE IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'StockClear')
               ${req.body.startDate ? `AND st.CREATED_DATE >= '${req.body.startDate}'` : ''}
               ${req.body.endDate ? `AND st.CREATED_DATE <= '${req.body.endDate} 23:59:59'` : ''}
@@ -2079,7 +2086,7 @@ router.post('/api/reports/items', async (req, res) => {
             FROM store_transactions_items sti
             JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
             JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
-            WHERE ${whereClause}
+            WHERE ${whereClause} AND sti.IS_ACTIVE = 1
             GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE
         `;
 
@@ -2164,7 +2171,7 @@ router.post('/api/reports/stockMovement', async (req, res) => {
             FROM store_transactions_items sti
             JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
             JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
-            WHERE ${whereClause}
+            WHERE ${whereClause} AND sti.IS_ACTIVE = 1
             GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE, t.STORE_NO
         `;
 
@@ -2258,7 +2265,7 @@ router.post('/api/reports/averages', async (req, res) => {
             FROM store_transactions_items sti
             JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
             JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
-            WHERE ${whereClause}
+            WHERE ${whereClause} AND sti.IS_ACTIVE = 1
             GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE
         `;
 

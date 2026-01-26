@@ -7,6 +7,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { registerSinhalaFont } from '../../fonts/sinhalaFont';
 import MobileDateRange from '../../components/common/MobileDateRange';
+import CollapsibleReportFilters from '../../components/common/CollapsibleReportFilters';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -126,50 +127,72 @@ export default function ReportItemProfit() {
 
     // Mobile Item Card
     const ItemCard = ({ item }) => (
-        <div className="bg-white/50 dark:bg-white/5 rounded-lg p-3">
+        <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 border border-gray-100 dark:border-white/5 shadow-sm">
             <div className="flex justify-between items-start mb-2">
-                <div className="flex-1 min-w-0">
-                    <div className="text-[10px] text-gray-400">{item.code}</div>
-                    <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
+                <div className="flex-1 min-w-0 pr-2">
+                    <div className="text-[10px] text-gray-400 font-mono tracking-wide">{item.code}</div>
+                    <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
                 </div>
-                <div className={`text-right font-bold ${item.profit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                <div className={`text-right font-bold text-base ${item.profit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                    <span className="text-[10px] text-gray-400 font-normal block">Profit</span>
                     Rs.{Number(item.profit).toLocaleString()}
                 </div>
             </div>
-            <div className="flex justify-between text-[11px]">
-                <div className="flex gap-3">
-                    <span className="text-emerald-600">Sales: {Number(item.soldAmount).toLocaleString()}</span>
-                    <span className="text-red-500">Cost: {Number(item.boughtAmount).toLocaleString()}</span>
+            <div className="flex items-center justify-between text-xs bg-gray-50 dark:bg-black/20 rounded-lg p-2 mt-2">
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-400">Sales</span>
+                    <span className="text-emerald-600 font-medium">Rs.{Number(item.soldAmount).toLocaleString()}</span>
                 </div>
-                {item.soldQty && <span className="text-gray-400">Qty: {Number(item.soldQty).toFixed(2)}</span>}
+                <div className="h-6 w-px bg-gray-200 dark:bg-white/10 mx-2"></div>
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-400">Cost</span>
+                    <span className="text-red-500 font-medium">Rs.{Number(item.boughtAmount).toLocaleString()}</span>
+                </div>
+                {item.soldQty && (
+                    <>
+                        <div className="h-6 w-px bg-gray-200 dark:bg-white/10 mx-2"></div>
+                        <div className="flex flex-col text-right">
+                            <span className="text-[10px] text-gray-400">Qty</span>
+                            <span className="text-gray-600 dark:text-gray-300 font-medium">{Number(item.soldQty).toFixed(2)}</span>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );
 
+
+
     return (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
             {/* Filter Bar */}
-            <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3">
-                <div className="text-xs text-gray-500 mb-2">Filter Items (Optional)</div>
+            <CollapsibleReportFilters
+                title="Filter Item Profit"
+                activeFilterCount={selectedItems.length > 0 ? 1 : 0}
+                onClear={() => setSelectedItems([])}
+                defaultCollapsed={false}
+            >
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Filter Items</div>
                 <Select
                     mode="multiple"
-                    placeholder="All Items"
+                    placeholder="Search & Select Items"
                     value={selectedItems}
                     onChange={setSelectedItems}
-                    className="w-full mb-3"
+                    className="w-full mb-4"
                     optionFilterProp="children"
-                    maxTagCount={2}
+                    maxTagCount="responsive"
+                    size="large"
                 >
                     {allItems.map(item => (
                         <Option key={item.ITEM_ID} value={item.ITEM_ID}>{item.NAME}</Option>
                     ))}
                 </Select>
 
-                <div className="text-xs text-gray-500 mb-2">Period</div>
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Period</div>
                 <MobileDateRange
                     value={dateRange}
                     onChange={setDateRange}
-                    className="w-full mb-3"
+                    className="w-full mb-4"
                 />
 
                 <div className="flex gap-2">
@@ -178,17 +201,15 @@ export default function ReportItemProfit() {
                         icon={<SearchOutlined />}
                         onClick={fetchReport}
                         loading={loading}
-                        className="bg-purple-600 hover:bg-purple-500 flex-1"
+                        className="bg-purple-600 hover:bg-purple-500 flex-1 h-10 text-sm font-medium rounded-xl border-none shadow-md shadow-purple-500/20"
                     >
-                        Analyze
+                        Analyze Profit
                     </Button>
                     {data.length > 0 && (
-                        <Button icon={<FilePdfOutlined />} onClick={generatePDF} danger>
-                            PDF
-                        </Button>
+                        <Button icon={<FilePdfOutlined />} onClick={generatePDF} danger className="h-10 w-12 flex items-center justify-center rounded-xl" />
                     )}
                 </div>
-            </div>
+            </CollapsibleReportFilters>
 
             {/* Loading */}
             {loading && (
@@ -232,7 +253,7 @@ export default function ReportItemProfit() {
                         <div className="text-xs text-gray-500 mb-2">
                             Items ({data.length})
                         </div>
-                        <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto pr-1">
+                        <div className="flex flex-col gap-2">
                             {data.map((item, index) => (
                                 <ItemCard key={item.id || index} item={item} />
                             ))}

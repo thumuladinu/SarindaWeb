@@ -371,6 +371,7 @@ const UserForm = ({ open, onClose, onSuccess, initialValues, mode = 'add' }) => 
                                 <Select placeholder="Select role">
                                     <Option value="ADMIN">Admin</Option>
                                     <Option value="USER">User</Option>
+                                    <Option value="MONITOR">Monitor</Option>
                                     {currentUser?.ROLE === 'DEV' && <Option value="DEV">Developer</Option>}
                                 </Select>
                             </Form.Item>
@@ -405,15 +406,17 @@ const UserForm = ({ open, onClose, onSuccess, initialValues, mode = 'add' }) => 
                         <Button onClick={onClose} size="large" className="rounded-xl" disabled={loading}>
                             Cancel
                         </Button>
-                        <Button
-                            type="primary"
-                            htmlType="submit"
-                            loading={loading}
-                            size="large"
-                            className="rounded-xl px-8 bg-emerald-600 hover:bg-emerald-500 border-none shadow-lg shadow-emerald-500/30"
-                        >
-                            {mode === 'edit' ? 'Update User' : 'Add User'}
-                        </Button>
+                        {currentUser?.ROLE !== 'MONITOR' && (
+                            <Button
+                                type="primary"
+                                htmlType="submit"
+                                loading={loading}
+                                size="large"
+                                className="rounded-xl px-8 bg-emerald-600 hover:bg-emerald-500 border-none shadow-lg shadow-emerald-500/30"
+                            >
+                                {mode === 'edit' ? 'Update User' : 'Add User'}
+                            </Button>
+                        )}
                     </div>
                 </Form>
             </Drawer>

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Drawer, Form, Input, Select, DatePicker, Button, InputNumber, Table, App, Spin, Divider, Checkbox, Modal, Tag } from 'antd';
 import { DeleteOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-
+import Cookies from 'js-cookie';
 import axios from 'axios';
 import { generateReceiptHTML } from '../../utils/receiptGenerator';
 
@@ -520,6 +520,9 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
         }
     ];
 
+    // Current User Logic
+    const currentUser = JSON.parse(Cookies.get('rememberedUser') || '{}');
+
     return (
         <Drawer
             title="Update Transaction"
@@ -577,7 +580,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                         </Form.Item>
 
                         <Form.Item name="DATE" label="Date & Time" rules={[{ required: true }]}>
-                            <DatePicker showTime className="w-full" format="YYYY-MM-DD HH:mm" />
+                            <DatePicker showTime className="w-full" format="YYYY-MM-DD HH:mm" disabled={currentUser?.ROLE === 'MONITOR'} />
                         </Form.Item>
                     </div>
 
@@ -589,6 +592,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                     placeholder="Select Customer"
                                     optionFilterProp="children"
                                     filterOption={(input, option) => (option?.children ?? '').toLowerCase().includes(input.toLowerCase())}
+                                    disabled={currentUser?.ROLE === 'MONITOR'}
                                 >
                                     {customers.map(c => <Option key={c.CUSTOMER_ID} value={c.CUSTOMER_ID}>{c.NAME}</Option>)}
                                 </Select>
@@ -601,14 +605,16 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                         <div className="mb-6 border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden">
                             <div className="bg-gray-50 dark:bg-zinc-900 p-3 border-b border-gray-200 dark:border-white/10 flex justify-between items-center">
                                 <span className="font-semibold text-gray-700 dark:text-gray-300">Items</span>
-                                <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={handleAddItem}>Add Item</Button>
+                                {currentUser?.ROLE !== 'MONITOR' && (
+                                    <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={handleAddItem}>Add Item</Button>
+                                )}
                             </div>
 
                             {/* Desktop Table View */}
                             <div className="hidden md:block">
                                 <Table
                                     dataSource={transactionItems}
-                                    columns={itemColumns}
+                                    columns={itemColumns.filter(col => currentUser?.ROLE !== 'MONITOR' || col.key !== 'action')}
                                     pagination={false}
                                     size="small"
                                     rowClassName="bg-white dark:bg-black/20 align-top"
@@ -625,6 +631,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                                                 value={entry.kilos}
                                                                 onChange={v => handleBagChange(record.key, idx, 'kilos', v)}
                                                                 className="w-full"
+                                                                disabled={currentUser?.ROLE === 'MONITOR'}
                                                             />
                                                         </div>
                                                         <div className="flex-1">
@@ -634,26 +641,31 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                                                 value={entry.bags}
                                                                 onChange={v => handleBagChange(record.key, idx, 'bags', v)}
                                                                 className="w-full"
+                                                                disabled={currentUser?.ROLE === 'MONITOR'}
                                                             />
                                                         </div>
-                                                        <Button
-                                                            danger
-                                                            type="text"
-                                                            icon={<DeleteOutlined />}
-                                                            size="small"
-                                                            className="mt-4"
-                                                            onClick={() => handleRemoveBag(record.key, idx)}
-                                                        />
+                                                        {currentUser?.ROLE !== 'MONITOR' && (
+                                                            <Button
+                                                                danger
+                                                                type="text"
+                                                                icon={<DeleteOutlined />}
+                                                                size="small"
+                                                                className="mt-4"
+                                                                onClick={() => handleRemoveBag(record.key, idx)}
+                                                            />
+                                                        )}
                                                     </div>
                                                 ))}
-                                                <Button
-                                                    type="dashed"
-                                                    size="small"
-                                                    onClick={() => handleAddBag(record.key)}
-                                                    className="w-full mt-2 text-xs"
-                                                >
-                                                    + Add Bag Line
-                                                </Button>
+                                                {currentUser?.ROLE !== 'MONITOR' && (
+                                                    <Button
+                                                        type="dashed"
+                                                        size="small"
+                                                        onClick={() => handleAddBag(record.key)}
+                                                        className="w-full mt-2 text-xs"
+                                                    >
+                                                        + Add Bag Line
+                                                    </Button>
+                                                )}
                                             </div>
                                         ),
                                         rowExpandable: (record) => true,
@@ -665,9 +677,11 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                             <div className="md:hidden flex flex-col gap-2 p-2 bg-gray-50/50 dark:bg-black/20">
                                 {transactionItems.map((item, index) => (
                                     <div key={item.key} className="glass-card p-3 rounded-lg flex flex-col gap-3 relative border border-gray-100 dark:border-white/5 bg-white dark:bg-zinc-900">
-                                        <div className="absolute top-2 right-2">
-                                            <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => handleRemoveItem(item.key)} />
-                                        </div>
+                                        {currentUser?.ROLE !== 'MONITOR' && (
+                                            <div className="absolute top-2 right-2">
+                                                <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => handleRemoveItem(item.key)} />
+                                            </div>
+                                        )}
 
                                         <div className="w-full pr-8">
                                             <span className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Item</span>
@@ -678,6 +692,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                                 onChange={(val) => handleItemChange(item.key, 'ITEM_ID', val)}
                                                 className="w-full"
                                                 size="large"
+                                                disabled={currentUser?.ROLE === 'MONITOR'}
                                                 filterOption={(input, option) =>
                                                     (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                                                 }
@@ -694,6 +709,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                                     onChange={(val) => handleItemChange(item.key, 'PRICE', val)}
                                                     className="w-full"
                                                     prefix="Rs."
+                                                    disabled={currentUser?.ROLE === 'MONITOR'}
                                                 />
                                             </div>
                                             <div className="flex-1">
@@ -703,7 +719,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                                     value={item.QUANTITY}
                                                     onChange={(val) => handleItemChange(item.key, 'QUANTITY', val)}
                                                     className="w-full"
-                                                    disabled={(item.lotEntries && item.lotEntries.length > 0) || (item.ITEM_NAME && item.ITEM_NAME.toLowerCase().includes('lot'))}
+                                                    disabled={(item.lotEntries && item.lotEntries.length > 0) || (item.ITEM_NAME && item.ITEM_NAME.toLowerCase().includes('lot')) || currentUser?.ROLE === 'MONITOR'}
                                                 />
                                             </div>
                                         </div>
@@ -725,6 +741,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                                             value={entry.kilos}
                                                             onChange={v => handleBagChange(item.key, idx, 'kilos', v)}
                                                             style={{ width: '80px' }}
+                                                            disabled={currentUser?.ROLE === 'MONITOR'}
                                                         />
                                                         <span className="text-xs text-gray-400">kg</span>
                                                         <InputNumber
@@ -733,26 +750,31 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                                             value={entry.bags}
                                                             onChange={v => handleBagChange(item.key, idx, 'bags', v)}
                                                             style={{ width: '60px' }}
+                                                            disabled={currentUser?.ROLE === 'MONITOR'}
                                                         />
                                                         <span className="text-xs text-gray-400">bags</span>
-                                                        <Button
-                                                            danger
-                                                            type="text"
-                                                            icon={<DeleteOutlined />}
-                                                            size="small"
-                                                            onClick={() => handleRemoveBag(item.key, idx)}
-                                                        />
+                                                        {currentUser?.ROLE !== 'MONITOR' && (
+                                                            <Button
+                                                                danger
+                                                                type="text"
+                                                                icon={<DeleteOutlined />}
+                                                                size="small"
+                                                                onClick={() => handleRemoveBag(item.key, idx)}
+                                                            />
+                                                        )}
                                                     </div>
                                                 ))}
-                                                <Button
-                                                    type="dashed"
-                                                    size="small"
-                                                    block
-                                                    onClick={() => handleAddBag(item.key)}
-                                                    className="text-xs"
-                                                >
-                                                    + Add Bag Line
-                                                </Button>
+                                                {currentUser?.ROLE !== 'MONITOR' && (
+                                                    <Button
+                                                        type="dashed"
+                                                        size="small"
+                                                        block
+                                                        onClick={() => handleAddBag(item.key)}
+                                                        className="text-xs"
+                                                    >
+                                                        + Add Bag Line
+                                                    </Button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -792,7 +814,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                     <Divider orientation="left" className="!border-gray-200 dark:!border-white/10 !text-gray-500 !text-xs uppercase !tracking-widest">Financials</Divider>
 
                     <Form.Item name="SUB_TOTAL" label="Sub Total" rules={[{ required: true }]}>
-                        <InputNumber className="w-full font-bold" prefix="Rs." readOnly={transactionType !== 'Expenses'} />
+                        <InputNumber className="w-full font-bold" prefix="Rs." readOnly />
                     </Form.Item>
 
                     {transactionType === 'Expenses' && (
@@ -808,7 +830,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                 <Form.Item name="METHOD" label="Payment Method" rules={[{ required: true }]}>
-                                    <Select placeholder="Select Method">
+                                    <Select placeholder="Select Method" disabled={currentUser?.ROLE === 'MONITOR'}>
                                         <Option value="Cash">Cash</Option>
                                         <Option value="Bank">Bank Transfer</Option>
                                         <Option value="Cheque">Cheque</Option>
@@ -821,6 +843,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                         prefix="Rs."
                                         formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                         parser={value => value.replace(/\Rs.\s?|(,*)/g, '')}
+                                        disabled={currentUser?.ROLE === 'MONITOR'}
                                     />
                                 </Form.Item>
 
@@ -830,7 +853,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                             <InputNumber className="w-full text-red-500 font-semibold" prefix="Rs." readOnly />
                                         </Form.Item>
                                         <Form.Item name="DUE_DATE" noStyle>
-                                            <DatePicker placeholder="Due Date" className="w-full" />
+                                            <DatePicker placeholder="Due Date" className="w-full" disabled={currentUser?.ROLE === 'MONITOR'} />
                                         </Form.Item>
                                     </div>
                                 </Form.Item>
@@ -843,25 +866,25 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                                     return method === 'Cheque' ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 dark:bg-white/5 p-4 rounded-lg mb-4 animate-fade-in border border-gray-200 dark:border-white/10">
                                             <Form.Item name="CHEQUE_NO" label="Cheque Number" rules={[{ required: true }]}>
-                                                <Input placeholder="Enter Cheque No" />
+                                                <Input placeholder="Enter Cheque No" disabled={currentUser?.ROLE === 'MONITOR'} />
                                             </Form.Item>
                                             <Form.Item name="CHEQUE_EXPIRY" label="Cheque Expiry Date">
-                                                <DatePicker className="w-full" />
+                                                <DatePicker className="w-full" disabled={currentUser?.ROLE === 'MONITOR'} />
                                             </Form.Item>
                                             <Form.Item name="BANK_NAME" label="Bank Name">
-                                                <Input placeholder="Bank Name" />
+                                                <Input placeholder="Bank Name" disabled={currentUser?.ROLE === 'MONITOR'} />
                                             </Form.Item>
                                             <Form.Item name="IS_CHEQUE_COLLECTED" valuePropName="checked" className="pt-8 mb-0">
-                                                <Checkbox>Cheque Collected</Checkbox>
+                                                <Checkbox disabled={currentUser?.ROLE === 'MONITOR'}>Cheque Collected</Checkbox>
                                             </Form.Item>
                                         </div>
                                     ) : method === 'Bank' ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 dark:bg-white/5 p-4 rounded-lg mb-4 animate-fade-in border border-gray-200 dark:border-white/10">
                                             <Form.Item name="BANK_NAME" label="Bank Name" rules={[{ required: true }]}>
-                                                <Input placeholder="Bank Name" />
+                                                <Input placeholder="Bank Name" disabled={currentUser?.ROLE === 'MONITOR'} />
                                             </Form.Item>
                                             <Form.Item name="BANK_TRANS_DATETIME" label="Transaction Date & Time">
-                                                <DatePicker showTime className="w-full" />
+                                                <DatePicker showTime className="w-full" disabled={currentUser?.ROLE === 'MONITOR'} />
                                             </Form.Item>
                                         </div>
                                     ) : null;
@@ -871,7 +894,7 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                     )}
 
                     <Form.Item name="COMMENTS" label="Comments">
-                        <Input.TextArea rows={3} placeholder="Add any notes here..." />
+                        <Input.TextArea rows={3} placeholder="Add any notes here..." disabled={currentUser?.ROLE === 'MONITOR'} />
                     </Form.Item>
 
                     {transactionType !== 'Expenses' && (
@@ -884,9 +907,11 @@ const TransactionForm = ({ open, onClose, transactionId, onSuccess }) => {
                     {/* Footer Actions */}
                     <div className="flex justify-end gap-3 mt-8">
                         <Button onClick={onClose} size="large" className="rounded-xl">Cancel</Button>
-                        <Button type="primary" htmlType="submit" loading={loading} size="large" className="rounded-xl px-8 bg-emerald-500 hover:bg-emerald-600 border-none shadow-lg shadow-emerald-500/30">
-                            Update Transaction
-                        </Button>
+                        {currentUser?.ROLE !== 'MONITOR' && (
+                            <Button type="primary" htmlType="submit" loading={loading} size="large" className="rounded-xl px-8 bg-emerald-500 hover:bg-emerald-600 border-none shadow-lg shadow-emerald-500/30">
+                                Update Transaction
+                            </Button>
+                        )}
                     </div>
 
                 </Form>

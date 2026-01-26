@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Input, Select, DatePicker, Button, Collapse, Badge, theme } from 'antd';
 import { SearchOutlined, FilterOutlined, ClearOutlined, DownOutlined, UpOutlined, CaretRightOutlined } from '@ant-design/icons';
 import MobileDateRange from '../../components/common/MobileDateRange';
+import axios from 'axios';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -15,6 +16,27 @@ export default function TransactionFilters({ filters, setFilters }) {
     const [localCode, setLocalCode] = useState(filters.code);
     const [localMin, setLocalMin] = useState(filters.minAmount);
     const [localMax, setLocalMax] = useState(filters.maxAmount);
+    const [items, setItems] = useState([]);
+    const [itemsLoading, setItemsLoading] = useState(false);
+
+    // Fetch items for filter
+    useEffect(() => {
+        const fetchItems = async () => {
+            setItemsLoading(true);
+            try {
+                // Assuming this endpoint exists and returns all items
+                const response = await axios.post('/api/getAllItems', {});
+                if (response.data.success) {
+                    setItems(response.data.result);
+                }
+            } catch (error) {
+                console.error("Error fetching items for filter:", error);
+            } finally {
+                setItemsLoading(false);
+            }
+        };
+        fetchItems();
+    }, []);
 
     // Sync local state if parent filters change externally (e.g. clear)
     useEffect(() => {
@@ -90,7 +112,7 @@ export default function TransactionFilters({ filters, setFilters }) {
                             className="text-gray-400 hover:text-red-500"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setFilters({ code: '', store: null, type: null, minAmount: '', maxAmount: '', dateRange: null });
+                                setFilters({ code: '', store: null, type: null, item: null, minAmount: '', maxAmount: '', dateRange: null });
                             }}
                         >
                             Clear
@@ -100,7 +122,7 @@ export default function TransactionFilters({ filters, setFilters }) {
                 </div>
             </div>
 
-            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'}`}>
+            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[2000px] opacity-100'}`}>
                 <div className="p-4 pt-0 border-t border-gray-100 dark:border-white/5 bg-gray-50/30 dark:bg-black/20">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
                         {/* Search Code */}
@@ -152,6 +174,31 @@ export default function TransactionFilters({ filters, setFilters }) {
                                     <span className="text-orange-500 font-medium">Expenses</span>
                                 </Option>
                             </Select>
+                        </div>
+
+                        {/* Item Filter */}
+                        <div className="form-group">
+                            <label className="text-xs font-medium text-gray-500 mb-1 block">Filtered by Item</label>
+                            <Select
+                                mode="multiple"
+                                maxTagCount="responsive"
+                                showSearch
+                                placeholder="Select Items"
+                                optionFilterProp="children"
+                                className="w-full h-10"
+                                popupClassName="glass-dropdown"
+                                allowClear
+                                loading={itemsLoading}
+                                value={filters.item}
+                                onChange={(val) => handleChange('item', val)}
+                                filterOption={(input, option) =>
+                                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                                }
+                                options={items.map(item => ({
+                                    value: item.ITEM_ID,
+                                    label: `${item.CODE} - ${item.NAME}`
+                                }))}
+                            />
                         </div>
 
                         {/* Date Range */}
