@@ -25,6 +25,54 @@ pool.query = util.promisify(pool.query);
     }
 })();
 
+// Database Migration: Add WEIGHT_CODE column if not exists
+(async () => {
+    try {
+        await pool.query("ALTER TABLE store_transactions ADD COLUMN WEIGHT_CODE VARCHAR(50) DEFAULT NULL");
+        try {
+            await pool.query("CREATE INDEX idx_store_transactions_weight_code ON store_transactions(WEIGHT_CODE)");
+        } catch (e) { }
+        console.log("Verified 'store_transactions' table: Added WEIGHT_CODE column.");
+    } catch (err) {
+        if (err.code !== 'ER_DUP_FIELDNAME') {
+            console.log("Verified 'store_transactions' table (WEIGHT_CODE exists or other error):", err.message);
+        }
+    }
+})();
+
+// Database Migration: Add STOCK_DATE column and Backfill
+(async () => {
+    try {
+        await pool.query("ALTER TABLE store_transactions ADD COLUMN STOCK_DATE DATETIME DEFAULT NULL");
+        try {
+            await pool.query("CREATE INDEX idx_store_transactions_stock_date ON store_transactions(STOCK_DATE)");
+        } catch (e) { }
+        console.log("Verified 'store_transactions' table: Added STOCK_DATE column.");
+
+        // Backfill Logic
+        console.log("[Migration] Backfilling STOCK_DATE...");
+
+        // 1. Update all to default (Transaction Date)
+        await pool.query("UPDATE store_transactions SET STOCK_DATE = CREATED_DATE WHERE STOCK_DATE IS NULL");
+
+        // 2. Correct Store 2 records linked to Weighting (Use Weighting Date)
+        // Fix: Explicitly handle collation mismatch between tables
+        await pool.query(`
+            UPDATE store_transactions t
+            JOIN weight_measurements wm ON t.WEIGHT_CODE = wm.CODE COLLATE utf8mb4_general_ci
+            SET t.STOCK_DATE = wm.CREATED_DATE
+            WHERE t.STORE_NO = 2 AND t.WEIGHT_CODE IS NOT NULL AND wm.IS_ACTIVE = 1
+        `);
+
+        console.log("[Migration] Backfill complete: Verified STOCK_DATE logic.");
+
+    } catch (err) {
+        if (err.code !== 'ER_DUP_FIELDNAME') {
+            console.log("Verified 'store_transactions' table (STOCK_DATE exists or other error):", err.message);
+        }
+    }
+})();
+
 // Database Migration: Add UNIQUE constraint on CODE column to prevent duplicates
 (async () => {
     try {
@@ -413,14 +461,40 @@ router.post('/api/items/merge-sync', async (req, res) => {
 
 function toMySQLDateTime(isoStr) {
     try {
-        if (!isoStr) return new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const date = new Date(isoStr);
-        if (isNaN(date.getTime())) {
-            return new Date().toISOString().slice(0, 19).replace('T', ' ');
+        let date;
+        if (!isoStr) {
+            date = new Date();
+        } else {
+            date = new Date(isoStr);
+            if (isNaN(date.getTime())) {
+                date = new Date();
+            }
         }
-        return date.toISOString().slice(0, 19).replace('T', ' ');
+
+        // Convert to Sri Lanka Time (UTC+5:30) manually if server is not in SL, 
+        // OR simply format as Local Time if server is expected to be in SL.
+        // Since user said "mark at UTC time and updated time marked at srilanken time",
+        // we assume the server is running in SL time (or configured so).
+        // The issue was toISOString() FORCES UTC.
+        // We want YYYY-MM-DD HH:mm:ss in LOCAL time.
+
+        // Use sv-SE locale trick for YYYY-MM-DD HH:mm:ss format in specific timezone
+        return date.toLocaleString('sv-SE', {
+            timeZone: 'Asia/Colombo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }).replace('T', ' ');
+
     } catch (e) {
-        return new Date().toISOString().slice(0, 19).replace('T', ' ');
+        // Fallback to simplistic local string construction
+        const now = new Date();
+        now.setHours(now.getHours() + 5); // Rough fallback if timezone fails
+        now.setMinutes(now.getMinutes() + 30);
+        return now.toISOString().slice(0, 19).replace('T', ' ');
     }
 }
 
@@ -768,14 +842,55 @@ router.post('/api/transactions/sync', async (req, res) => {
         // Log the payment method being used
         console.log('[Sync] Transaction paymentMethod:', transaction.paymentMethod, '-> Using:', transaction.paymentMethod || 'Cash');
 
+        // Logic to determine STOCK_DATE
+        // Default to transaction date
+        let stockDate = createdDate;
+
+        // If Store 2 and has Weight Code, try to fetch original weighting date
+        if ((transaction.storeNo == 2 || transaction.storeNo == '2') && transaction.s2BillCode) {
+            try {
+                let wRows = null;
+                // 1. Try exact match
+                const [exactMatch] = await pool.query(
+                    'SELECT CREATED_DATE FROM weight_measurements WHERE CODE = ? LIMIT 1',
+                    [transaction.s2BillCode]
+                );
+
+                if (exactMatch && exactMatch.CREATED_DATE) {
+                    wRows = exactMatch;
+                } else {
+                    // 2. Try with S2- prefix (common pattern)
+                    const prefixedCode = `S2-${transaction.s2BillCode}`;
+                    console.log(`[Sync] Exact match failed for ${transaction.s2BillCode}, trying ${prefixedCode}`);
+                    const [prefixMatch] = await pool.query(
+                        'SELECT CREATED_DATE FROM weight_measurements WHERE CODE = ? LIMIT 1',
+                        [prefixedCode]
+                    );
+                    if (prefixMatch && prefixMatch.CREATED_DATE) {
+                        wRows = prefixMatch;
+                        // Found logic using prefixed code, but we keep extraction raw for storage
+                        // transaction.s2BillCode remains as is (or update if you want to store prefix, but user said remove it)
+                        // So we DO NOT update transaction.s2BillCode here.
+                    }
+                }
+
+                if (wRows && wRows.CREATED_DATE) {
+                    stockDate = toMySQLDateTime(wRows.CREATED_DATE);
+                    console.log(`[Sync] Found Weight Record date for ${transaction.s2BillCode}: ${stockDate}`);
+                }
+            } catch (e) {
+                console.warn(`[Sync] Failed to lookup weight date for ${transaction.s2BillCode}`, e.message);
+            }
+        }
+
         // Insert transaction with all fields including bank/cheque details
         const result = await pool.query(`
             INSERT INTO store_transactions (
                 CODE, TYPE, CUSTOMER, METHOD, DATE, 
                 SUB_TOTAL, PAYMENT_AMOUNT, AMOUNT_SETTLED, DUE_AMOUNT, DUE_DATE,
                 BANK_NAME, BANK_TRANS_DATETIME, CHEQUE_NO, CHEQUE_EXPIRY, IS_CHEQUE_COLLECTED,
-                COMMENTS, CREATED_BY, STORE_NO, CREATED_DATE, IS_ACTIVE, BILL_DATA
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                COMMENTS, CREATED_BY, STORE_NO, CREATED_DATE, IS_ACTIVE, BILL_DATA, WEIGHT_CODE, STOCK_DATE
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
         `, [
             transactionCode,
             transaction.type || 'Selling',
@@ -796,7 +911,9 @@ router.post('/api/transactions/sync', async (req, res) => {
             transaction.userId || null,
             transaction.storeNo || 1,
             createdDate,
-            transaction.billData ? JSON.stringify(transaction.billData) : null
+            transaction.billData ? JSON.stringify(transaction.billData) : null,
+            transaction.s2BillCode || null,
+            stockDate
         ]);
 
         const transactionId = result.insertId;

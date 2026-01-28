@@ -168,7 +168,16 @@ const Weighting = () => {
             key: 'status',
             align: 'center',
             width: 100,
-            render: (status) => <Tag color={getStatusColor(status)}>{status}</Tag>
+            render: (status, record) => (
+                <div className="flex flex-col items-center">
+                    <Tag color={getStatusColor(status)}>{status}</Tag>
+                    {record.collectedAt && (
+                        <div className="text-[10px] text-gray-400 mt-1 text-center">
+                            Paid: {formatDateTime(record.collectedAt)}
+                        </div>
+                    )}
+                </div>
+            )
         },
         {
             title: 'Action',
@@ -252,7 +261,14 @@ const Weighting = () => {
                                 <span className="text-xs text-blue-500 font-mono font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-md w-fit mb-1">{record.code}</span>
                                 <div className="text-xs text-gray-400 mt-1">{formatDateTime(record.createdAt)}</div>
                             </div>
-                            <Tag color={getStatusColor(record.status)}>{record.status}</Tag>
+                            <div className="flex flex-col items-end">
+                                <Tag color={getStatusColor(record.status)}>{record.status}</Tag>
+                                {record.collectedAt && (
+                                    <div className="text-[10px] text-gray-400 mt-1">
+                                        Paid: {formatDateTime(record.collectedAt)}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-dashed border-gray-100 dark:border-white/10">
@@ -316,6 +332,21 @@ const Weighting = () => {
                                 <span className="text-gray-500">Gross Weight:</span>
                                 <span className="font-mono font-medium">{selectedRecord.grossWeight || '0.00'}</span>
                             </div>
+
+                            {selectedRecord.collectedAt && (
+                                <div className="bg-green-50 dark:bg-green-900/10 p-3 rounded-lg border border-green-100 dark:border-green-800/30 flex justify-between items-center">
+                                    <div>
+                                        <div className="text-xs text-green-600 dark:text-green-400 font-bold uppercase">Payment Collected</div>
+                                        <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{formatDateTime(selectedRecord.collectedAt)}</div>
+                                    </div>
+                                    {selectedRecord.transactionCode && (
+                                        <div className="text-right">
+                                            <div className="text-xs text-gray-400">Transaction</div>
+                                            <div className="text-sm font-mono font-bold text-gray-600 dark:text-gray-400">{selectedRecord.transactionCode}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <div className="flex justify-between items-center text-sm mb-2">
                                 <span className="text-gray-500">Tare Weight:</span>
                                 <span className="font-mono font-medium">{selectedRecord.tareWeight || '0.00'}</span>

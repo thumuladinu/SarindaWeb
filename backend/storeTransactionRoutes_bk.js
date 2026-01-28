@@ -2160,7 +2160,6 @@ router.post('/api/reports/stockMovement', async (req, res) => {
         }
 
         // Query: Get Buy/Sell quantities per Item per Store
-        // Use STOCK_DATE for date filtering (handles Store 2 weighting date logic)
         let sql = `
             SELECT 
                 si.ITEM_ID,
@@ -2172,11 +2171,12 @@ router.post('/api/reports/stockMovement', async (req, res) => {
             FROM store_transactions_items sti
             JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
             JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
+            LEFT JOIN weight_measurements wm ON t.WEIGHT_CODE = wm.CODE
             WHERE 
                 t.IS_ACTIVE = 1 
                 AND t.TYPE IN ('Selling', 'Buying')
                 AND sti.IS_ACTIVE = 1
-                AND DATE(COALESCE(t.STOCK_DATE, t.CREATED_DATE)) BETWEEN ? AND ?
+                AND DATE(IF(t.STORE_NO = 2 AND wm.CREATED_DATE IS NOT NULL, wm.CREATED_DATE, t.CREATED_DATE)) BETWEEN ? AND ?
         `;
 
         if (storeNo && storeNo !== 'all') {
