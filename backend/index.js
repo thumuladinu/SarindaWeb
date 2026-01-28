@@ -24,7 +24,8 @@ const pool = mysql.createPool({
     database: process.env.DB_NAME || 'chamika_rice_mill',
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    dateStrings: true // Return dates as strings to prevent timezone conversion
 });
 
 console.log('MySQL connection pool created successfully');
