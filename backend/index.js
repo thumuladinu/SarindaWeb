@@ -53,6 +53,9 @@ app.use(require('./millDrying'));
 app.use(require('./millInventory'));
 app.use(require('./MillStockClearRoutes'));
 app.use(require('./localSyncRoutes'));
+app.use(require('./stockOperationsRoutes'));
+
+app.use('/api/stock-transfers', require('./transferRequestRoutes'));
 
 // Start the server
 const server = app.listen(port, () => {

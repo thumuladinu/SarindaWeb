@@ -13,6 +13,7 @@ const handlebars = require("handlebars");
 const pdf = require("html-pdf");
 const Printer = require('pdf-to-printer');
 const { query } = require("express");
+const { calculateCurrentStock } = require("./stockCalculator");
 
 
 // Promisify the pool.query method
@@ -340,7 +341,7 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
             FROM store_transactions st
             LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID
             WHERE ${whereClause}
-            ORDER BY st.CREATED_DATE DESC
+            ORDER BY st.TRANSACTION_ID DESC
             LIMIT ? OFFSET ?
         `;
         const queryResult = await pool.query(mainQuery, [...queryParams, limit, offset]);
@@ -1577,30 +1578,9 @@ router.post('/api/adjustInventory', async (req, res) => {
         // Get current stock from LEDGER (not cache) for accurate calculations
         let currentStock = 0;
         try {
-            // Calculate stock from transaction ledger
-            const ledgerQuery = `
-                SELECT st.TYPE, SUM(sti.QUANTITY) as total_qty
-                FROM store_transactions st
-                JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
-                WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
-                  AND sti.ITEM_ID = ?
-                  AND st.STORE_NO = ?
-                GROUP BY st.TYPE
-            `;
-            const rows = await pool.query(ledgerQuery, [ITEM_ID, STORE_NO]);
-            console.log('[adjustInventory] Ledger query rows:', rows);
-
-            // Sum up stock based on transaction types
-            rows.forEach(row => {
-                const type = row.TYPE;
-                const qty = parseFloat(row.total_qty || 0);
-
-                if (['Buying', 'Opening', 'AdjIn'].includes(type)) {
-                    currentStock += qty;
-                } else if (['Selling', 'AdjOut', 'StockClear'].includes(type)) {
-                    currentStock -= qty;
-                }
-            });
+            // Get current stock using Unified Calculator
+            currentStock = await calculateCurrentStock(pool, ITEM_ID, STORE_NO);
+            console.log(`[adjustInventory] Calculated Stock for Item ${ITEM_ID} Store ${STORE_NO}: ${currentStock}`);
 
             console.log('[adjustInventory] Calculated current stock from ledger:', currentStock);
         } catch (e) {
@@ -1762,9 +1742,9 @@ router.post('/api/getItemStockLedger', async (req, res) => {
         let ledgerStock = 0;
         rows.forEach(row => {
             const qty = parseFloat(row.total_qty || 0);
-            if (['Buying', 'Opening', 'AdjustmentAdd'].includes(row.TYPE)) {
+            if (['Buying', 'Opening', 'AdjIn', 'TransferIn', 'StockTake'].includes(row.TYPE)) {
                 ledgerStock += qty;
-            } else if (['Selling', 'AdjustmentRemove'].includes(row.TYPE)) {
+            } else if (['Selling', 'AdjOut', 'StockClear', 'TransferOut', 'Wastage'].includes(row.TYPE)) {
                 ledgerStock -= qty;
             }
         });
@@ -1823,6 +1803,12 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
 
         const rows = await pool.query(query);
 
+        // DEBUG: Check rows for Item 860
+        const debugRows = rows.filter(r => r.ITEM_ID === 860);
+        if (debugRows.length > 0) {
+            console.log('[getAllItemStocksRealTime] DEBUG Item 860 rows:', debugRows);
+        }
+
         // Process rows to build the result map
         // Map<ItemID, { CODE, NAME, "1": val, "2": val, total: val }>
         const stockMap = {};
@@ -1841,9 +1827,9 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
             if (!type || !storeNo) return;
 
             let change = 0;
-            if (['Buying', 'Opening', 'AdjIn'].includes(type)) {
+            if (['Buying', 'Opening', 'AdjIn', 'TransferIn', 'StockTake'].includes(type)) { // Added TransferIn, StockTake
                 change = qty;
-            } else if (['Selling', 'AdjOut', 'StockClear'].includes(type)) {
+            } else if (['Selling', 'AdjOut', 'StockClear', 'TransferOut', 'Wastage'].includes(type)) { // Added TransferOut, Wastage
                 change = -qty;
             }
 
@@ -1873,37 +1859,119 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
     }
 });
 
-// Get Inventory History (Audit Log)
+// Get Inventory History (Audit Log) - Now includes Stock Operations as unified records
 router.post('/api/getInventoryHistory', async (req, res) => {
     try {
-        // Fetch only inventory-related transactions
-        const query = `
+        // 1. Fetch inventory-related transactions (EXCLUDE stock operation transactions)
+        // Stock operation transactions have [OP-...] in their COMMENTS
+        const transactionQuery = `
             SELECT 
-                st.*,
+                st.TRANSACTION_ID,
+                st.CODE,
+                st.TYPE,
+                st.STORE_NO,
+                st.COMMENTS,
+                st.CREATED_DATE,
+                st.CREATED_BY,
                 sti.ITEM_ID,
                 sti.QUANTITY as ITEM_QTY,
                 i.NAME as ITEM_NAME,
                 i.CODE as ITEM_CODE,
-                u.NAME as CREATED_BY_NAME
+                u.NAME as CREATED_BY_NAME,
+                'transaction' as SOURCE_TYPE
             FROM store_transactions st
             JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
             LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
             LEFT JOIN user_details u ON st.CREATED_BY = u.USER_ID
             WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
               AND st.TYPE IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'StockClear')
+              AND (st.COMMENTS IS NULL OR (st.COMMENTS NOT LIKE '[OP-%' AND st.COMMENTS NOT LIKE '[S%-%-CLR-%'))
               ${req.body.startDate ? `AND st.CREATED_DATE >= '${req.body.startDate}'` : ''}
               ${req.body.endDate ? `AND st.CREATED_DATE <= '${req.body.endDate} 23:59:59'` : ''}
-            ORDER BY st.CREATED_DATE DESC
         `;
 
-        const rows = await pool.query(query);
+        const transactionRows = await pool.query(transactionQuery);
 
-        // Derive display type from COMMENTS for better UI
-        const result = rows.map(row => {
+        // 2. Fetch stock operations from tables (these are unified records)
+        const stockOpsQuery = `
+            SELECT 
+                so.OP_ID,
+                so.OP_CODE as CODE,
+                so.REFERENCE_OP_ID,
+                parent_op.OP_CODE as REF_OP_CODE,
+                parent_op.BILL_CODE as REF_BILL_CODE,
+                so.OP_TYPE,
+                so.CLEARANCE_TYPE,
+                so.STORE_NO,
+                so.COMMENTS,
+                so.CREATED_DATE,
+                so.CREATED_BY,
+                so.CREATED_BY_NAME,
+                so.WASTAGE_AMOUNT,
+                so.SURPLUS_AMOUNT,
+                so.CUSTOMER_NAME,
+                so.LORRY_NAME,
+                so.DRIVER_NAME,
+                so.DESTINATION,
+                so.BILL_CODE,
+                so.BILL_AMOUNT,
+                'stock_operation' as SOURCE_TYPE,
+                CASE so.OP_TYPE
+                    WHEN 1 THEN 'Full Clear (Standard)'
+                    WHEN 2 THEN 'Partial Clear (Standard)'
+                    WHEN 3 THEN 'Full Clear + Sales'
+                    WHEN 4 THEN 'Partial Clear + Sales'
+                    WHEN 5 THEN 'Transfer (Standard)'
+                    WHEN 6 THEN 'Transfer + Full Clear'
+                    WHEN 7 THEN 'Partial Clear + Lorry'
+                    WHEN 8 THEN 'Full Clear + Lorry'
+                    WHEN 9 THEN 'Item Conversion'
+                    WHEN 10 THEN 'Cash Float Adjustment'
+                    WHEN 11 THEN 'Stock Return'
+                    ELSE 'Stock Operation'
+                END AS OP_TYPE_NAME
+            FROM store_stock_operations so
+            LEFT JOIN store_stock_operations parent_op ON so.REFERENCE_OP_ID = parent_op.OP_ID
+            WHERE so.IS_ACTIVE = 1
+              ${req.body.startDate ? `AND so.CREATED_DATE >= '${req.body.startDate}'` : ''}
+              ${req.body.endDate ? `AND so.CREATED_DATE <= '${req.body.endDate} 23:59:59'` : ''}
+        `;
+
+        let stockOpsRows = [];
+        try {
+            stockOpsRows = await pool.query(stockOpsQuery);
+
+            // Fetch items, conversions, and calculate stock impact for each operation
+            for (let op of stockOpsRows) {
+                op.items = await pool.query(
+                    'SELECT * FROM store_stock_operation_items WHERE OP_ID = ? AND IS_ACTIVE = 1',
+                    [op.OP_ID]
+                );
+                op.conversions = await pool.query(
+                    'SELECT * FROM store_stock_operation_conversions WHERE OP_ID = ? AND IS_ACTIVE = 1',
+                    [op.OP_ID]
+                );
+
+                // Get actual stock adjustments made by this operation
+                const txQuery = `
+                    SELECT st.TYPE, sti.QUANTITY, sti.ITEM_ID, i.NAME as ITEM_NAME, i.CODE as ITEM_CODE
+                    FROM store_transactions st
+                    JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                    LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
+                    WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
+                      AND st.COMMENTS LIKE ?
+                `;
+                op.stockAdjustments = await pool.query(txQuery, [`[${op.CODE}]%`]);
+            }
+        } catch (e) {
+            console.log('[getInventoryHistory] Stock operations table may not exist yet:', e.message);
+        }
+
+        // 3. Process transaction rows (non-stock-operation adjustments)
+        const transactionResult = transactionRows.map(row => {
             let displayType = row.TYPE;
             const comments = row.COMMENTS || '';
 
-            // Parse comments to determine original action type
             if (comments.includes('Opening Stock')) {
                 displayType = 'Opening';
             } else if (comments.includes('Stock Cleared')) {
@@ -1916,11 +1984,219 @@ router.post('/api/getInventoryHistory', async (req, res) => {
 
             return {
                 ...row,
-                DISPLAY_TYPE: displayType
+                DISPLAY_TYPE: displayType,
+                SOURCE_TYPE: 'transaction'
             };
         });
 
-        return res.json({ success: true, result });
+        // 4. Process stock operations into unified records with breakdown
+        const stockOpsResult = stockOpsRows.map(row => {
+            const sourceItem = row.items?.[0] || {};
+            const conversions = row.conversions || [];
+            const adjustments = row.stockAdjustments || [];
+
+            // Special handling for ops 3, 4 (Full/Partial + Sales)
+            const isOpWithSales = [3, 4].includes(row.OP_TYPE);
+
+            // For ops 3, 4: Use stored values from operation items
+            let soldQty = parseFloat(sourceItem.SOLD_QUANTITY) || 0;
+            let originalStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
+
+            // Find Selling transaction
+            const sellingTx = adjustments.find(a =>
+                a.TYPE === 'Selling' &&
+                (a.ITEM_ID === sourceItem.ITEM_ID || String(a.ITEM_ID) === String(sourceItem.ITEM_ID))
+            );
+
+            // Find the source item's adjustment (could be AdjIn for negative stock or AdjOut for positive)
+            const sourceAdjOut = adjustments.find(a =>
+                (a.TYPE === 'AdjOut' || a.TYPE === 'StockClear') &&
+                (a.ITEM_ID === sourceItem.ITEM_ID || String(a.ITEM_ID) === String(sourceItem.ITEM_ID))
+            );
+            const sourceAdjIn = adjustments.find(a =>
+                a.TYPE === 'AdjIn' &&
+                (a.ITEM_ID === sourceItem.ITEM_ID || String(a.ITEM_ID) === String(sourceItem.ITEM_ID))
+            );
+
+            // Determine the source adjustment type and previous stock
+            let adjustmentQty = 0;
+            let adjustmentType = 'AdjOut';
+            let previousStock = originalStock; // Use stored original stock for ops 3, 4
+
+            if (isOpWithSales) {
+                // For Op 3 (Full Clear): Net change is simply the previous stock (going to 0)
+                // For Op 4 (Partial): Net change is what was sold + converted
+                if (row.OP_TYPE === 3) {
+                    adjustmentQty = previousStock;
+                } else {
+                    const convertedQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+                    adjustmentQty = soldQty + convertedQty;
+                }
+                adjustmentType = 'AdjOut';
+
+                // If original stock not stored, try to get from adjustment
+                if (!previousStock && sourceAdjOut) {
+                    previousStock = parseFloat(sourceAdjOut.QUANTITY) || 0;
+                }
+            } else if (sourceAdjOut) {
+                // Previous stock was positive, we removed it
+                adjustmentQty = parseFloat(sourceAdjOut.QUANTITY) || 0;
+                adjustmentType = 'AdjOut';
+                // Prefer stored ORIGINAL_STOCK, fallback to adjustment quantity
+                if (!previousStock) {
+                    previousStock = adjustmentQty; // e.g., +1000kg
+                }
+            } else if (row.OP_TYPE === 11) {
+                // Op 11: Stock Return
+                // If conversion return, sum of destinations is the added stock mass
+                // If direct return, cleared_quantity is the added stock
+                const totalDestQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+                if (totalDestQty > 0) {
+                    adjustmentQty = totalDestQty;
+                } else {
+                    adjustmentQty = parseFloat(sourceItem.CLEARED_QUANTITY) || 0;
+                }
+                adjustmentType = 'AdjIn';
+                previousStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
+            } else if (sourceAdjIn && !conversions.some(c =>
+                c.DEST_ITEM_ID === sourceItem.ITEM_ID || String(c.DEST_ITEM_ID) === String(sourceItem.ITEM_ID)
+            )) {
+                // Previous stock was negative, we added to make it 0
+                // (Make sure this AdjIn is not a destination item)
+                adjustmentQty = parseFloat(sourceAdjIn.QUANTITY) || 0;
+                adjustmentType = 'AdjIn';
+                // Prefer stored ORIGINAL_STOCK, fallback to calculated value
+                if (!previousStock) {
+                    previousStock = -adjustmentQty; // e.g., -550kg
+                }
+            }
+
+            // Sum of destination quantities
+            const totalDestQty = conversions.reduce((sum, c) =>
+                sum + (parseFloat(c.DEST_QUANTITY) || 0), 0
+            );
+
+            // Calculate wastage/surplus
+            let wastage = parseFloat(row.WASTAGE_AMOUNT) || 0;
+            let surplus = parseFloat(row.SURPLUS_AMOUNT) || 0;
+
+            // If not stored, calculate from logic
+            if (!wastage && !surplus && conversions.length > 0) {
+                if (previousStock > 0) {
+                    // For ops 3, 4: wastage = stock - sold - converted
+                    const baseForCalc = isOpWithSales ? (previousStock - soldQty) : previousStock;
+                    const diff = baseForCalc - totalDestQty;
+                    if (diff > 0) wastage = diff;
+                    else if (diff < 0) surplus = Math.abs(diff);
+                } else if (previousStock < 0) {
+                    surplus = Math.abs(previousStock) + totalDestQty;
+                } else if (previousStock === 0 && totalDestQty > 0) {
+                    surplus = totalDestQty;
+                }
+            }
+
+            // Build breakdown for display
+            // Get Store 2 items if this is a transfer operation (Op 5 or 6)
+            const store1Items = (row.items || []).filter(i => !i.STORE_NO || i.STORE_NO === 1);
+            const store2Items = (row.items || []).filter(i => i.STORE_NO === 2);
+
+            // Determine main item cleared quantity
+            let mainQty = 0;
+            if (isOpWithSales) {
+                // For Op 4 (Partial + Sales), main qty is the sold amount
+                // For Op 3 (Full + Sales), main qty is effectively the whole stock, but we can display soldQty
+                mainQty = soldQty;
+            } else if (row.OP_TYPE === 2) {
+                // For Op 2 (Partial Standard), main qty = total removed - converted
+                mainQty = adjustmentQty - totalDestQty;
+                if (mainQty < 0) mainQty = 0; // Should not happen with correct logic
+            } else if (row.OP_TYPE === 1) {
+                // Op 1 (Full Standard), main qty = total removed
+                mainQty = adjustmentQty;
+            }
+
+            const breakdown = {
+                source: {
+                    itemId: sourceItem.ITEM_ID,
+                    itemCode: sourceItem.ITEM_CODE,
+                    itemName: sourceItem.ITEM_NAME,
+                    adjustmentQty: adjustmentQty,
+                    adjustmentType: adjustmentType,
+                    previousStock: previousStock,
+                    soldQty: soldQty,  // For ops 3, 4
+                    mainQty: mainQty   // NEW: Explicit main item qty
+                },
+                destinations: conversions.map(c => ({
+                    itemId: c.DEST_ITEM_ID,
+                    itemCode: c.DEST_ITEM_CODE,
+                    itemName: c.DEST_ITEM_NAME,
+                    quantity: parseFloat(c.DEST_QUANTITY) || 0
+                })),
+                // Store 2 items with before/after stock for transfer operations
+                store2Items: store2Items.map(i => ({
+                    itemId: i.ITEM_ID,
+                    itemCode: i.ITEM_CODE,
+                    itemName: i.ITEM_NAME,
+                    previousStock: parseFloat(i.ORIGINAL_STOCK) || 0,
+                    addedQty: Math.abs(parseFloat(i.CLEARED_QUANTITY) || 0),
+                    currentStock: parseFloat(i.REMAINING_STOCK) || 0
+                })),
+                isTransferOperation: [5, 6].includes(row.OP_TYPE),
+                wastage: wastage,
+                surplus: surplus,
+                totalDestQty: totalDestQty,
+                isSalesOperation: isOpWithSales,
+                billCode: row.BILL_CODE,
+                billAmount: parseFloat(row.BILL_AMOUNT) || 0,
+                // Lorry details for ops 3, 4, 7, 8
+                lorryName: row.LORRY_NAME || null,
+                driverName: row.DRIVER_NAME || null,
+                destination: row.DESTINATION || null,
+                referenceOpId: row.REFERENCE_OP_ID,
+                refOpCode: row.REF_OP_CODE,
+                refBillCode: row.REF_BILL_CODE
+            };
+
+
+            return {
+                TRANSACTION_ID: `OP-${row.OP_ID}`,
+                OP_ID: row.OP_ID,
+                OP_CODE: row.CODE,
+                CODE: row.CODE,
+                TYPE: `OP_${row.OP_TYPE}`,
+                STORE_NO: row.STORE_NO,
+                COMMENTS: row.COMMENTS,
+                CREATED_DATE: row.CREATED_DATE,
+                CREATED_BY: row.CREATED_BY,
+                CREATED_BY_NAME: row.CREATED_BY_NAME,
+                ITEM_NAME: sourceItem.ITEM_NAME || 'Unknown Item',
+                ITEM_CODE: sourceItem.ITEM_CODE || '',
+                ITEM_ID: sourceItem.ITEM_ID || null,
+                ITEM_QTY: adjustmentQty,
+                DISPLAY_TYPE: row.OP_TYPE_NAME,
+                SOURCE_TYPE: 'stock_operation',
+                OP_TYPE: row.OP_TYPE,
+                OP_TYPE_NAME: row.OP_TYPE_NAME,
+                CLEARANCE_TYPE: row.CLEARANCE_TYPE,
+                WASTAGE_AMOUNT: wastage,
+                SURPLUS_AMOUNT: surplus,
+                SOLD_QUANTITY: soldQty,
+                CUSTOMER_NAME: row.CUSTOMER_NAME,
+                LORRY_NAME: row.LORRY_NAME,
+                BILL_CODE: row.BILL_CODE,
+                BILL_AMOUNT: row.BILL_AMOUNT,
+                items: row.items,
+                conversions: row.conversions,
+                breakdown: breakdown
+            };
+        });
+
+        // 5. Combine and sort by date
+        const allResults = [...transactionResult, ...stockOpsResult].sort((a, b) =>
+            new Date(b.CREATED_DATE) - new Date(a.CREATED_DATE)
+        );
+
+        return res.json({ success: true, result: allResults });
 
     } catch (e) {
         console.error("Error fetching inventory history:", e);
@@ -1928,6 +2204,8 @@ router.post('/api/getInventoryHistory', async (req, res) => {
     }
 });
 
+
+// Soft delete inventory transaction
 // Soft delete inventory transaction
 router.post('/api/deleteInventoryTransaction', async (req, res) => {
     try {
@@ -1937,9 +2215,26 @@ router.post('/api/deleteInventoryTransaction', async (req, res) => {
             return res.json({ success: false, message: 'Transaction ID required' });
         }
 
+        let numericId = TRANSACTION_ID;
+
+        // Check if ID is likely a string code (e.g. "OP-79" or "S1-...") 
+        // If so, lookup the numeric ID using CODE
+        if (typeof TRANSACTION_ID === 'string' && isNaN(TRANSACTION_ID)) {
+            const lookup = await pool.query('SELECT TRANSACTION_ID FROM store_transactions WHERE CODE = ? OR TRANSACTION_ID = ?', [TRANSACTION_ID, TRANSACTION_ID]);
+            if (lookup && lookup.length > 0) {
+                numericId = lookup[0].TRANSACTION_ID;
+            } else {
+                // If not found by CODE, maybe it's an OP_CODE in store_stock_operations? 
+                // But this endpoint is for store_transactions. 
+                // Let's assume if not found, we can't delete.
+                console.warn(`[Delete] Could not find numeric ID for code: ${TRANSACTION_ID}`);
+                return res.json({ success: false, message: 'Transaction not found for deletion' });
+            }
+        }
+
         // Soft delete - set IS_ACTIVE = 0
-        await pool.query('UPDATE store_transactions SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [TRANSACTION_ID]);
-        await pool.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [TRANSACTION_ID]);
+        await pool.query('UPDATE store_transactions SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [numericId]);
+        await pool.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [numericId]);
 
         return res.json({ success: true, message: 'Transaction deleted successfully' });
 

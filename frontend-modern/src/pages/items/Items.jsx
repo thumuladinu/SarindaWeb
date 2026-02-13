@@ -408,9 +408,10 @@ export default function Items() {
                             name="CODE"
                             label="Item Code"
                             rules={[{ required: true, message: 'Please enter item code' }]}
+                            normalize={(value) => value ? value.toUpperCase() : value}
                             className="md:col-span-1"
                         >
-                            <Input placeholder="E.g. ITEM001" className="font-mono uppercase" onChange={(e) => e.target.value = e.target.value.toUpperCase()} />
+                            <Input placeholder="E.g. ITEM001" className="font-mono uppercase" />
                         </Form.Item>
                         <Form.Item
                             name="NAME"

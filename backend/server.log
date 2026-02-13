@@ -1,0 +1,761 @@
+MySQL connection pool created successfully
+>>> BACKEND RELOADED: Balance Fix Applied <<<
+Server is running on port 3001
+[Migration] UNIQUE index on CODE already exists - good!
+Verified 'cash_floats' table.
+Client connected: GDoDFMBd52NZEvzaAAAB
+[Socket] Terminal Registered: WeighingStation - WS-KWT2RBM9A
+Client connected: 8kOT1vD_RNZmaxOXAAAD
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 39 items from POS
+[MergeSync] Received 39 items from POS
+[Migration] Cannot create unique index on transactions - duplicates still exist.
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: 8kOT1vD_RNZmaxOXAAAD
+Client connected: MqwbT8_MCXFR5sEfAAAG
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: GDoDFMBd52NZEvzaAAAB
+Client connected: x48BcvDlVC_RWbkMAAAJ
+[Socket] Terminal Registered: WeighingStation - WS-KWT2RBM9A
+Transaction sync received: {
+  code: 'S2-260208-CN4ZH-005',
+  type: 'Buying',
+  storeNo: 2,
+  sourceType: 'Direct',
+  s2BillCode: null,
+  total: 12064,
+  subtotal: 12064,
+  amountPaid: 12064,
+  paymentMethod: 'Cash',
+  userId: 4,
+  customerId: null,
+  bankName: null,
+  bankTransactionDateTime: null,
+  chequeNo: null,
+  chequeExpiryDate: null,
+  chequeBank: null,
+  chequeCollected: false,
+  dueAmount: 0,
+  dueDate: null,
+  billData: null,
+  items: [
+    {
+      id: 'cart-1770532065895-kq9wayvno',
+      splitFrom: null,
+      productId: 881,
+      productCode: 'ADSAD',
+      productName: 'ssa',
+      quantity: 52,
+      price: 232,
+      total: 12064,
+      isLot: false,
+      lotEntries: [],
+      grossWeight: null,
+      tareWeight: null,
+      storeSource: null,
+      unitWeight: null,
+      containerCount: null
+    }
+  ],
+  createdAt: '2026-02-08T01:00:00.000Z',
+  date: '2026-02-08T01:00:00.000Z'
+}
+[Sync] Transaction paymentMethod: Cash -> Using: Cash
+[Sync] Transaction S2-260208-CN4ZH-005 saved with store=2, source=Direct
+[Sync] Looking up item: code="ADSAD", name="ssa", price=232
+[Sync] Inserted 1 items for transaction S2-260208-CN4ZH-005
+Transaction sync received: {
+  code: 'S2-260208-CN4ZH-006',
+  type: 'Buying',
+  storeNo: 2,
+  sourceType: 'Direct',
+  s2BillCode: null,
+  total: 5200,
+  subtotal: 5200,
+  amountPaid: 5200,
+  paymentMethod: 'Cash',
+  userId: 4,
+  customerId: null,
+  bankName: null,
+  bankTransactionDateTime: null,
+  chequeNo: null,
+  chequeExpiryDate: null,
+  chequeBank: null,
+  chequeCollected: false,
+  dueAmount: 0,
+  dueDate: null,
+  billData: null,
+  items: [
+    {
+      id: 'cart-1770532089363-d5wqd0r8p',
+      splitFrom: null,
+      productId: 876,
+      productCode: 'KADL',
+      productName: 'කබල කටුමි',
+      quantity: 52,
+      price: 100,
+      total: 5200,
+      isLot: false,
+      lotEntries: [],
+      grossWeight: null,
+      tareWeight: null,
+      storeSource: null,
+      unitWeight: null,
+      containerCount: null
+    }
+  ],
+  createdAt: '2026-02-06T01:00:00.000Z',
+  date: '2026-02-06T01:00:00.000Z'
+}
+[Sync] Transaction paymentMethod: Cash -> Using: Cash
+[Sync] Transaction S2-260208-CN4ZH-006 saved with store=2, source=Direct
+[Sync] Looking up item: code="KADL", name="කබල කටුමි", price=100
+[Sync] Inserted 1 items for transaction S2-260208-CN4ZH-006
+[getAllItemStocksRealTime] DEBUG Item 860 rows: [
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjIn',
+    total_qty: '1870.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjOut',
+    total_qty: '930.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjIn',
+    total_qty: '1530.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Selling',
+    total_qty: '110.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Buying',
+    total_qty: '100.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'TransferOut',
+    total_qty: '700.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'TransferIn',
+    total_qty: '400.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjOut',
+    total_qty: '52.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'Buying',
+    total_qty: '185.00'
+  }
+]
+[getAllItemStocksRealTime] DEBUG Item 860 rows: [
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjIn',
+    total_qty: '1870.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjOut',
+    total_qty: '930.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjIn',
+    total_qty: '1530.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Selling',
+    total_qty: '110.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Buying',
+    total_qty: '100.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'TransferOut',
+    total_qty: '700.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'TransferIn',
+    total_qty: '400.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjOut',
+    total_qty: '52.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'Buying',
+    total_qty: '185.00'
+  }
+]
+[adjustInventory] Request body: {
+  ITEM_ID: 859,
+  STORE_NO: 1,
+  TYPE: 'StockClear',
+  QUANTITY: 50,
+  REASON: 'kjljl',
+  CREATED_BY: 4,
+  DATE: '2026-02-08T06:31:16.967Z'
+}
+[adjustInventory] Calculated Stock for Item 859 Store 1: 70
+[adjustInventory] Calculated current stock from ledger: 70
+[adjustInventory] Current stock: 70 Target qty: 50 Type: StockClear
+[adjustInventory] Final delta: -70 Using type: AdjOut
+[adjustInventory] Created transaction: 40513 {
+  CODE: 'ADJ-080226-8YN4',
+  STORE_NO: 1,
+  TYPE: 'AdjOut',
+  CREATED_BY: 4,
+  CREATED_DATE: 2026-02-08T06:31:17.006Z,
+  SUB_TOTAL: 0,
+  COMMENTS: 'Stock Cleared (was 70). Valid: 50. Waste: 20.00kg (28.6%): kjljl',
+  IS_ACTIVE: 1
+}
+[adjustInventory] Inserting item: {
+  TRANSACTION_ID: 40513,
+  ITEM_ID: 859,
+  PRICE: 0,
+  QUANTITY: 70,
+  TOTAL: 0,
+  CREATED_BY: 4
+}
+[adjustInventory] Item insert result: ResultSetHeader {
+  fieldCount: 0,
+  affectedRows: 1,
+  insertId: 4611,
+  info: '',
+  serverStatus: 2,
+  warningStatus: 0,
+  changedRows: 0
+}
+[adjustInventory] Stock adjusted, delta: -70
+[getAllItemStocksRealTime] DEBUG Item 860 rows: [
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjIn',
+    total_qty: '1870.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjOut',
+    total_qty: '930.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjIn',
+    total_qty: '1530.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Selling',
+    total_qty: '110.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Buying',
+    total_qty: '100.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'TransferOut',
+    total_qty: '700.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'TransferIn',
+    total_qty: '400.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjOut',
+    total_qty: '52.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'Buying',
+    total_qty: '185.00'
+  }
+]
+[getAllItemStocksRealTime] DEBUG Item 860 rows: [
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjIn',
+    total_qty: '1870.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjOut',
+    total_qty: '930.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjIn',
+    total_qty: '1530.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Selling',
+    total_qty: '110.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Buying',
+    total_qty: '100.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'TransferOut',
+    total_qty: '700.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'TransferIn',
+    total_qty: '400.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjOut',
+    total_qty: '52.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'Buying',
+    total_qty: '185.00'
+  }
+]
+[getAllItemStocksRealTime] DEBUG Item 860 rows: [
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjIn',
+    total_qty: '1870.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjOut',
+    total_qty: '930.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'AdjIn',
+    total_qty: '1530.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Selling',
+    total_qty: '110.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'Buying',
+    total_qty: '100.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 1,
+    TYPE: 'TransferOut',
+    total_qty: '700.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'TransferIn',
+    total_qty: '400.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'AdjOut',
+    total_qty: '52.00'
+  },
+  {
+    ITEM_ID: 860,
+    CODE: 'DC',
+    NAME: 'DC - පොල්',
+    STORE_NO: 2,
+    TYPE: 'Buying',
+    total_qty: '185.00'
+  }
+]
+Client disconnected: x48BcvDlVC_RWbkMAAAJ
+Client connected: fuVlioDQ9_1Vw4QfAAAM
+[Socket] Terminal Registered: WeighingStation - WS-KWT2RBM9A
+[WeightSync] Received: S2-20260208-OQQ9
+[WeightSync] Inserted: S2-20260208-OQQ9, ID: 65
+[WeightSync] Received: S2-20260208-C4JT
+[WeightSync] Inserted: S2-20260208-C4JT, ID: 66
+Client disconnected: MqwbT8_MCXFR5sEfAAAG
+[MergeSync] Received 19 items from POS
+Client connected: hKe1gmDuc7e69tpeAAAP
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[Update] Updating item 860: IS_ACTIVE=1
+Client disconnected: hKe1gmDuc7e69tpeAAAP
+Client connected: aXMUvca3V_dUL6yaAAAS
+[MergeSync] Received 19 items from POS
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: fuVlioDQ9_1Vw4QfAAAM
+Client connected: bZx4Nj1pS0AApUopAAAV
+[Socket] Terminal Registered: WeighingStation - WS-KWT2RBM9A
+[WeightSync] Received: S2-20260208-V3TH
+[WeightSync] Inserted: S2-20260208-V3TH, ID: 67
+Client disconnected: aXMUvca3V_dUL6yaAAAS
+Client connected: lfCauKhwhkxKk4d3AAAY
+[MergeSync] Received 19 items from POS
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: lfCauKhwhkxKk4d3AAAY
+Client disconnected: bZx4Nj1pS0AApUopAAAV
+[MergeSync] Received 19 items from POS
+Client connected: n7z7dtqpSxdhzbYfAAAb
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: n7z7dtqpSxdhzbYfAAAb
+Client connected: qXbQnuzs7Eaed1zTAAAe
+[MergeSync] Received 19 items from POS
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: qXbQnuzs7Eaed1zTAAAe
+[MergeSync] Received 19 items from POS
+Client connected: -LkWNFJ8TUsYxChOAAAh
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Received 39 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: -LkWNFJ8TUsYxChOAAAh
+[MergeSync] Received 19 items from POS
+Client connected: oUdrb6oRGFyq_KTiAAAk
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: oUdrb6oRGFyq_KTiAAAk
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Received 19 items from POS
+Client connected: cLr-MakHLzdbqHXXAAAn
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Transaction sync received: {
+  code: 'S1-EXP-260208-TL6E8-001',
+  type: 'Expenses',
+  storeNo: 1,
+  total: 34,
+  subtotal: 34,
+  amountPaid: 34,
+  paymentMethod: 'Cash',
+  comment: '23',
+  userId: 4,
+  items: [],
+  metadata: { reason: '23', sourceType: 'POS-Expense' },
+  createdAt: '2026-02-08T13:39:49.240Z'
+}
+[Sync] Expense received - comment: "23", metadata.reason: "23", final: "23"
+[Sync] Transaction paymentMethod: Cash -> Using: Cash
+[Sync] Transaction S1-EXP-260208-TL6E8-001 saved with store=1, source=undefined
+Client disconnected: cLr-MakHLzdbqHXXAAAn
+[MergeSync] Received 19 items from POS
+Client connected: 9V6WBAJk6yKMNMSZAAAq
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[Update] Updating item 860: IS_ACTIVE=1
+Client disconnected: 9V6WBAJk6yKMNMSZAAAq
+[MergeSync] Received 19 items from POS
+Client connected: 3qfxur3BiJMGLHYnAAAs
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: 3qfxur3BiJMGLHYnAAAs
+Client connected: Fvan4yQIEIYt4n3eAAAv
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: Fvan4yQIEIYt4n3eAAAv
+Client connected: eJQecRVvogjV_nlYAAAy
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client disconnected: eJQecRVvogjV_nlYAAAy
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+Client connected: WTkMacJc3kPxmUlvAAA1
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 39 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[Sync] Updating transaction id=S1-EXP-260208-TL6E8-001, code=S1-EXP-260208-TL6E8-001
+[Sync] Found transaction by code: S1-EXP-260208-TL6E8-001 -> ID=40514
+[Sync] Soft deleted transaction: 40514
+[Update] Updating item 860: IS_ACTIVE=0
+Client disconnected: WTkMacJc3kPxmUlvAAA1
+Login request received: { user: 'thumula', password: 'thumula123', remember: true }
+Dashboard Stats Request Received: {}
+Querying for Date: 2026-02-09
+Step 1: Fetching Global Stats...
+Dashboard Stats Request Received: {}
+Querying for Date: 2026-02-09
+Step 1: Fetching Global Stats...
+Step 2: Fetching Users...
+Step 3: Fetching Floats...
+Step 2: Fetching Users...
+Step 3: Fetching Floats...
+Client connected: KQkNLErF3tSKXpvFAAA4
+Step 4: Fetching User Transactions...
+Step 4: Fetching User Transactions...
+Step 5: Fetching Today's Stock Movement...
+Step 5: Fetching Today's Stock Movement...
+All queries successful. Processing data...
+Sending Response. Active Users: 0 Stock Items: 0
+All queries successful. Processing data...
+Sending Response. Active Users: 0 Stock Items: 0
+Client connected: 7flFK8UbmHj_9o3rAAA7
+[Socket] Terminal Registered: WeighingStation - WS-KWT2RBM9A
+Client connected: aBUKP6F5O1YXk5xfAAA-
+[MergeSync] Received 19 items from POS
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 19 items from POS
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }
+[MergeSync] Web DB has 37 valid items
+[MergeSync] POS has 0 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 0, toUpdateOnPOS: 0, newForPOS: 37 }

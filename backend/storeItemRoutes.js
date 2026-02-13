@@ -58,6 +58,8 @@ router.post('/api/addItem', async (req, res) => {
     console.log('Add items request received:', req.body);
 
     try {
+        // Force Uppercase for CODE
+        if (req.body.CODE) req.body.CODE = req.body.CODE.toUpperCase();
         // Ensure the MySQL connection pool is defined
         if (!pool) {
             console.error('Error: MySQL connection pool is not defined');
@@ -196,6 +198,8 @@ router.post('/api/checkForDuplicateName', async (req, res) => {
     //console.log('Check for duplicate items request received:', req.body);
 
     try {
+        // Force Uppercase for CODE
+        if (req.body.CODE) req.body.CODE = req.body.CODE.toUpperCase();
         // Ensure the MySQL connection pool is defined
         if (!pool) {
             console.error('Error: MySQL connection pool is not defined');
@@ -222,6 +226,8 @@ router.post('/api/checkForDuplicateNameUpdate', async (req, res) => {
     //console.log('Check for duplicate items request received:', req.body);
 
     try {
+        // Force Uppercase for CODE
+        if (req.body.CODE) req.body.CODE = req.body.CODE.toUpperCase();
         // Ensure the MySQL connection pool is defined
         if (!pool) {
             console.error('Error: MySQL connection pool is not defined');
@@ -263,6 +269,8 @@ router.post('/api/updateItem', async (req, res) => {
     //console.log('Update items request received:', req.body);
 
     try {
+        // Force Uppercase for CODE
+        if (req.body.CODE) req.body.CODE = req.body.CODE.toUpperCase();
         // Ensure the MySQL connection pool is defined
         if (!pool) {
             console.error('Error: MySQL connection pool is not defined');
