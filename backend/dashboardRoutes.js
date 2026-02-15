@@ -437,8 +437,9 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
             JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
             WHERE t.IS_ACTIVE = 1 
-              AND t.TYPE IN ('Selling', 'Buying')
-              AND DATE(t.CREATED_DATE) = ?
+            AND sti.IS_ACTIVE = 1
+            AND t.TYPE IN ('Selling', 'Buying')
+            AND DATE(t.CREATED_DATE) = ?
             GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE, t.STORE_NO
         `;
         const stockMovementRows = await pool.query(stockMovementQuery, [queryDate]);

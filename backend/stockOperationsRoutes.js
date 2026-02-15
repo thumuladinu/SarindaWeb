@@ -1818,4 +1818,177 @@ router.get('/api/stock-ops/returns', async (req, res) => {
     }
 });
 
+// =====================================================
+// GET TRIPS (For Trips Page)
+// =====================================================
+
+router.post('/api/stock-ops/trips', async (req, res) => {
+    try {
+        const { storeNo, startDate, endDate, tripId, itemName, limit = 50 } = req.body;
+
+        let query = `
+            SELECT DISTINCT so.*,
+                CASE so.OP_TYPE
+                    WHEN 1 THEN 'Full Clear (Standard)'
+                    WHEN 2 THEN 'Partial Clear (Standard)'
+                    WHEN 3 THEN 'Full Clear + Sales'
+                    WHEN 4 THEN 'Partial Clear + Sales'
+                    WHEN 5 THEN 'Transfer (Standard)'
+                    WHEN 6 THEN 'Transfer + Full Clear'
+                    WHEN 7 THEN 'Partial Clear + Lorry'
+                    WHEN 8 THEN 'Full Clear + Lorry'
+                    WHEN 9 THEN 'Item Conversion'
+                    ELSE 'Unknown'
+                END AS OP_TYPE_NAME
+            FROM store_stock_operations so
+            LEFT JOIN store_stock_operation_items soi ON so.OP_ID = soi.OP_ID
+            WHERE so.IS_ACTIVE = 1
+              AND so.TRIP_ID IS NOT NULL
+        `;
+        const params = [];
+
+        if (storeNo) {
+            query += ' AND so.STORE_NO = ?';
+            params.push(storeNo);
+        }
+        if (startDate) {
+            query += ' AND DATE(so.CREATED_DATE) >= ?';
+            params.push(startDate);
+        }
+        if (endDate) {
+            query += ' AND DATE(so.CREATED_DATE) <= ?';
+            params.push(endDate);
+        }
+        if (tripId) {
+            query += ' AND so.TRIP_ID LIKE ?';
+            params.push(`%${tripId}%`);
+        }
+        if (itemName) {
+            query += ' AND (soi.ITEM_NAME LIKE ? OR soi.ITEM_CODE LIKE ?)';
+            params.push(`%${itemName}%`, `%${itemName}%`);
+        }
+
+        query += ' ORDER BY so.CREATED_DATE DESC LIMIT ?';
+        params.push(parseInt(limit));
+
+        const operations = await pool.query(query, params);
+
+        // Fetch items for each operation
+        for (let op of operations) {
+            // Get base items
+            const baseItems = await pool.query(
+                'SELECT * FROM store_stock_operation_items WHERE OP_ID = ? AND IS_ACTIVE = 1',
+                [op.OP_ID]
+            );
+
+            // Check if operation has conversions
+            const conversions = await pool.query(
+                'SELECT * FROM store_stock_operation_conversions WHERE OP_ID = ? AND IS_ACTIVE = 1',
+                [op.OP_ID]
+            );
+
+            // Calculate the total converted quantity ONCE per operation (sum of all destination quantities)
+            const totalDestQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+
+            // Get the source item (first item in the operation)
+            const sourceItem = baseItems[0] || {};
+
+            // Special handling for ops 3, 4 (Full/Partial + Sales)
+            const isOpWithSales = [3, 4].includes(op.OP_TYPE);
+            const soldQty = parseFloat(sourceItem.SOLD_QUANTITY) || 0;
+            const clearedQty = parseFloat(sourceItem.CLEARED_QUANTITY) || 0;
+            const originalStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
+
+            // Fetch the source item's AdjOut/StockClear transaction to get the actual "total removed" quantity
+            // IMPORTANT: The OP_CODE is stored in COMMENTS (e.g. "[S2-260213-CLR-WEIGH-004] ..."), NOT in CODE
+            // This matches exactly how getInventoryHistory finds transactions (line 1964 of storeTransactionRoutes.js)
+            const sourceTxRows = await pool.query(
+                `SELECT sti.QUANTITY, st.TYPE
+                 FROM store_transactions st 
+                 JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                 WHERE st.COMMENTS LIKE ? 
+                   AND sti.ITEM_ID = ? 
+                   AND st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1`,
+                [`[${op.OP_CODE}]%`, sourceItem.ITEM_ID]
+            );
+
+            // Find AdjOut/StockClear transaction (source removed)
+            const sourceAdjOut = sourceTxRows.find(r => r.TYPE === 'AdjOut' || r.TYPE === 'StockClear');
+            const adjustmentQty = sourceAdjOut ? parseFloat(sourceAdjOut.QUANTITY) : 0;
+
+            // Find Selling transaction (for ops 3, 4)
+            const sellingTx = sourceTxRows.find(r => r.TYPE === 'Selling');
+
+            // ===== Calculate mainQty: EXACT SAME LOGIC as getInventoryHistory (lines 2104-2116) =====
+            // Op 3, 4 (Sales):  mainQty = soldQty
+            // Op 1 (Full Clear): mainQty = adjustmentQty (NO subtraction of conversions)
+            // Op 2 (Partial):    mainQty = adjustmentQty - totalDestQty
+            let mainQty = 0;
+            if (isOpWithSales) {
+                // For Sales ops: main qty = sold amount (from operation items table)
+                // Fallback to Selling transaction if stored value is 0
+                mainQty = soldQty || (sellingTx ? parseFloat(sellingTx.QUANTITY) : 0);
+            } else if (op.OP_TYPE === 1) {
+                // Op 1 (Full Clear): main qty = total removed (entire stock cleared, NO subtraction)
+                mainQty = adjustmentQty || originalStock;
+            } else if (op.OP_TYPE === 2) {
+                // Op 2 (Partial Clear): main qty = total removed - converted
+                const totalRemoved = adjustmentQty || clearedQty;
+                mainQty = totalRemoved - totalDestQty;
+                if (mainQty < 0) mainQty = 0;
+            } else {
+                // For other ops (transfers, returns, etc.), use cleared quantity as-is
+                mainQty = clearedQty || adjustmentQty;
+            }
+
+            // Apply mainQty to ALL items in the operation
+            for (let item of baseItems) {
+                // Store the calculated mainQty for display
+                item.MAIN_QTY = mainQty;
+                item.CONVERTED_QTY = totalDestQty;
+                item.CONVERSIONS = conversions;
+            }
+
+            // If billed, fetch bill data for each item
+            if (op.BILL_CODE) {
+                for (let item of baseItems) {
+                    // Try to find bill_item data
+                    const billItems = await pool.query(
+                        `SELECT bi.PRICE, bi.QUANTITY, bi.TOTAL 
+                             FROM store_transactions st
+                             JOIN store_transactions_items bi ON st.TRANSACTION_ID = bi.TRANSACTION_ID
+                             WHERE st.CODE = ? AND bi.ITEM_ID = ? AND bi.IS_ACTIVE = 1
+                             LIMIT 1`,
+                        [op.BILL_CODE, item.ITEM_ID]
+                    );
+
+                    if (billItems && billItems.length > 0) {
+                        item.BILL_PRICE_PER_KG = billItems[0].PRICE;
+                        item.BILL_QUANTITY = billItems[0].QUANTITY;
+                        item.BILL_TOTAL = billItems[0].TOTAL;
+                    }
+                }
+            }
+
+            // Set items for this operation
+            op.items = baseItems;
+
+            // Also fetch lorry returns if applicable, for completeness in the modal
+            if ([7, 8].includes(op.OP_TYPE)) {
+                op.returns = await pool.query(
+                    'SELECT * FROM store_lorry_returns WHERE OP_ID = ? AND IS_ACTIVE = 1',
+                    [op.OP_ID]
+                );
+            }
+        }
+
+
+        return res.status(200).json({ success: true, trips: operations });
+
+    } catch (error) {
+        console.error('[Stock Ops] Trips error:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
 module.exports = router;

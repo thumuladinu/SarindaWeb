@@ -54,6 +54,7 @@ app.use(require('./millInventory'));
 app.use(require('./MillStockClearRoutes'));
 app.use(require('./localSyncRoutes'));
 app.use(require('./stockOperationsRoutes'));
+app.use(require('./reportsDashboardRoutes'));
 
 app.use('/api/stock-transfers', require('./transferRequestRoutes'));
 

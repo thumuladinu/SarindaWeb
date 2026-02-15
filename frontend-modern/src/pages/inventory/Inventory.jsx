@@ -415,13 +415,37 @@ export default function Inventory() {
                 )}
             </div>
 
-            {/* Tabs (Shared for Desktop and Mobile) */}
-            <Tabs activeKey={activeTab} onChange={handleTabChange} type="line" size="small" className="mb-4">
-                <TabPane tab={<span><StockOutlined /> Stock</span>} key="1" />
-                <TabPane tab={<span><HistoryOutlined /> History</span>} key="2" />
-                <TabPane tab={<span><SwapOutlined /> Transfer Requests {pendingTransfers.length > 0 && <Tag color="red" style={{ marginLeft: 4 }}>{pendingTransfers.length}</Tag>}</span>} key="3" />
+            {/* Mobile Navigation Dropdown - Only show on mobile */}
+            <div className="md:hidden mb-4">
+                <Select
+                    value={activeTab}
+                    onChange={handleTabChange}
+                    className="w-full"
+                    size="large"
+                    options={[
+                        { value: '1', label: <span className="flex items-center gap-2"><StockOutlined /> Stock</span> },
+                        { value: '2', label: <span className="flex items-center gap-2"><HistoryOutlined /> History</span> },
+                        {
+                            value: '3',
+                            label: (
+                                <span className="flex items-center justify-between w-full">
+                                    <span className="flex items-center gap-2"><SwapOutlined /> Transfer Requests</span>
+                                    {pendingTransfers.length > 0 && <Tag color="red" className="ml-2 m-0">{pendingTransfers.length}</Tag>}
+                                </span>
+                            )
+                        }
+                    ]}
+                />
+            </div>
 
-            </Tabs>
+            {/* Desktop Tabs - Hidden on mobile */}
+            <div className="hidden md:block">
+                <Tabs activeKey={activeTab} onChange={handleTabChange} type="line" size="small" className="mb-4">
+                    <TabPane tab={<span><StockOutlined /> Stock</span>} key="1" />
+                    <TabPane tab={<span><HistoryOutlined /> History</span>} key="2" />
+                    <TabPane tab={<span><SwapOutlined /> Transfer Requests {pendingTransfers.length > 0 && <Tag color="red" style={{ marginLeft: 4 }}>{pendingTransfers.length}</Tag>}</span>} key="3" />
+                </Tabs>
+            </div>
 
             {/* History Filters - Only show on History tab */}
             {activeTab === '2' && (

@@ -8,8 +8,10 @@ import {
     TeamOutlined,
     UserOutlined,
     ExperimentOutlined,
+    TruckOutlined, // Changed from CarOutlined
     FileTextOutlined,
-    StockOutlined // New
+    StockOutlined, // New
+    DashboardOutlined
 } from '@ant-design/icons';
 import { Tooltip } from 'antd';
 import logo from "../../assets/images/logo.png";
@@ -23,7 +25,9 @@ const NAV_ITEMS = [
     { label: 'Customers', path: '/customers', icon: <TeamOutlined /> },
     { label: 'Users', path: '/users', icon: <UserOutlined /> },
     { label: 'Weighting', path: '/weighting', icon: <ExperimentOutlined /> },
+    { label: 'Trips', path: '/trips', icon: <TruckOutlined /> }, // Changed from CarOutlined
     { label: 'Reports', path: '/reports', icon: <FileTextOutlined /> },
+    { label: 'Dashboards', path: '/reports-dashboard', icon: <DashboardOutlined /> },
 ];
 
 export default function Sidebar() {

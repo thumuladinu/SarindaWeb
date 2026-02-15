@@ -12,7 +12,9 @@ import Balance from './pages/balance/Balance'; // New Import
 import Customers from './pages/customers/Customers';
 import Users from './pages/users/Users';
 import Weighting from './pages/weighting/Weighting';
+import Trips from './pages/TripsPage'; // New Import
 import Reports from './pages/reports/Reports';
+import ReportsDashboard from './pages/reports-dashboard/ReportsDashboard';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
@@ -47,7 +49,9 @@ function App() {
                 <Route path="/customers" element={<Customers />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/weighting" element={<Weighting />} />
+                <Route path="/trips" element={<Trips />} />
                 <Route path="/reports" element={<Reports />} />
+                <Route path="/reports-dashboard" element={<ReportsDashboard />} />
             </Route>
 
             {/* Fallback */}

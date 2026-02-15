@@ -9,9 +9,11 @@ import {
     TeamOutlined,
     UserOutlined,
     ExperimentOutlined,
+    TruckOutlined, // Changed from CarOutlined
     FileTextOutlined,
     StockOutlined, // New
-    CloseOutlined
+    CloseOutlined,
+    DashboardOutlined
 } from '@ant-design/icons';
 import { Drawer } from 'antd';
 
@@ -118,7 +120,9 @@ const BottomNav = () => {
                         <DrawerItem path="/customers" icon={<TeamOutlined />} label="Customers" />
                         <DrawerItem path="/users" icon={<UserOutlined />} label="Users" />
                         <DrawerItem path="/weighting" icon={<ExperimentOutlined />} label="Weighting" />
+                        <DrawerItem path="/trips" icon={<TruckOutlined />} label="Trips" />
                         <DrawerItem path="/reports" icon={<FileTextOutlined />} label="Reports" />
+                        <DrawerItem path="/reports-dashboard" icon={<DashboardOutlined />} label="Dashboards" />
                     </div>
                 </div>
             </Drawer>

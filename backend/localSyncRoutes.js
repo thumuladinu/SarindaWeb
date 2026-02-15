@@ -763,7 +763,7 @@ router.post('/api/transactions/sync', async (req, res) => {
 
         // CHECK FOR DUPLICATE: If transaction with same CODE already exists, return success
         const [existingTx] = await pool.query(
-            'SELECT TRANSACTION_ID FROM store_transactions WHERE CODE = ? LIMIT 1',
+            'SELECT TRANSACTION_ID FROM store_transactions WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1',
             [transactionCode]
         );
 
