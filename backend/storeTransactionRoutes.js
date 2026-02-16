@@ -2469,7 +2469,7 @@ router.post('/api/reports/stockMovement', async (req, res) => {
             JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
             WHERE 
                 t.IS_ACTIVE = 1 
-                AND t.TYPE IN ('Selling', 'Buying')
+                AND t.TYPE IN ('Buying', 'Opening', 'AdjIn', 'TransferIn', 'StockTake', 'Selling', 'AdjOut', 'StockClear', 'TransferOut', 'Wastage')
                 AND sti.IS_ACTIVE = 1
                 AND DATE(COALESCE(t.STOCK_DATE, t.CREATED_DATE)) BETWEEN ? AND ?
         `;
@@ -2485,7 +2485,7 @@ router.post('/api/reports/stockMovement', async (req, res) => {
 
         const rows = await pool.query(sql, params);
 
-        // Process in JS to pivot buy/sell per store
+        // Process in JS to pivot categories per store
         const reportMap = {};
 
         rows.forEach(row => {
@@ -2495,22 +2495,27 @@ router.post('/api/reports/stockMovement', async (req, res) => {
                     code: row.CODE,
                     name: row.NAME,
                     unit: 'KG',
-                    buyQtyS1: 0,
-                    sellQtyS1: 0,
-                    buyQtyS2: 0,
-                    sellQtyS2: 0
+                    // Store 1 breakdown
+                    S1_Buying: 0, S1_Selling: 0, S1_Opening: 0, S1_Wastage: 0,
+                    S1_AdjIn: 0, S1_AdjOut: 0, S1_StockTake: 0, S1_StockClear: 0,
+                    S1_TransferIn: 0, S1_TransferOut: 0,
+                    // Store 2 breakdown
+                    S2_Buying: 0, S2_Selling: 0, S2_Opening: 0, S2_Wastage: 0,
+                    S2_AdjIn: 0, S2_AdjOut: 0, S2_StockTake: 0, S2_StockClear: 0,
+                    S2_TransferIn: 0, S2_TransferOut: 0,
                 };
             }
             const item = reportMap[row.ITEM_ID];
             const qty = parseFloat(row.total_qty || 0);
             const store = String(row.STORE_NO);
+            const type = row.TYPE;
 
-            if (row.TYPE === 'Buying') {
-                if (store === '1') item.buyQtyS1 += qty;
-                else if (store === '2') item.buyQtyS2 += qty;
-            } else if (row.TYPE === 'Selling') {
-                if (store === '1') item.sellQtyS1 += qty;
-                else if (store === '2') item.sellQtyS2 += qty;
+            // Map TYPE to specific key
+            if (store === '1' || store === '2') {
+                const key = `S${store}_${type}`;
+                if (item[key] !== undefined) {
+                    item[key] += qty;
+                }
             }
         });
 
@@ -2522,15 +2527,44 @@ router.post('/api/reports/stockMovement', async (req, res) => {
             results = results.filter(r => allowedIds.has(r.id));
         }
 
-        // Calculate totals and net changes
-        results = results.map(r => ({
-            ...r,
-            buyQty: r.buyQtyS1 + r.buyQtyS2,
-            sellQty: r.sellQtyS1 + r.sellQtyS2,
-            netS1: r.buyQtyS1 - r.sellQtyS1,
-            netS2: r.buyQtyS2 - r.sellQtyS2,
-            netChange: (r.buyQtyS1 + r.buyQtyS2) - (r.sellQtyS1 + r.sellQtyS2)
-        }));
+        // Calculate Totals and Nets
+        results = results.map(r => {
+            // Helper to sum S1 and S2 for a type
+            const sumType = (type) => (r[`S1_${type}`] || 0) + (r[`S2_${type}`] || 0);
+
+            const totals = {
+                Total_Buying: sumType('Buying'),
+                Total_Selling: sumType('Selling'),
+                Total_Opening: sumType('Opening'),
+                Total_Wastage: sumType('Wastage'),
+                Total_AdjIn: sumType('AdjIn'),
+                Total_AdjOut: sumType('AdjOut'),
+                Total_StockTake: sumType('StockTake'),
+                Total_StockClear: sumType('StockClear'),
+                Total_TransferIn: sumType('TransferIn'),
+                Total_TransferOut: sumType('TransferOut')
+            };
+
+            // Calculate Net Change per Store
+            // In: Buying, Opening, AdjIn, TransferIn, StockTake
+            // Out: Selling, AdjOut, StockClear, TransferOut, Wastage
+            const calcNet = (prefix) => {
+                const i = (r[`${prefix}_Buying`] || 0) + (r[`${prefix}_Opening`] || 0) + (r[`${prefix}_AdjIn`] || 0) + (r[`${prefix}_TransferIn`] || 0) + (r[`${prefix}_StockTake`] || 0);
+                const o = (r[`${prefix}_Selling`] || 0) + (r[`${prefix}_AdjOut`] || 0) + (r[`${prefix}_StockClear`] || 0) + (r[`${prefix}_TransferOut`] || 0) + (r[`${prefix}_Wastage`] || 0);
+                return i - o;
+            };
+
+            const netS1 = calcNet('S1');
+            const netS2 = calcNet('S2');
+
+            return {
+                ...r,
+                ...totals,
+                netS1,
+                netS2,
+                netChange: netS1 + netS2
+            };
+        });
 
         // Sort by net change (biggest decrease first)
         results.sort((a, b) => a.netChange - b.netChange);

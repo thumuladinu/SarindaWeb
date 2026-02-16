@@ -28,7 +28,6 @@ const TripsPage = () => {
             const params = {
                 page,
                 limit: pageSize,
-                limit: pageSize,
                 tripId: tripId || undefined,
                 itemName: itemNameSearch || undefined, // New filter
             };

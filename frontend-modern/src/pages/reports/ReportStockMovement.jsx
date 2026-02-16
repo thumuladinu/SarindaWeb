@@ -77,31 +77,56 @@ export default function ReportStockMovement() {
         let tableHead, tableBody;
 
         if (selectedStore === 'all') {
-            // Include store-wise breakdown
-            tableHead = [['Code', 'Item Name', 'S1 Buy', 'S1 Sell', 'S1 Net', 'S2 Buy', 'S2 Sell', 'S2 Net', 'Total Buy', 'Total Sell', 'Total Net']];
-            tableBody = data.map(item => [
-                item.code || '-',
-                item.name || '-',
-                Number(item.buyQtyS1).toFixed(1),
-                Number(item.sellQtyS1).toFixed(1),
-                Number(item.netS1).toFixed(1),
-                Number(item.buyQtyS2).toFixed(1),
-                Number(item.sellQtyS2).toFixed(1),
-                Number(item.netS2).toFixed(1),
-                Number(item.buyQty).toFixed(2),
-                Number(item.sellQty).toFixed(2),
-                Number(item.netChange).toFixed(2)
-            ]);
+            tableHead = [['Code', 'Item', 'Type', 'Buy', 'Sell', 'Adj In', 'Adj Out', 'Others', 'Net']];
+            tableBody = []; // Initialize tableBody here
+
+            data.forEach(item => {
+                const addRow = (type, prefix, netVal) => {
+                    const othersVal = ((item[`${prefix}_Opening`] || 0) + (item[`${prefix}_TransferIn`] || 0) + (item[`${prefix}_StockTake`] || 0)) -
+                        ((item[`${prefix}_Wastage`] || 0) + (item[`${prefix}_TransferOut`] || 0) + (item[`${prefix}_StockClear`] || 0));
+
+                    tableBody.push([
+                        item.code,
+                        item.name,
+                        type,
+                        Number(item[`${prefix}_Buying`]).toFixed(1),
+                        Number(item[`${prefix}_Selling`]).toFixed(1),
+                        Number(item[`${prefix}_AdjIn`]).toFixed(1),
+                        Number(item[`${prefix}_AdjOut`]).toFixed(1),
+                        Number(othersVal).toFixed(1),
+                        Number(netVal).toFixed(2)
+                    ]);
+                };
+                addRow('Store 1', 'S1', item.netS1);
+                addRow('Store 2', 'S2', item.netS2);
+                addRow('Total', 'Total', item.netChange);
+                // Add row for spacing/divider visually in PDF
+                // Use a thin line or empty space
+                // Here we just add an empty row, but we can style it in didParseCell
+                tableBody.push(['', '', '', '', '', '', '', '', '']);
+            });
         } else {
-            // Single store - simple view
-            tableHead = [['Code', 'Item Name', 'Buy Qty', 'Sell Qty', 'Net Change']];
-            tableBody = data.map(item => [
-                item.code || '-',
-                item.name || '-',
-                Number(item.buyQty).toFixed(2),
-                Number(item.sellQty).toFixed(2),
-                Number(item.netChange).toFixed(2)
-            ]);
+            tableHead = [['Code', 'Item', 'Buy', 'Sell', 'Adj In', 'Adj Out', 'Others', 'Net']];
+            const prefix = selectedStore === '1' ? 'S1' : 'S2';
+            const netKey = selectedStore === '1' ? 'netS1' : 'netS2';
+
+            tableBody = [];
+            data.forEach(item => {
+                const othersVal = ((item[`${prefix}_Opening`] || 0) + (item[`${prefix}_TransferIn`] || 0) + (item[`${prefix}_StockTake`] || 0)) -
+                    ((item[`${prefix}_Wastage`] || 0) + (item[`${prefix}_TransferOut`] || 0) + (item[`${prefix}_StockClear`] || 0));
+                tableBody.push([
+                    item.code,
+                    item.name,
+                    Number(item[`${prefix}_Buying`]).toFixed(1),
+                    Number(item[`${prefix}_Selling`]).toFixed(1),
+                    Number(item[`${prefix}_AdjIn`]).toFixed(1),
+                    Number(item[`${prefix}_AdjOut`]).toFixed(1),
+                    Number(othersVal).toFixed(1),
+                    Number(item[netKey]).toFixed(2)
+                ]);
+                // Add spacer row for PDF
+                tableBody.push(['', '', '', '', '', '', '', '']);
+            });
         }
 
         autoTable(doc, {
@@ -109,130 +134,203 @@ export default function ReportStockMovement() {
             head: tableHead,
             body: tableBody,
             theme: 'grid',
-            headStyles: { fillColor: [59, 130, 246], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
-            styles: { font: 'helvetica', fontSize: 8 },
-            columnStyles: { 1: { font: 'NotoSansSinhala' } }
+            headStyles: { fillColor: [59, 130, 246], font: 'helvetica', fontStyle: 'bold', fontSize: 7 },
+            styles: { font: 'helvetica', fontSize: 7, cellPadding: 1.5, lineColor: [200, 200, 200], lineWidth: 0.1 },
+            columnStyles: {
+                1: { font: 'NotoSansSinhala' } // Item Name
+            },
+            didParseCell: function (data) {
+                // Bold Total rows
+                if (data.row.raw[2] === 'Total') {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [240, 240, 240];
+                    // Add bottom border to Total row
+                    if (selectedStore === 'all') {
+                        data.cell.styles.lineWidth = { bottom: 0.5, top: 0, left: 0.1, right: 0.1 };
+                        data.cell.styles.lineColor = [0, 0, 0];
+                    }
+                }
+                // Style spacer rows
+                if (data.row.raw[0] === '') {
+                    data.cell.styles.fillColor = [255, 255, 255];
+                    data.cell.styles.cellPadding = 0;
+                    data.cell.styles.minCellHeight = 2; // Small height for divider
+                    data.cell.styles.lineWidth = 0; // No borders for spacer
+                }
+            }
         });
 
         doc.save(`Stock_Movement_${storeLabel.replace(' ', '_')}_${startDate}_${endDate}.pdf`);
         message.success('PDF downloaded!');
     };
 
-    // Desktop table columns - show store-wise when "All Stores" selected
+    // Simplified Columns for PDF/Desktop that show breakdown
     const columns = [
-        { title: 'Code', dataIndex: 'code', width: 70, fixed: 'left' },
-        { title: 'Item', dataIndex: 'name', width: 120, ellipsis: true },
-        ...(selectedStore === 'all' ? [
-            {
-                title: 'S1 Net',
-                dataIndex: 'netS1',
-                align: 'right',
-                width: 70,
-                render: val => (
-                    <span className={`text-xs font-medium ${val >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
-                        {val >= 0 ? '+' : ''}{Number(val).toFixed(1)}
-                    </span>
-                )
-            },
-            {
-                title: 'S2 Net',
-                dataIndex: 'netS2',
-                align: 'right',
-                width: 70,
-                render: val => (
-                    <span className={`text-xs font-medium ${val >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
-                        {val >= 0 ? '+' : ''}{Number(val).toFixed(1)}
-                    </span>
-                )
-            }
-        ] : []),
+        { title: 'Code', dataIndex: 'code', width: 60, fixed: 'left' },
+        { title: 'Item', dataIndex: 'name', width: 120, ellipsis: true, fixed: 'left' },
+        {
+            title: 'Type',
+            dataIndex: 'typeKey',
+            width: 80,
+            render: (val) => <span className="font-semibold text-xs text-gray-500">{val}</span>
+        },
         {
             title: 'Buy',
-            dataIndex: 'buyQty',
+            dataIndex: 'buying',
             align: 'right',
             width: 70,
-            render: val => <span className="text-red-500 text-xs">{Number(val).toFixed(1)}</span>
+            render: val => val ? <span className="text-emerald-600 text-xs font-medium">{Number(val).toFixed(1)}</span> : '-'
         },
         {
             title: 'Sell',
-            dataIndex: 'sellQty',
+            dataIndex: 'selling',
             align: 'right',
             width: 70,
-            render: val => <span className="text-emerald-600 text-xs">{Number(val).toFixed(1)}</span>
+            render: val => val ? <span className="text-red-500 text-xs font-medium">{Number(val).toFixed(1)}</span> : '-'
+        },
+        {
+            title: 'Adj In',
+            dataIndex: 'adjIn',
+            align: 'right',
+            width: 70,
+            render: val => val ? <span className="text-blue-500 text-xs">{Number(val).toFixed(1)}</span> : '-'
+        },
+        {
+            title: 'Adj Out',
+            dataIndex: 'adjOut',
+            align: 'right',
+            width: 70,
+            render: val => val ? <span className="text-orange-500 text-xs">{Number(val).toFixed(1)}</span> : '-'
+        },
+        {
+            title: 'Others',
+            dataIndex: 'others',
+            align: 'right',
+            width: 70,
+            render: val => val ? <span className="text-gray-600 text-xs">{Number(val).toFixed(1)}</span> : '-'
         },
         {
             title: 'Net',
-            dataIndex: 'netChange',
+            dataIndex: 'net',
             align: 'right',
             width: 80,
+            fixed: 'right',
             render: val => (
-                <span className={`font-bold ${val >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
+                <span className={`font-bold text-xs ${val >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
                     {val >= 0 ? '+' : ''}{Number(val).toFixed(2)}
                 </span>
             )
         }
     ];
 
-    // Mobile Item Card with store breakdown
-    const ItemCard = ({ item }) => (
-        <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 border border-gray-100 dark:border-white/5 shadow-sm">
-            <div className="flex justify-between items-start mb-2">
-                <div className="flex-1 min-w-0 pr-2">
-                    <div className="text-[10px] text-gray-400 font-mono tracking-wide">{item.code}</div>
-                    <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
-                </div>
-                <div className={`text-right font-bold text-base ${item.netChange >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
-                    <span className="text-[10px] text-gray-400 font-normal block">Net Change</span>
-                    {item.netChange >= 0 ? '+' : ''}{Number(item.netChange).toFixed(2)}
-                </div>
-            </div>
+    // Prepare data for table: 1 item -> 1-3 rows depending on selection
+    const tableData = React.useMemo(() => {
+        if (!data) return [];
+        let rows = [];
+        data.forEach(item => {
+            // Helper to calculate Others (Net of everything else)
+            // Others In: Opening + TransferIn + StockTake
+            // Others Out: Wastage + TransferOut + StockClear
+            const calcOthers = (prefix) => {
+                const i = (item[`${prefix}_Opening`] || 0) + (item[`${prefix}_TransferIn`] || 0) + (item[`${prefix}_StockTake`] || 0);
+                const o = (item[`${prefix}_Wastage`] || 0) + (item[`${prefix}_TransferOut`] || 0) + (item[`${prefix}_StockClear`] || 0);
+                return i - o;
+            };
 
-            {/* Store breakdown when showing all stores */}
-            {selectedStore === 'all' && (
-                <div className="space-y-2 mb-2">
-                    {/* Store 1 Row */}
-                    <div className="flex flex-col bg-blue-50/50 dark:bg-blue-900/10 rounded-lg p-2">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">🏪 Store 1</span>
-                            <span className={`text-xs font-bold ${item.netS1 >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
-                                Net: {item.netS1 >= 0 ? '+' : ''}{Number(item.netS1).toFixed(1)}
+            const createRow = (typeKey, prefix, netVal) => ({
+                key: `${item.id}-${typeKey}`,
+                id: item.id,
+                code: item.code,
+                name: item.name,
+                typeKey,
+                buying: item[`${prefix}_Buying`],
+                selling: item[`${prefix}_Selling`],
+                adjIn: item[`${prefix}_AdjIn`],
+                adjOut: item[`${prefix}_AdjOut`],
+                others: calcOthers(prefix),
+                net: netVal
+            });
+
+            if (selectedStore === 'all') {
+                rows.push(createRow('Store 1', 'S1', item.netS1));
+                rows.push(createRow('Store 2', 'S2', item.netS2));
+                rows.push(createRow('Total', 'Total', item.netChange));
+            } else if (selectedStore === '1') {
+                rows.push(createRow('Store 1', 'S1', item.netS1));
+            } else if (selectedStore === '2') {
+                rows.push(createRow('Store 2', 'S2', item.netS2));
+            }
+        });
+        return rows;
+    }, [data, selectedStore]);
+
+    // Mobile Item Card with detailed breakdown
+    const ItemCard = ({ item }) => {
+        // Determine the net value to display based on selection
+        let displayNet = item.netChange;
+        if (selectedStore === '1') displayNet = item.netS1;
+        else if (selectedStore === '2') displayNet = item.netS2;
+
+        // Helper to show breakdown row
+        const BreakdownRow = ({ label, prefix, color }) => {
+            const othersVal = ((item[`${prefix}Opening`] || 0) + (item[`${prefix}TransferIn`] || 0) + (item[`${prefix}StockTake`] || 0)) -
+                ((item[`${prefix}Wastage`] || 0) + (item[`${prefix}TransferOut`] || 0) + (item[`${prefix}StockClear`] || 0));
+
+            return (
+                <div className={`flex flex-col ${color} rounded-lg p-2 mb-2`}>
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-semibold">{label}</span>
+                        <span className="text-xs font-bold">
+                            Net: {Number(item[`net${prefix.replace('_', '')}`] !== undefined ? item[`net${prefix.replace('_', '')}`] : item.netChange).toFixed(1)}
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1 text-[10px]">
+                        <span className="text-emerald-600">Buy: {Number(item[`${prefix}Buying`]).toFixed(1)}</span>
+                        <span className="text-red-500">Sell: {Number(item[`${prefix}Selling`]).toFixed(1)}</span>
+                        <span className="text-blue-500">AdjIn: {Number(item[`${prefix}AdjIn`]).toFixed(1)}</span>
+                        <span className="text-orange-500">AdjOut: {Number(item[`${prefix}AdjOut`]).toFixed(1)}</span>
+                        <span className="text-gray-500">Other: {Number(othersVal).toFixed(1)}</span>
+                    </div>
+                </div>
+            );
+        };
+
+        return (
+            <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 border border-gray-100 dark:border-white/5 shadow-sm mb-4 border-b-4 border-b-gray-200 dark:border-b-gray-700">
+                <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1 min-w-0 pr-2">
+                        <div className="text-[10px] text-gray-400 font-mono tracking-wide">{item.code}</div>
+                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
+                    </div>
+                    <div className={`text-right font-bold text-base ${displayNet >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
+                        <span className="text-[10px] text-gray-400 font-normal block">Net Change</span>
+                        {displayNet >= 0 ? '+' : ''}{Number(displayNet).toFixed(2)}
+                    </div>
+                </div>
+
+                {selectedStore === 'all' ? (
+                    <>
+                        <BreakdownRow label="🏪 Store 1" prefix="S1_" color="bg-blue-50/50 dark:bg-blue-900/10" />
+                        <BreakdownRow label="🏪 Store 2" prefix="S2_" color="bg-purple-50/50 dark:bg-purple-900/10" />
+                    </>
+                ) : (
+                    <div className="grid grid-cols-3 gap-2 text-xs bg-gray-50 dark:bg-black/20 rounded-lg p-2">
+                        <div className="flex flex-col"><span className="text-gray-400">Buy</span><span className="text-emerald-600">{Number(item[`${selectedStore === '1' ? 'S1' : 'S2'}_Buying`]).toFixed(1)}</span></div>
+                        <div className="flex flex-col"><span className="text-gray-400">Sell</span><span className="text-red-500">{Number(item[`${selectedStore === '1' ? 'S1' : 'S2'}_Selling`]).toFixed(1)}</span></div>
+                        <div className="flex flex-col">
+                            <span className="text-gray-400">Others</span>
+                            <span className="text-blue-500">
+                                {Number(((item[`${selectedStore === '1' ? 'S1' : 'S2'}_Opening`] || 0) + (item[`${selectedStore === '1' ? 'S1' : 'S2'}_TransferIn`] || 0) + (item[`${selectedStore === '1' ? 'S1' : 'S2'}_StockTake`] || 0)) -
+                                    ((item[`${selectedStore === '1' ? 'S1' : 'S2'}_Wastage`] || 0) + (item[`${selectedStore === '1' ? 'S1' : 'S2'}_TransferOut`] || 0) + (item[`${selectedStore === '1' ? 'S1' : 'S2'}_StockClear`] || 0))).toFixed(1)}
                             </span>
                         </div>
-                        <div className="flex justify-between text-[10px]">
-                            <span className="text-red-500">Buy: {Number(item.buyQtyS1).toFixed(1)}</span>
-                            <span className="text-emerald-600">Sell: {Number(item.sellQtyS1).toFixed(1)}</span>
-                        </div>
+                        <div className="flex flex-col"><span className="text-gray-400">Adj In</span><span className="text-blue-600">{Number(item[`${selectedStore === '1' ? 'S1' : 'S2'}_AdjIn`]).toFixed(1)}</span></div>
+                        <div className="flex flex-col"><span className="text-gray-400">Adj Out</span><span className="text-orange-500">{Number(item[`${selectedStore === '1' ? 'S1' : 'S2'}_AdjOut`]).toFixed(1)}</span></div>
                     </div>
-                    {/* Store 2 Row */}
-                    <div className="flex flex-col bg-purple-50/50 dark:bg-purple-900/10 rounded-lg p-2">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-semibold text-purple-700 dark:text-purple-300">🏪 Store 2</span>
-                            <span className={`text-xs font-bold ${item.netS2 >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
-                                Net: {item.netS2 >= 0 ? '+' : ''}{Number(item.netS2).toFixed(1)}
-                            </span>
-                        </div>
-                        <div className="flex justify-between text-[10px]">
-                            <span className="text-red-500">Buy: {Number(item.buyQtyS2).toFixed(1)}</span>
-                            <span className="text-emerald-600">Sell: {Number(item.sellQtyS2).toFixed(1)}</span>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Total row */}
-            <div className="flex justify-between items-center text-xs bg-gray-50 dark:bg-black/20 rounded-lg p-2">
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-400">Total Buy</span>
-                    <span className="text-red-500 font-medium">{Number(item.buyQty).toFixed(2)}</span>
-                </div>
-                <div className="h-6 w-px bg-gray-200 dark:bg-white/10 mx-2"></div>
-                <div className="flex flex-col text-right">
-                    <span className="text-[10px] text-gray-400">Total Sell</span>
-                    <span className="text-emerald-600 font-medium">{Number(item.sellQty).toFixed(2)}</span>
-                </div>
+                )}
             </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="flex flex-col gap-4">
@@ -326,38 +424,20 @@ export default function ReportStockMovement() {
             {/* Data Display */}
             {data.length > 0 && !loading && (
                 <div className="animate-fade-in">
-                    {/* Summary Stats */}
-                    <div className="grid grid-cols-3 gap-2 mb-3">
-                        <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-center">
-                            <div className="text-[10px] text-gray-500">Total Buy</div>
-                            <div className="text-lg font-bold text-red-500">
-                                {data.reduce((sum, i) => sum + i.buyQty, 0).toFixed(1)}
-                            </div>
-                        </div>
-                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-lg text-center">
-                            <div className="text-[10px] text-gray-500">Total Sell</div>
-                            <div className="text-lg font-bold text-emerald-600">
-                                {data.reduce((sum, i) => sum + i.sellQty, 0).toFixed(1)}
-                            </div>
-                        </div>
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg text-center">
-                            <div className="text-[10px] text-gray-500">Net Change</div>
-                            <div className={`text-lg font-bold ${data.reduce((sum, i) => sum + i.netChange, 0) >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>
-                                {data.reduce((sum, i) => sum + i.netChange, 0).toFixed(1)}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Desktop: Table */}
+                    {/* Main Report Content */}
                     <div className="hidden md:block">
                         <div className="glass-card rounded-xl p-3 overflow-hidden">
                             <Table
-                                dataSource={data}
+                                dataSource={tableData}
                                 columns={columns}
-                                rowKey="id"
+                                rowKey="key"
                                 size="small"
-                                pagination={{ pageSize: 15, size: 'small' }}
-                                scroll={{ x: 600 }}
+                                pagination={{ pageSize: 45, size: 'small' }} // 15 items * 3 rows = 45
+                                scroll={{ x: 800 }}
+                                onRow={(record) => {
+                                    if (record.typeKey === 'Total') return { className: 'bg-gray-50 font-semibold border-b-2 border-gray-300 dark:border-gray-600' };
+                                    return { className: 'border-b border-gray-100 dark:border-gray-800' };
+                                }}
                             />
                         </div>
                     </div>
