@@ -225,13 +225,20 @@ export default function Transactions() {
         setReceiptModalOpen(true);
         try {
             // Check if BILL_DATA exists on record, otherwise fetch it
+            // Check if BILL_DATA exists on record, otherwise fetch it
             let billData = record.BILL_DATA;
+            let transactionItems = [];
 
             if (!billData) {
                 // Fetch full transaction details if BILL_DATA not in list
                 const response = await axios.get(`/api/getTransactionDetails/${record.TRANSACTION_ID}`);
-                if (response.data.success && response.data.transaction) {
-                    billData = response.data.transaction.BILL_DATA;
+                if (response.data.success) {
+                    if (response.data.transaction) {
+                        billData = response.data.transaction.BILL_DATA;
+                    }
+                    if (response.data.items) {
+                        transactionItems = response.data.items;
+                    }
                 }
             }
 
@@ -239,8 +246,25 @@ export default function Transactions() {
                 const parsedData = typeof billData === 'string' ? JSON.parse(billData) : billData;
                 setReceiptData(parsedData);
             } else {
-                message.warning('No bill data available for this transaction');
-                setReceiptModalOpen(false);
+                // FALLBACK: Construct view from available record data
+                console.warn('Bill data missing, using fallback view');
+                const fallbackData = {
+                    billId: record.CODE,
+                    date: dayjs(record.CREATED_DATE).format('MM/DD/YYYY'),
+                    time: dayjs(record.CREATED_DATE).format('h:mm A'),
+                    mode: record.TYPE === 'Buying' ? 'buy' : 'sell',
+                    items: transactionItems.map(item => ({
+                        id: item.ITEM_ID,
+                        name: item.ITEM_NAME || 'Unknown Item',
+                        qty: item.QTY,
+                        price: item.PRICE,
+                        amount: item.AMOUNT
+                    })),
+                    total: record.SUB_TOTAL,
+                    isFallback: true
+                };
+                setReceiptData(fallbackData);
+                message.warning('Displaying reconstructed bill (Original data missing)');
             }
         } catch (error) {
             console.error('Error loading bill:', error);
@@ -258,6 +282,25 @@ export default function Transactions() {
             dataIndex: 'CODE',
             key: 'CODE',
             className: 'text-gray-700 dark:text-gray-300 font-medium',
+            render: (code, record) => {
+                let isLate = false;
+                if (record.BILL_DATA) {
+                    try {
+                        const bd = typeof record.BILL_DATA === 'string' ? JSON.parse(record.BILL_DATA) : record.BILL_DATA;
+                        isLate = !!bd.isLate;
+                    } catch (e) { }
+                }
+                return (
+                    <div className="flex items-center gap-2">
+                        <span>{code}</span>
+                        {isLate && (
+                            <Tooltip title="Late Entry">
+                                <span className="text-xs bg-orange-100 text-orange-600 px-1 rounded border border-orange-200 cursor-help">🕒 Late</span>
+                            </Tooltip>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             title: 'Store',
@@ -390,11 +433,30 @@ export default function Transactions() {
                         <div className="flex justify-between items-start">
                             <div className="flex flex-col">
                                 <span className="text-xs text-gray-500 font-mono">{item.CODE}</span>
-                                <span className="text-gray-800 dark:text-white font-semibold text-lg">{dayjs(item.CREATED_DATE).format('DD MMM, h:mm A')}</span>
+                                <span className="text-gray-800 dark:text-white font-semibold text-lg">
+                                    {dayjs(item.CREATED_DATE).format('DD MMM, h:mm A')}
+                                </span>
                             </div>
-                            <Tag color={item.TYPE === 'Selling' ? 'success' : item.TYPE === 'Buying' ? 'error' : 'warning'} className="capitalize m-0 font-bold">
-                                {item.TYPE}
-                            </Tag>
+                            <div className="flex gap-1 items-center">
+                                {/* Late Tag */}
+                                {(() => {
+                                    let isLate = false;
+                                    if (item.BILL_DATA) {
+                                        try {
+                                            const bd = typeof item.BILL_DATA === 'string' ? JSON.parse(item.BILL_DATA) : item.BILL_DATA;
+                                            isLate = !!bd.isLate;
+                                        } catch (e) { }
+                                    }
+                                    return isLate ? (
+                                        <Tag color="warning" className="m-0 font-bold border-yellow-200 text-yellow-600 bg-yellow-50">
+                                            Late
+                                        </Tag>
+                                    ) : null;
+                                })()}
+                                <Tag color={item.TYPE === 'Selling' ? 'success' : item.TYPE === 'Buying' ? 'error' : 'warning'} className="capitalize m-0 font-bold">
+                                    {item.TYPE}
+                                </Tag>
+                            </div>
                         </div>
 
                         <div className="flex justify-between items-end border-t border-gray-200 dark:border-white/5 pt-3">

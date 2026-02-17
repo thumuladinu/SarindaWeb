@@ -85,6 +85,46 @@ const generateTransferCode = async () => {
 };
 
 // =====================================================
+// GET LAST TRIP ID (For Sync)
+// =====================================================
+router.get('/api/stock-ops/last-trip-id/:storeId', async (req, res) => {
+    try {
+        const { storeId } = req.params;
+
+        // Find the latest active operation with a TRIP_ID for this store
+        // Ordered by OP_ID DESC to get the absolute latest creation
+        // Find the latest active operation with a TRIP_ID for this store
+        // Ordered by OP_ID DESC to get the absolute latest creation
+        const rows = await pool.query(
+            `SELECT OP_ID, TRIP_ID, OP_CODE, CREATED_DATE 
+             FROM store_stock_operations 
+             WHERE STORE_NO = ? 
+             AND TRIP_ID IS NOT NULL 
+             AND TRIP_ID != ''
+             AND IS_ACTIVE = 1
+             ORDER BY OP_ID DESC 
+             LIMIT 1`,
+            [storeId]
+        );
+
+        if (rows && rows.length > 0) {
+            return res.json({
+                success: true,
+                tripId: rows[0].TRIP_ID,
+                opId: rows[0].OP_ID, // Use OP_ID for strict versioning/sync
+                opCode: rows[0].OP_CODE,
+                date: rows[0].CREATED_DATE
+            });
+        }
+
+        return res.json({ success: true, tripId: null, message: 'No trip IDs found' });
+    } catch (error) {
+        console.error('Error fetching last trip ID:', error);
+        return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    }
+});
+
+// =====================================================
 // MAIN OPERATION CREATION ENDPOINT
 // =====================================================
 
