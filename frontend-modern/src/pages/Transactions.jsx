@@ -256,9 +256,9 @@ export default function Transactions() {
                     items: transactionItems.map(item => ({
                         id: item.ITEM_ID,
                         name: item.ITEM_NAME || 'Unknown Item',
-                        qty: item.QTY,
+                        quantity: item.QUANTITY,
                         price: item.PRICE,
-                        amount: item.AMOUNT
+                        total: item.TOTAL || (item.PRICE * item.QUANTITY)
                     })),
                     total: record.SUB_TOTAL,
                     isFallback: true
