@@ -139,4 +139,20 @@
         grid-template-columns: 1fr;
         gap: 0.5rem;
     }
+    
+    .mobile-full-modal {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        top: 0 !important;
+        padding: 0 !important;
+    }
+    
+    .mobile-full-modal .ant-modal-content {
+        height: 100vh !important;
+        border-radius: 0 !important;
+        overflow-y: auto !important;
+        padding: 10px !important;
+        padding-bottom: 80px !important;
+    }
 }

@@ -816,7 +816,7 @@ export default function StockOperations() {
         <div className="stock-ops-container p-4 pb-24 md:pb-8">
             {/* PAGE HEADER */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                <div>
+                <div className="hidden md:block">
                     <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
                         <StockOutlined /> Stock Operations
                     </h2>
@@ -825,7 +825,7 @@ export default function StockOperations() {
                 <Button
                     type="primary"
                     icon={<PlusOutlined />}
-                    className="bg-emerald-600 hover:bg-emerald-500 border-none shadow-lg shadow-emerald-500/30"
+                    className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 border-none shadow-lg shadow-emerald-500/30"
                     onClick={openAddModal}
                 >
                     Add Stock Operation
@@ -919,14 +919,14 @@ export default function StockOperations() {
                 onCancel={() => setShowOpModal(false)}
                 footer={null}
                 width="89%"
-                className="stock-op-modal"
-                centered
+                className="stock-op-modal mobile-full-modal"
+                centered={window.innerWidth >= 768}
                 destroyOnClose
             >
-                <div className="p-4 md:p-8" style={{ minHeight: '600px' }}>
+                <div className="p-2 md:p-8 min-h-[100vh] md:min-h-[600px] flex flex-col">
                     {/* Header - Common for all steps */}
-                    <div className="flex justify-between items-center mb-8 border-b dark:border-white/10 pb-4">
-                        <h3 className="text-2xl font-bold flex items-center gap-3 text-gray-800 dark:text-white">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0 mb-6 md:mb-8 border-b dark:border-white/10 pb-4 shrink-0">
+                        <h3 className="text-xl md:text-2xl font-bold flex flex-wrap items-center gap-2 md:gap-3 text-gray-800 dark:text-white leading-tight">
                             {step === 1 && <><StockOutlined className="text-emerald-500" /> Select Operation Type</>}
                             {step === 2 && <><ShopOutlined className="text-blue-500" /> Select Store</>}
                             {step === 3 && (
@@ -936,21 +936,21 @@ export default function StockOperations() {
                                 </>
                             )}
                         </h3>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
                             {[1, 2, 3].map(s => (
                                 <div key={s} className={`w-3 h-3 rounded-full transition-all ${step >= s ? 'bg-emerald-500 scale-110' : 'bg-gray-200 dark:bg-white/10'}`} />
                             ))}
-                            <span className="ml-2 text-gray-400 font-mono text-sm">Step {step}/3</span>
+                            <span className="ml-2 text-gray-400 font-mono text-xs md:text-sm">Step {step}/3</span>
                         </div>
                     </div>
 
                     {/* STEP 1: Operation Selection */}
                     {step === 1 && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 animate-fade-in">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 animate-fade-in pb-10">
                             {OPERATION_TYPES.map(op => (
                                 <div
                                     key={op.id}
-                                    className="p-8 rounded-3xl border border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 cursor-pointer flex flex-col items-center gap-6 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl hover:scale-105 group"
+                                    className="p-4 md:p-8 rounded-2xl md:rounded-3xl border border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 cursor-pointer flex flex-col items-center gap-3 md:gap-6 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl hover:scale-105 group"
                                     onClick={() => {
                                         handleOpTypeChange(op.id);
                                         if (op.id === 12) {
@@ -963,10 +963,10 @@ export default function StockOperations() {
                                         }
                                     }}
                                 >
-                                    <span className="text-6xl group-hover:scale-110 transition-transform filter drop-shadow-lg">{op.icon}</span>
+                                    <span className="text-4xl md:text-6xl group-hover:scale-110 transition-transform filter drop-shadow-lg">{op.icon}</span>
                                     <div className="text-center">
-                                        <div className="font-bold text-xl text-gray-800 dark:text-gray-100 mb-1">{op.shortName}</div>
-                                        <div className="text-xs text-gray-400">{op.name}</div>
+                                        <div className="font-bold text-sm md:text-xl text-gray-800 dark:text-gray-100 mb-1 leading-tight">{op.shortName}</div>
+                                        <div className="text-[10px] md:text-xs text-gray-400 leading-tight mt-1">{op.name}</div>
                                     </div>
                                 </div>
                             ))}
@@ -987,30 +987,30 @@ export default function StockOperations() {
                                 </Button>
                             </div>
 
-                            <div className="flex flex-col md:flex-row gap-8 justify-center items-center flex-1 mt-12">
+                            <div className="flex flex-col md:flex-row gap-6 md:gap-8 justify-center items-center flex-1 mt-12 pb-10">
                                 <button
-                                    className="flex-1 w-full max-w-sm p-10 rounded-3xl bg-emerald-50 dark:bg-emerald-900/10 border-2 border-emerald-100 dark:border-emerald-800 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:shadow-2xl transition-all flex flex-col items-center gap-6 group"
+                                    className="flex-1 w-full max-w-sm p-6 md:p-10 rounded-2xl md:rounded-3xl bg-emerald-50 dark:bg-emerald-900/10 border-2 border-emerald-100 dark:border-emerald-800 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:shadow-2xl transition-all flex flex-col items-center gap-4 md:gap-6 group"
                                     onClick={() => { setSelectedStore(1); setStep(3); }}
                                 >
-                                    <div className="w-24 h-24 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <ShopOutlined className="text-5xl text-emerald-600 dark:text-white" />
+                                    <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <ShopOutlined className="text-4xl md:text-5xl text-emerald-600 dark:text-white" />
                                     </div>
                                     <div className="text-center">
-                                        <div className="text-3xl font-bold text-emerald-900 dark:text-emerald-100">Store 1</div>
-                                        <div className="text-emerald-600 dark:text-emerald-400 mt-2">Main POS Store</div>
+                                        <div className="text-2xl md:text-3xl font-bold text-emerald-900 dark:text-emerald-100">Store 1</div>
+                                        <div className="text-sm md:text-base text-emerald-600 dark:text-emerald-400 mt-1 md:mt-2">Main POS Store</div>
                                     </div>
                                 </button>
-                                <div className="text-gray-300 font-bold text-2xl">OR</div>
+                                <div className="text-gray-300 font-bold text-lg md:text-2xl">OR</div>
                                 <button
-                                    className="flex-1 w-full max-w-sm p-10 rounded-3xl bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-100 dark:border-blue-800 hover:border-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:shadow-2xl transition-all flex flex-col items-center gap-6 group"
+                                    className="flex-1 w-full max-w-sm p-6 md:p-10 rounded-2xl md:rounded-3xl bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-100 dark:border-blue-800 hover:border-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:shadow-2xl transition-all flex flex-col items-center gap-4 md:gap-6 group"
                                     onClick={() => { setSelectedStore(2); setStep(3); }}
                                 >
-                                    <div className="w-24 h-24 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <ShopOutlined className="text-5xl text-blue-600 dark:text-white" />
+                                    <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <ShopOutlined className="text-4xl md:text-5xl text-blue-600 dark:text-white" />
                                     </div>
                                     <div className="text-center">
-                                        <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">Store 2</div>
-                                        <div className="text-blue-600 dark:text-blue-400 mt-2">Weighing Station</div>
+                                        <div className="text-2xl md:text-3xl font-bold text-blue-900 dark:text-blue-100">Store 2</div>
+                                        <div className="text-sm md:text-base text-blue-600 dark:text-blue-400 mt-1 md:mt-2">Weighing Station</div>
                                     </div>
                                 </button>
                             </div>
@@ -1232,7 +1232,7 @@ export default function StockOperations() {
                             </div>
 
                             {/* Main Form Content - Always Visible but Disabled if No Item */}
-                            <div className={`flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 overflow-y-auto pr-2 transition-all ${!selectedItem ? 'opacity-50 pointer-events-none grayscale' : ''}`} style={{ maxHeight: 'calc(100vh - 350px)' }}>
+                            <div className={`flex-1 flex flex-col lg:grid lg:grid-cols-2 gap-4 md:gap-8 overflow-y-auto pr-1 md:pr-2 transition-all pb-24 lg:pb-0 ${!selectedItem ? 'opacity-50 pointer-events-none grayscale' : ''}`} style={{ maxHeight: window.innerWidth < 1024 ? 'none' : 'calc(100vh - 350px)' }}>
                                 {/* LEFT COLUMN: Core Inputs */}
                                 <div className="flex flex-col gap-6">
                                     <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-2xl border border-gray-100 dark:border-white/5">
@@ -1258,7 +1258,7 @@ export default function StockOperations() {
 
                                         {/* Sales Details (Op 3, 4 only) */}
                                         {[3, 4].includes(selectedOpType) && (
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div>
                                                     <label className="block text-sm font-medium mb-1.5 ml-1">Sold Qty (Kg)</label>
                                                     <InputNumber
@@ -1346,16 +1346,16 @@ export default function StockOperations() {
 
                                     {/* Actual Conversion Panel with INLINE SELECT */}
                                     {([9].includes(selectedOpType) || conversionEnabled) && (
-                                        <div className="bg-blue-50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-800/30 animate-fade-in">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <span className="font-bold text-blue-900 dark:text-blue-100 flex items-center gap-2"><SwapOutlined /> Conversions / Destinations</span>
-                                                <Button size="small" onClick={handleAddConversion} type="primary" ghost icon={<PlusOutlined />}>Add Line</Button>
+                                        <div className="bg-blue-50 dark:bg-blue-900/10 p-4 md:p-6 rounded-xl md:rounded-2xl border border-blue-100 dark:border-blue-800/30 animate-fade-in">
+                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3 md:gap-0">
+                                                <span className="font-bold text-blue-900 dark:text-blue-100 flex items-center gap-2 text-sm md:text-base"><SwapOutlined /> Conversions / Destinations</span>
+                                                <Button size="small" className="w-full md:w-auto" onClick={handleAddConversion} type="primary" ghost icon={<PlusOutlined />}>Add Line</Button>
                                             </div>
 
                                             <div className="flex flex-col gap-2">
                                                 {conversions.map((c, idx) => (
-                                                    <div key={c.id} className="flex gap-2 items-center bg-white dark:bg-gray-800 p-2 rounded-xl shadow-sm">
-                                                        <div className="flex-1">
+                                                    <div key={c.id} className="flex flex-col md:flex-row gap-2 md:items-center bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm">
+                                                        <div className="flex-1 w-full relative">
                                                             <div className="flex flex-col">
                                                                 <Select
                                                                     showSearch
@@ -1406,13 +1406,15 @@ export default function StockOperations() {
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        <InputNumber
-                                                            placeholder="Qty"
-                                                            value={c.val}
-                                                            onChange={v => updateConversion(c.id, 'val', v)}
-                                                            style={{ width: 100 }}
-                                                        />
-                                                        <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeConversion(c.id)} />
+                                                        <div className="flex items-center gap-2 w-full md:w-auto justify-end mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100 dark:border-gray-700">
+                                                            <InputNumber
+                                                                placeholder="Qty"
+                                                                value={c.val}
+                                                                onChange={v => updateConversion(c.id, 'val', v)}
+                                                                className="w-full md:w-24"
+                                                            />
+                                                            <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeConversion(c.id)} />
+                                                        </div>
                                                     </div>
                                                 ))}
                                                 {conversions.length === 0 && <div className="text-center py-6 text-gray-400 bg-white/50 dark:bg-white/5 rounded-xl border border-dashed border-gray-300">No conversions added</div>}
@@ -1513,14 +1515,14 @@ export default function StockOperations() {
 
                                     {/* Lorry Details */}
                                     {[1, 2, 3, 4, 12].includes(selectedOpType) && (
-                                        <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-2xl border border-gray-100 dark:border-white/5">
+                                        <div className="bg-gray-50 dark:bg-white/5 p-4 md:p-6 rounded-xl md:rounded-2xl border border-gray-100 dark:border-white/5">
                                             <h4 className="font-bold text-gray-500 uppercase text-xs mb-4 tracking-wider flex items-center gap-2">🚛 Transport Details</h4>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                                                 <Input
                                                     placeholder="Lorry No"
                                                     value={lorryDetails.name}
                                                     onChange={e => setLorryDetails({ ...lorryDetails, name: e.target.value })}
-                                                    className="col-span-2 h-10 rounded-lg"
+                                                    className="md:col-span-2 h-10 rounded-lg"
                                                 />
                                                 <Input
                                                     placeholder="Driver Name"
@@ -1567,9 +1569,9 @@ export default function StockOperations() {
                                     </div>
 
                                     {/* Preview & Submit Actions */}
-                                    <div className="bg-gray-100 dark:bg-white/10 p-6 rounded-2xl flex flex-col gap-4">
+                                    <div className="bg-gray-100 dark:bg-white/10 p-4 md:p-6 rounded-xl md:rounded-2xl flex flex-col gap-4 sticky bottom-0 z-10 border-t border-gray-200 dark:border-gray-700 md:relative md:border-none shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)] md:shadow-none">
                                         <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-500 uppercase font-bold text-xs tracking-wider">Projected Stock Update ({selectedItem?.NAME || 'Item'})</span>
+                                            <span className="text-gray-500 uppercase font-bold text-[10px] md:text-xs tracking-wider">Projected Stock ({selectedItem?.NAME || 'Item'})</span>
                                             <span className={`font-bold ${previewStock.diff < 0 ? 'text-red-500' : 'text-green-500'}`}>
                                                 {previewStock.diff > 0 ? '+' : ''}{Number(previewStock.diff).toFixed(2)} Kg
                                             </span>
@@ -1578,9 +1580,9 @@ export default function StockOperations() {
 
                                         {/* REMOVED WASTAGE FROM FOOTER - Moved to LEFT COLUMN */}
 
-                                        <div className="flex justify-between items-end">
-                                            <div className="text-3xl font-bold text-gray-800 dark:text-white">
-                                                {Number(previewStock.projected).toFixed(2)} <span className="text-sm font-normal text-gray-500">Kg</span>
+                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 md:gap-0">
+                                            <div className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">
+                                                {Number(previewStock.projected).toFixed(2)} <span className="text-xs md:text-sm font-normal text-gray-500">Kg</span>
                                             </div>
                                             <Button
                                                 type="primary"
@@ -1588,7 +1590,7 @@ export default function StockOperations() {
                                                 onClick={handleSubmit}
                                                 loading={saving}
                                                 icon={<CheckOutlined />}
-                                                className="bg-emerald-600 hover:bg-emerald-500 h-12 px-8 rounded-xl shadow-lg shadow-emerald-500/30 border-none"
+                                                className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 h-12 px-8 rounded-xl shadow-lg shadow-emerald-500/30 border-none"
                                             >
                                                 {selectedOpType === 12 ? 'Submit Transfer' : 'Confirm'}
                                             </Button>

@@ -301,7 +301,7 @@ export default function ReportsDashboard() {
     return (
         <div className="animate-fade-in pb-24 md:pb-8">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+            <div className="hidden md:flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
                 <div>
                     <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                         <DashboardOutlined className="text-emerald-400" /> Stock Lifecycle Analysis
