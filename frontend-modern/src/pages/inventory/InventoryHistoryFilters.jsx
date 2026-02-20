@@ -6,7 +6,7 @@ import MobileDateRange from '../../components/common/MobileDateRange';
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
-export default function InventoryHistoryFilters({ filters, setFilters, collapsed, setCollapsed, itemOptions }) {
+export default function InventoryHistoryFilters({ filters, setFilters, collapsed, setCollapsed, itemOptions, typeOptions }) {
 
     const handleChange = (key, value) => {
         setFilters(prev => ({ ...prev, [key]: value }));
@@ -81,10 +81,16 @@ export default function InventoryHistoryFilters({ filters, setFilters, collapsed
                             onChange={(val) => handleChange('type', val)}
                         >
                             <Option value="all">All Types</Option>
-                            <Option value="AdjIn">Stock In (+)</Option>
-                            <Option value="AdjOut">Stock Out (-)</Option>
-                            <Option value="StockClear">Stock Clear (Reset)</Option>
-                            <Option value="Opening">Opening Stock</Option>
+                            {typeOptions && typeOptions.length > 0 ? (
+                                typeOptions.map(type => <Option key={type} value={type}>{type}</Option>)
+                            ) : (
+                                <>
+                                    <Option value="AdjIn">Stock In (+)</Option>
+                                    <Option value="AdjOut">Stock Out (-)</Option>
+                                    <Option value="StockClear">Stock Clear (Reset)</Option>
+                                    <Option value="Opening">Opening Stock</Option>
+                                </>
+                            )}
                         </Select>
                     </div>
 

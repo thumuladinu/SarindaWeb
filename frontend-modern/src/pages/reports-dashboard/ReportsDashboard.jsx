@@ -536,7 +536,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                             <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px] flex items-center justify-center font-bold">F</span>
                             Stock Summary
                         </div>
-                        <div className="grid grid-cols-5 md:grid-cols-10 gap-2">
+                        <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-2">
                             {summaryCards.map((c, i) => (
                                 <div key={i} className={`bg-${c.color}-900/10 border border-${c.color}-900/20 rounded-xl p-2.5 text-center relative`}>
                                     <div className="text-base mb-1">{c.icon}</div>

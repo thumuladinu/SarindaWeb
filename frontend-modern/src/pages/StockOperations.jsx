@@ -839,6 +839,7 @@ export default function StockOperations() {
                 collapsed={filtersCollapsed}
                 setCollapsed={setFiltersCollapsed}
                 itemOptions={[...new Map(history.map(h => [h.ITEM_ID, { id: h.ITEM_ID, name: h.ITEM_NAME }])).values()]}
+                typeOptions={[...new Set(history.map(h => h.DISPLAY_TYPE).filter(Boolean))]}
             />
 
             {/* HISTORY TABLE */}

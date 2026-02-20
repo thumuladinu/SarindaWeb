@@ -455,6 +455,7 @@ export default function Inventory() {
                     collapsed={filtersCollapsed}
                     setCollapsed={setFiltersCollapsed}
                     itemOptions={[...new Map(historyData.map(h => [h.ITEM_ID, { id: h.ITEM_ID, name: h.ITEM_NAME }])).values()]}
+                    typeOptions={[...new Set(historyData.map(h => h.DISPLAY_TYPE).filter(Boolean))]}
                 />
             )}
 
