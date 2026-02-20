@@ -197,12 +197,16 @@ export default function StockOperations() {
 
     const fetchCustomers = async () => {
         try {
-            const response = await axios.get('/api/customers');
+            const response = await axios.post('/api/getAllCustomers', {});
             if (response.data.success) {
-                setCustomers(response.data);
+                setCustomers(response.data.result || []);
             }
         } catch (error) {
-            console.error('Failed to fetch customers', error);
+            if (error.response && error.response.status === 404) {
+                setCustomers([]); // Gracefully handle no customers
+            } else {
+                console.error('Failed to fetch customers', error);
+            }
         }
     };
 

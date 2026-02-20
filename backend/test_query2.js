@@ -1,17 +1,20 @@
-const mysql = require('mysql2/promise');
+const mysql = require('mysql2');
+const util = require('util');
+
+const pool = mysql.createPool({
+    host: 'localhost',
+    user: 'root',
+    password: '',
+    database: 'chamika_rice_mill',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    dateStrings: true
+});
+
+pool.query = util.promisify(pool.query);
 
 async function test() {
-    const pool = mysql.createPool({
-        host: 'localhost',
-        user: 'root',
-        password: '',
-        database: 'chamika_rice_mill',
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0,
-        dateStrings: true
-    });
-
     try {
         const stockOpsQuery = `
             SELECT 
@@ -56,11 +59,37 @@ async function test() {
             LEFT JOIN store_transactions st_bill ON so.BILL_CODE = st_bill.CODE AND st_bill.IS_ACTIVE = 1
             WHERE so.IS_ACTIVE = 1
         `;
-        const [rows] = await pool.query(stockOpsQuery);
-        console.log("Query SUCCESS. Found rows:", rows.length);
+        let stockOpsRows = [];
+        try {
+            stockOpsRows = await pool.query(stockOpsQuery);
+
+            for (let op of stockOpsRows) {
+                op.items = await pool.query(
+                    'SELECT * FROM store_stock_operation_items WHERE OP_ID = ? AND IS_ACTIVE = 1',
+                    [op.OP_ID]
+                );
+                op.conversions = await pool.query(
+                    'SELECT * FROM store_stock_operation_conversions WHERE OP_ID = ? AND IS_ACTIVE = 1',
+                    [op.OP_ID]
+                );
+
+                const txQuery = `
+                    SELECT st.TYPE, sti.QUANTITY, sti.ITEM_ID, i.NAME as ITEM_NAME, i.CODE as ITEM_CODE
+                    FROM store_transactions st
+                    JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                    LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
+                    WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
+                      AND st.COMMENTS LIKE ?
+                `;
+                op.stockAdjustments = await pool.query(txQuery, [`[${op.CODE}]%`]);
+            }
+            console.log("SUCCESS! Got rows:", stockOpsRows.length);
+        } catch (e) {
+            console.log('[getInventoryHistory] Stock operations table may not exist yet:', e.message);
+        }
         process.exit(0);
     } catch (e) {
-        console.error("Query FAILED:", e.message);
+        console.error("Outer FAILED:", e.message);
         process.exit(1);
     }
 }
