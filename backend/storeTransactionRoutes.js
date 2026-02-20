@@ -1791,6 +1791,7 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
                 si.ITEM_ID,
                 si.CODE,
                 si.NAME,
+                si.SELLING_PRICE,
                 st.STORE_NO,
                 st.TYPE,
                 SUM(sti.QUANTITY) as total_qty
@@ -1798,7 +1799,7 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
             LEFT JOIN store_transactions_items sti ON si.ITEM_ID = sti.ITEM_ID AND sti.IS_ACTIVE = 1
             LEFT JOIN store_transactions st ON sti.TRANSACTION_ID = st.TRANSACTION_ID AND st.IS_ACTIVE = 1
             WHERE si.IS_ACTIVE = 1
-            GROUP BY si.ITEM_ID, si.CODE, si.NAME, st.STORE_NO, st.TYPE
+            GROUP BY si.ITEM_ID, si.CODE, si.NAME, si.SELLING_PRICE, st.STORE_NO, st.TYPE
         `;
 
         const rows = await pool.query(query);
@@ -1820,7 +1821,7 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
             const qty = parseFloat(row.total_qty || 0);
 
             if (!stockMap[itemId]) {
-                stockMap[itemId] = { CODE: row.CODE, NAME: row.NAME, 1: 0, 2: 0 };
+                stockMap[itemId] = { CODE: row.CODE, NAME: row.NAME, SELLING_PRICE: row.SELLING_PRICE, 1: 0, 2: 0 };
             }
 
             // If no transactions yet, storeNo/type will be NULL, skip adjustment
@@ -1846,6 +1847,7 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
             ITEM_ID: parseInt(id),
             CODE: stockMap[id].CODE,
             NAME: stockMap[id].NAME,
+            SELLING_PRICE: stockMap[id].SELLING_PRICE,
             STOCK_S1: stockMap[id][1],
             STOCK_S2: stockMap[id][2],
             TOTAL_STOCK: stockMap[id][1] + stockMap[id][2]
@@ -1915,6 +1917,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 so.DESTINATION,
                 so.BILL_CODE,
                 so.BILL_AMOUNT,
+                st_bill.SUB_TOTAL as TRANSACTION_BILL_AMOUNT,
                 'stock_operation' as SOURCE_TYPE,
                 CASE so.OP_TYPE
                     WHEN 1 THEN 'Full Clear (Standard)'
@@ -1932,6 +1935,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 END AS OP_TYPE_NAME
             FROM store_stock_operations so
             LEFT JOIN store_stock_operations parent_op ON so.REFERENCE_OP_ID = parent_op.OP_ID
+            LEFT JOIN store_transactions st_bill ON so.BILL_CODE = st_bill.CODE AND st_bill.IS_ACTIVE = 1
             WHERE so.IS_ACTIVE = 1
               ${req.body.startDate ? `AND so.CREATED_DATE >= '${req.body.startDate}'` : ''}
               ${req.body.endDate ? `AND so.CREATED_DATE <= '${req.body.endDate} 23:59:59'` : ''}
@@ -2147,7 +2151,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 totalDestQty: totalDestQty,
                 isSalesOperation: isOpWithSales,
                 billCode: row.BILL_CODE,
-                billAmount: parseFloat(row.BILL_AMOUNT) || 0,
+                billAmount: parseFloat(row.TRANSACTION_BILL_AMOUNT) || parseFloat(row.BILL_AMOUNT) || 0,
                 // Lorry details for ops 3, 4, 7, 8
                 lorryName: row.LORRY_NAME || null,
                 driverName: row.DRIVER_NAME || null,

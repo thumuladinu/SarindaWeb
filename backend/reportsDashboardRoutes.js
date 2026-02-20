@@ -64,7 +64,9 @@ router.get('/api/reports-dashboard/clearances/:itemId', async (req, res) => {
     try {
         const { itemId } = req.params;
 
-        // Only fetch Full Clearance operations: OP_TYPE IN (1, 3, 8)
+        // Fetch Full AND Partial Clearance operations
+        // OP_TYPE: 1=Full Clear, 2=Partial Clear, 3=Full+Sale, 4=Partial+Sale,
+        //          7=Partial+Lorry, 8=Full+Lorry
         // Excludes Transfer Full Clear (6) and Item Conversion (9)
         let clearanceQuery = `
             SELECT DISTINCT
@@ -91,10 +93,9 @@ router.get('/api/reports-dashboard/clearances/:itemId', async (req, res) => {
             WHERE ssoi.ITEM_ID = ?
               AND sso.IS_ACTIVE = 1
               AND ssoi.IS_ACTIVE = 1
-              AND sso.CLEARANCE_TYPE = 'FULL'
-              AND sso.OP_TYPE IN (1, 3, 8)
+              AND sso.OP_TYPE IN (1, 2, 3, 4, 7, 8)
             ORDER BY sso.CREATED_DATE DESC
-            LIMIT 30
+            LIMIT 50
         `;
 
         const clearances = await pool.query(clearanceQuery, [itemId]);
@@ -237,6 +238,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // B. TRANSACTIONS BY STORE (between boundaries)
         // ==========================================
         // Uses full datetime comparison, not DATE() truncation
+        // EXCLUDE transactions linked to stock operations (conversions, returns, etc.)
+        // to avoid double-counting. These are identified by COMMENTS containing [OP_CODE]
         const txByStoreQuery = `
             SELECT 
                 st.TRANSACTION_ID,
@@ -256,6 +259,9 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
               AND sti.IS_ACTIVE = 1
               AND st.CREATED_DATE > ?
               AND st.CREATED_DATE <= ?
+              AND st.COMMENTS NOT LIKE '%[OP-%'  -- Exclude operation-linked transactions
+              AND st.COMMENTS NOT LIKE '%[S2-%'   -- Exclude store operation codes
+              AND st.COMMENTS NOT LIKE '%[S1-%'
             ORDER BY st.CREATED_DATE ASC
         `;
         const allTransactions = await pool.query(txByStoreQuery, [itemId, startBoundary, endBoundary]);
@@ -303,7 +309,9 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // C. STOCK OPERATIONS IN PERIOD
         // ==========================================
         // Get all stock operations (including the final clearance)
-        // Use ssoi.STORE_NO = sso.STORE_NO OR ssoi.STORE_NO IS NULL to get primary item row only
+        // NOTE: Do NOT filter by ssoi.STORE_NO here — returns (op11) and conversions (op9)
+        // may have items whose STORE_NO differs from the operation's STORE_NO.
+        // Deduplication by OP_ID is handled in code below.
         const opsQuery = `
             SELECT DISTINCT
                 sso.OP_ID,
@@ -334,7 +342,6 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 ssoi.TOTAL
             FROM store_stock_operations sso
             JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
-              AND (ssoi.STORE_NO = sso.STORE_NO OR ssoi.STORE_NO IS NULL)
             WHERE ssoi.ITEM_ID = ?
               AND sso.IS_ACTIVE = 1
               AND ssoi.IS_ACTIVE = 1
@@ -369,55 +376,12 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             }
         }
 
-        // Also get returns AFTER the final clearance (they count as stock changes)
-        const returnsAfterQuery = `
-            SELECT 
-                sso.OP_ID,
-                sso.OP_CODE,
-                sso.OP_TYPE,
-                sso.CLEARANCE_TYPE,
-                sso.DATE as OP_DATE,
-                sso.CREATED_DATE,
-                sso.STORE_NO,
-                sso.BILL_CODE,
-                sso.BILL_AMOUNT,
-                sso.WASTAGE_AMOUNT,
-                sso.SURPLUS_AMOUNT,
-                sso.COMMENTS,
-                sso.CUSTOMER_NAME,
-                sso.LORRY_NAME,
-                sso.DRIVER_NAME,
-                sso.DESTINATION,
-                sso.REFERENCE_OP_ID,
-                ssoi.ITEM_ID,
-                ssoi.ITEM_NAME,
-                ssoi.ITEM_CODE,
-                ssoi.ORIGINAL_STOCK,
-                ssoi.CLEARED_QUANTITY,
-                ssoi.REMAINING_STOCK,
-                ssoi.SOLD_QUANTITY,
-                ssoi.PRICE,
-                ssoi.TOTAL
-            FROM store_stock_operations sso
-            JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
-              AND (ssoi.STORE_NO = sso.STORE_NO OR ssoi.STORE_NO IS NULL)
-            WHERE ssoi.ITEM_ID = ?
-              AND sso.IS_ACTIVE = 1
-              AND ssoi.IS_ACTIVE = 1
-              AND sso.OP_TYPE = 11
-              AND sso.CREATED_DATE > ?
-              AND sso.REFERENCE_OP_ID IS NOT NULL
-            ORDER BY sso.CREATED_DATE ASC
-            LIMIT 20
-        `;
-        const returnsAfter = await pool.query(returnsAfterQuery, [itemId, endBoundary]);
-
         // Enrich stock operations with conversion details
         // DEDUPLICATE by OP_ID (JOIN can produce duplicates)
         const enrichedOps = [];
         const seenOpIds = new Set();
         // Exclude the initial clearance operation (startOpId), include final (endOpId)
-        const allOpsRaw = [...rawStockOps, ...finalOpRow, ...returnsAfter].filter(op => {
+        const allOpsRaw = [...rawStockOps, ...finalOpRow].filter(op => {
             if (seenOpIds.has(op.OP_ID)) return false;
             if (startOpId && op.OP_ID == startOpId) return false; // Exclude initial clearance
             seenOpIds.add(op.OP_ID);
@@ -464,13 +428,87 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 STORE_NO: op.STORE_NO,
                 BILL_CODE: op.BILL_CODE,
                 BILL_AMOUNT: parseFloat(op.BILL_AMOUNT) || 0,
-                // For conversions (OP_TYPE 9), calculate wastage from source - dest quantities
-                WASTAGE_AMOUNT: op.OP_TYPE === 9
-                    ? Math.max(0, (parseFloat(op.ORIGINAL_STOCK) || 0) - totalDestQty)
-                    : (parseFloat(op.WASTAGE_AMOUNT) || 0),
-                SURPLUS_AMOUNT: op.OP_TYPE === 9
-                    ? Math.max(0, totalDestQty - (parseFloat(op.ORIGINAL_STOCK) || 0))
-                    : (parseFloat(op.SURPLUS_AMOUNT) || 0),
+                // -----------------------------------------------------------------------
+                // Wastage/Surplus — identical logic to Stock Operations page view modal
+                // Only applies to Full operations: OP_TYPE [1,3,6,8] and OP_TYPE 9 + FULL.
+                // All other ops (partial, transfers-partial, returns) → 0.
+                // -----------------------------------------------------------------------
+                WASTAGE_AMOUNT: (() => {
+                    const isFullOp = [1, 3, 6, 8].includes(op.OP_TYPE) ||
+                        (op.OP_TYPE === 9 && op.CLEARANCE_TYPE === 'FULL');
+                    if (!isFullOp) return 0;
+
+                    const prevStock = parseFloat(op.ORIGINAL_STOCK) || 0;
+                    const clearedQty = parseFloat(op.CLEARED_QUANTITY) || 0;
+                    const isSalesOp = [3, 4].includes(op.OP_TYPE);
+
+                    // GUARD: If this item had no starting stock (ORIGINAL_STOCK=0), it wasn't
+                    // the primary item being cleared (e.g., just a conversion destination).
+                    // Exception: older sales ops where ORIGINAL_STOCK wasn't recorded, but CLEARED_QUANTITY was.
+                    const effectivePrevStock = prevStock > 0 ? prevStock : (isSalesOp && clearedQty > 0 ? clearedQty : 0);
+                    if (effectivePrevStock === 0) return 0;
+
+                    // Step 1: ALWAYS use stored DB values first — saved at op creation time,
+                    //         identical to what the StockOperations view modal does.
+                    const storedWastage = parseFloat(op.WASTAGE_AMOUNT) || 0;
+                    const storedSurplus = parseFloat(op.SURPLUS_AMOUNT) || 0;
+                    if (storedWastage > 0) return storedWastage;
+                    if (storedSurplus > 0) return 0; // surplus stored → no wastage
+
+                    // Step 2: fallback calculation when both stored values are 0
+                    const soldQty = parseFloat(op.SOLD_QUANTITY) || 0;
+
+                    if (isSalesOp) {
+                        const diff = effectivePrevStock - (soldQty + totalDestQty);
+                        return diff > 0 ? diff : 0;
+                    }
+
+                    if (conversions.length > 0 && effectivePrevStock > 0) {
+                        const diff = effectivePrevStock - totalDestQty;
+                        return diff > 0 ? diff : 0;
+                    }
+                    return effectivePrevStock > 0 ? Math.max(0, effectivePrevStock - clearedQty) : 0;
+                })(),
+                SURPLUS_AMOUNT: (() => {
+                    const isFullOp = [1, 3, 6, 8].includes(op.OP_TYPE) ||
+                        (op.OP_TYPE === 9 && op.CLEARANCE_TYPE === 'FULL');
+                    if (!isFullOp) return 0;
+
+                    const prevStock = parseFloat(op.ORIGINAL_STOCK) || 0;
+                    const clearedQty = parseFloat(op.CLEARED_QUANTITY) || 0;
+                    const isSalesOp = [3, 4].includes(op.OP_TYPE);
+
+                    // GUARD: If this item had no starting stock (ORIGINAL_STOCK=0), it wasn't
+                    // the primary item being cleared (e.g., just a conversion destination).
+                    // Exception: older sales ops where ORIGINAL_STOCK wasn't recorded, but CLEARED_QUANTITY was.
+                    const effectivePrevStock = prevStock > 0 ? prevStock : (isSalesOp && clearedQty > 0 ? clearedQty : 0);
+
+                    // Allow negative prevStock to bypass guard (for rectifying negative balances)
+                    if (effectivePrevStock === 0 && prevStock >= 0) return 0;
+
+                    // Step 1: ALWAYS use stored DB values first — saved at op creation time.
+                    const storedWastage = parseFloat(op.WASTAGE_AMOUNT) || 0;
+                    const storedSurplus = parseFloat(op.SURPLUS_AMOUNT) || 0;
+                    if (storedSurplus > 0) return storedSurplus;
+                    if (storedWastage > 0) return 0; // wastage stored → no surplus
+
+                    // Step 2: fallback calculation when both stored values are 0
+                    const soldQty = parseFloat(op.SOLD_QUANTITY) || 0;
+
+                    if (isSalesOp && effectivePrevStock > 0) {
+                        const diff = (soldQty + totalDestQty) - effectivePrevStock;
+                        return diff > 0 ? diff : 0;
+                    }
+
+                    if (conversions.length > 0) {
+                        if (prevStock > 0) { const d = totalDestQty - prevStock; return d > 0 ? d : 0; }
+                        if (prevStock < 0) return Math.abs(prevStock) + totalDestQty;
+                        return 0;
+                    }
+                    if (prevStock < 0) return Math.abs(prevStock);
+                    if (prevStock > 0 && clearedQty > prevStock) return clearedQty - prevStock;
+                    return 0;
+                })(),
                 COMMENTS: op.COMMENTS,
                 CUSTOMER_NAME: op.CUSTOMER_NAME,
                 LORRY_NAME: op.LORRY_NAME,
@@ -483,12 +521,13 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 SOLD_QUANTITY: parseFloat(op.SOLD_QUANTITY) || 0,
                 itemPrice: parseFloat(op.PRICE) || 0,
                 itemTotal: parseFloat(op.TOTAL) || 0,
-                isReturnAfterClear: returnsAfter.some(r => r.OP_ID === op.OP_ID),
+                isReturnAfterClear: false,
                 conversions: conversions.map(c => ({
                     sourceItemId: c.SOURCE_ITEM_ID,
                     sourceItemName: c.SOURCE_ITEM_NAME,
                     sourceItemCode: c.SOURCE_ITEM_CODE,
-                    sourceQuantity: parseFloat(c.SOURCE_QUANTITY) || 0,
+                    // Use DEST_QUANTITY as canonical amount for both sides (SOURCE_QUANTITY unreliable)
+                    sourceQuantity: parseFloat(c.DEST_QUANTITY) || 0,
                     destItemId: c.DEST_ITEM_ID,
                     destItemName: c.DEST_ITEM_NAME,
                     destItemCode: c.DEST_ITEM_CODE,
@@ -535,15 +574,17 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 sso.CREATED_DATE,
                 sso.STORE_NO,
                 soc.SOURCE_ITEM_ID,
-                soc.SOURCE_ITEM_NAME,
-                soc.SOURCE_ITEM_CODE,
+                COALESCE(si_src.NAME, soc.SOURCE_ITEM_NAME) AS SOURCE_ITEM_NAME,
+                COALESCE(si_src.CODE, soc.SOURCE_ITEM_CODE) AS SOURCE_ITEM_CODE,
                 soc.SOURCE_QUANTITY,
                 soc.DEST_ITEM_ID,
-                soc.DEST_ITEM_NAME,
-                soc.DEST_ITEM_CODE,
+                COALESCE(si_dst.NAME, soc.DEST_ITEM_NAME) AS DEST_ITEM_NAME,
+                COALESCE(si_dst.CODE, soc.DEST_ITEM_CODE) AS DEST_ITEM_CODE,
                 soc.DEST_QUANTITY
             FROM store_stock_operation_conversions soc
             JOIN store_stock_operations sso ON soc.OP_ID = sso.OP_ID
+            LEFT JOIN store_items si_src ON soc.SOURCE_ITEM_ID = si_src.ITEM_ID
+            LEFT JOIN store_items si_dst ON soc.DEST_ITEM_ID = si_dst.ITEM_ID
             WHERE soc.SOURCE_ITEM_ID = ?
               AND sso.IS_ACTIVE = 1
               AND soc.IS_ACTIVE = 1
@@ -563,15 +604,17 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 sso.CREATED_DATE,
                 sso.STORE_NO,
                 soc.SOURCE_ITEM_ID,
-                soc.SOURCE_ITEM_NAME,
-                soc.SOURCE_ITEM_CODE,
+                COALESCE(si_src.NAME, soc.SOURCE_ITEM_NAME) AS SOURCE_ITEM_NAME,
+                COALESCE(si_src.CODE, soc.SOURCE_ITEM_CODE) AS SOURCE_ITEM_CODE,
                 soc.SOURCE_QUANTITY,
                 soc.DEST_ITEM_ID,
-                soc.DEST_ITEM_NAME,
-                soc.DEST_ITEM_CODE,
+                COALESCE(si_dst.NAME, soc.DEST_ITEM_NAME) AS DEST_ITEM_NAME,
+                COALESCE(si_dst.CODE, soc.DEST_ITEM_CODE) AS DEST_ITEM_CODE,
                 soc.DEST_QUANTITY
             FROM store_stock_operation_conversions soc
             JOIN store_stock_operations sso ON soc.OP_ID = sso.OP_ID
+            LEFT JOIN store_items si_src ON soc.SOURCE_ITEM_ID = si_src.ITEM_ID
+            LEFT JOIN store_items si_dst ON soc.DEST_ITEM_ID = si_dst.ITEM_ID
             WHERE soc.DEST_ITEM_ID = ?
               AND sso.IS_ACTIVE = 1
               AND soc.IS_ACTIVE = 1
@@ -581,11 +624,13 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         const conversionsIn = await pool.query(conversionsInQuery, [itemId, startBoundary, endBoundary]);
 
         // Build conversion analysis with P&L
+        // IMPORTANT: Use DEST_QUANTITY directly as the conversion amount for BOTH source and
+        // destination sides. SOURCE_QUANTITY is unreliable (often 0/null) in the DB.
+        // The convention is: whatever was converted out of the source item became destQty of dest item.
         const conversionAnalysis = [];
         for (const conv of conversionsOut) {
-            const destQty = parseFloat(conv.DEST_QUANTITY) || 0;
-            // SOURCE_QUANTITY is often 0/null in DB, fallback to DEST_QUANTITY
-            const sourceQty = parseFloat(conv.SOURCE_QUANTITY) || destQty;
+            // destQty = amount converted OUT of selected item (both source qty and dest qty treated as same)
+            const convQty = parseFloat(conv.DEST_QUANTITY) || 0;
             const [destItem] = await pool.query(
                 'SELECT SELLING_PRICE, BUYING_PRICE FROM store_items WHERE ITEM_ID = ?',
                 [conv.DEST_ITEM_ID]
@@ -599,24 +644,24 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 opType: conv.OP_TYPE,
                 date: conv.CREATED_DATE,
                 storeNo: conv.STORE_NO,
+                sourceItemId: conv.SOURCE_ITEM_ID,
                 sourceItemName: conv.SOURCE_ITEM_NAME,
-                sourceQty, sourcePrice,
-                sourceValue: sourceQty * sourcePrice,
+                sourceQty: convQty, sourcePrice,
+                sourceValue: convQty * sourcePrice,
                 destItemId: conv.DEST_ITEM_ID,
                 destItemName: conv.DEST_ITEM_NAME,
                 destItemCode: conv.DEST_ITEM_CODE,
-                destQty, destPrice,
-                destValue: destQty * destPrice,
-                wastageQty: sourceQty - destQty,
-                profitLoss: (destQty * destPrice) - (sourceQty * sourcePrice),
+                destQty: convQty, destPrice,
+                destValue: convQty * destPrice,
+                wastageQty: 0,
+                profitLoss: (convQty * destPrice) - (convQty * sourcePrice),
                 type: 'out'
             });
         }
 
         for (const conv of conversionsIn) {
-            const destQty = parseFloat(conv.DEST_QUANTITY) || 0;
-            // SOURCE_QUANTITY is often 0/null in DB, fallback to DEST_QUANTITY
-            const sourceQty = parseFloat(conv.SOURCE_QUANTITY) || destQty;
+            // convQty = amount converted INTO selected item (use DEST_QUANTITY as source of truth)
+            const convQty = parseFloat(conv.DEST_QUANTITY) || 0;
             const [srcItem] = await pool.query(
                 'SELECT SELLING_PRICE, BUYING_PRICE FROM store_items WHERE ITEM_ID = ?',
                 [conv.SOURCE_ITEM_ID]
@@ -633,15 +678,24 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 sourceItemId: conv.SOURCE_ITEM_ID,
                 sourceItemName: conv.SOURCE_ITEM_NAME,
                 sourceItemCode: conv.SOURCE_ITEM_CODE,
-                sourceQty, sourcePrice,
-                sourceValue: sourceQty * sourcePrice,
+                sourceQty: convQty, sourcePrice,
+                sourceValue: convQty * sourcePrice,
+                destItemId: conv.DEST_ITEM_ID,
                 destItemName: conv.DEST_ITEM_NAME,
-                destQty, destPrice,
-                destValue: destQty * destPrice,
-                profitLoss: (destQty * destPrice) - (sourceQty * sourcePrice),
+                destQty: convQty, destPrice,
+                destValue: convQty * destPrice,
+                profitLoss: (convQty * destPrice) - (convQty * sourcePrice),
                 type: 'in'
             });
         }
+
+        // Remove cancelled-out self-conversions: same source & dest item AND zero financial impact.
+        // Both conditions required (sourceItemId === destItemId AND profitLoss === 0).
+        // Hide any conversion where source item = destination item (self-conversions),
+        // regardless of direction (in/out) or financial impact.
+        const filteredConversionAnalysis = conversionAnalysis.filter(c =>
+            String(c.sourceItemId) !== String(c.destItemId)
+        );
 
         // ==========================================
         // F. FINAL STOCK (after final clearance)
@@ -668,6 +722,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // ==========================================
         // G. DAILY CHART DATA (combined both stores)
         // ==========================================
+        // Exclude operation-linked transactions to avoid double-counting
         const dailyQuery = `
             SELECT 
                 DATE(st.CREATED_DATE) as tx_date,
@@ -682,6 +737,9 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
               AND sti.IS_ACTIVE = 1
               AND st.CREATED_DATE > ?
               AND st.CREATED_DATE <= ?
+              AND st.COMMENTS NOT LIKE '%[OP-%'  -- Exclude operation-linked transactions
+              AND st.COMMENTS NOT LIKE '%[S2-%'   -- Exclude store operation codes
+              AND st.COMMENTS NOT LIKE '%[S1-%'
             GROUP BY DATE(st.CREATED_DATE), st.TYPE, st.STORE_NO
             ORDER BY tx_date ASC
         `;
@@ -747,17 +805,142 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         }
 
         // ==========================================
+        // G.5 APPEND SALES FROM STOCK OPERATIONS TO AGGREGATES
+        // ==========================================
+        // Operations 3 and 4 (Sales) have SOLD_QUANTITY and BILL_AMOUNT that were excluded 
+        // from allTransactions to avoid double-counting. We add them to selling aggregates here.
+        for (const op of enrichedOps) {
+            const soldQty = op.SOLD_QUANTITY || 0;
+            const itemTotal = op.itemTotal || 0;
+
+            if (soldQty > 0) {
+                const storeNo = op.STORE_NO || 1;
+
+                if (storeAggregates[storeNo]) {
+                    storeAggregates[storeNo].selling.qty += soldQty;
+                    storeAggregates[storeNo].selling.amount += itemTotal;
+                }
+
+                totalAggregates.selling.qty += soldQty;
+                totalAggregates.selling.amount += itemTotal;
+            }
+        }
+
+        // ==========================================
         // H. FINANCIAL SUMMARY
         // ==========================================
         const totalRevenue = totalAggregates.selling.amount;
         const totalCost = totalAggregates.buying.amount;
-        const conversionPL = conversionAnalysis.reduce((sum, c) => sum + (c.profitLoss || 0), 0);
+        const conversionPL = filteredConversionAnalysis.reduce((sum, c) => sum + (c.profitLoss || 0), 0);
         const grossProfit = totalRevenue - totalCost;
-        const netProfit = grossProfit + conversionPL;
+
+        // Fetch return expenses associated with the returns in this period
+        // Return expense transactions have Comments like "Automated: Expense for this return. Return code: [OP_CODE]"
+        // or "Automated: Expense for this return with return code [OP_CODE]"
+        let totalReturnExpense = 0;
+        const returnOpCodes = enrichedOps.filter(op => op.OP_TYPE === 11).map(op => op.OP_CODE);
+        console.log(`[ReportsDashboard] Found ${returnOpCodes.length} return operations:`, returnOpCodes);
+        if (returnOpCodes.length > 0) {
+            // Create LIKE clauses for each return op code
+            const likeClauses = returnOpCodes.map(() => `COMMENTS LIKE ?`).join(' OR ');
+            // Loosen the match to just the code, but we specify the general pattern in the base query
+            const likeValues = returnOpCodes.map(code => `%${code}%`);
+
+            const expenseQuery = `
+                SELECT SUM(SUB_TOTAL) as total_expense
+                FROM store_transactions
+                WHERE TYPE = 'Expenses' AND IS_ACTIVE = 1
+                AND (${likeClauses})
+            `;
+
+            try {
+                const [expenseRows] = await pool.query(expenseQuery, likeValues);
+                totalReturnExpense = parseFloat(expenseRows[0]?.total_expense || expenseRows?.total_expense || 0);
+            } catch (err) {
+                console.error('[ReportsDashboard] Error fetching return expenses:', err);
+                totalReturnExpense = 0;
+            }
+        }
+
+        const netProfit = grossProfit + conversionPL - totalReturnExpense;
 
         // Total wastage from operations
         const totalOperationWastage = enrichedOps.reduce((sum, op) => sum + (op.WASTAGE_AMOUNT || 0), 0);
         const totalOperationSurplus = enrichedOps.reduce((sum, op) => sum + (op.SURPLUS_AMOUNT || 0), 0);
+
+        // ==========================================
+        // I. MANUAL ADJUSTMENTS (AdjIn, AdjOut, Opening, StockClear, StockTake, Wastage)
+        // These are free-standing transactions from the Inventory/Adjust Stock page,
+        // NOT linked to any stock operation.
+        // ==========================================
+        // Pure manual adjustment types from the Inventory / Adjust Stock page only.
+        // TransferIn / TransferOut are intentionally excluded — those are generated
+        // by stock-transfer operations and would double-count if included here.
+        const ADJ_IN_TYPES = new Set(['AdjIn', 'Opening', 'StockTake']);
+        // Types that DECREASE stock (negative delta)
+        const ADJ_OUT_TYPES = new Set(['AdjOut', 'StockClear', 'Wastage']);
+        const ADJ_ALL_TYPES = new Set([...ADJ_IN_TYPES, ...ADJ_OUT_TYPES]);
+
+        const ADJ_LABELS = {
+            AdjIn: 'Adjust In', AdjOut: 'Adjust Out',
+            Opening: 'Opening Stock', StockClear: 'Stock Clearance',
+            StockTake: 'Stock Take', Wastage: 'Wastage'
+        };
+
+        const manualAdjustments = allTransactions
+            .filter(tx => ADJ_ALL_TYPES.has(tx.TYPE) && tx.TX_CODE && tx.TX_CODE.startsWith('ADJ-'))
+            .map(tx => {
+                const qty = parseFloat(tx.QUANTITY) || 0;
+                const isIn = ADJ_IN_TYPES.has(tx.TYPE);
+                const delta = isIn ? qty : -qty;
+                return {
+                    txId: tx.TRANSACTION_ID,
+                    txCode: tx.TX_CODE,
+                    type: tx.TYPE,
+                    typeLabel: ADJ_LABELS[tx.TYPE] || tx.TYPE,
+                    isIn,
+                    qty: parseFloat(qty.toFixed(3)),
+                    delta: parseFloat(delta.toFixed(3)),
+                    storeNo: tx.STORE_NO || 1,
+                    date: tx.CREATED_DATE,
+                    comments: tx.COMMENTS || null
+                };
+            });
+
+        // Partial Clear (Standard) ops on the selected item. We check CLEARED_QUANTITY > 0
+        // (instead of ORIGINAL_STOCK > 0) so we capture older ops where original stock was 0.
+        // The CLEARED_QUANTITY from these ops is filtered out of allTransactions 
+        // (COMMENTS filter) so it's not captured anywhere else.
+        // Append them as out entries so they appear in the section and count in the balance formula.
+        const partialClearAdjs = enrichedOps
+            .filter(op => op.OP_TYPE === 2 && (parseFloat(op.CLEARED_QUANTITY) || 0) > 0)
+            .map(op => {
+                const clearedQty = parseFloat(op.CLEARED_QUANTITY) || 0;
+                // Subtract conversion-out qty — those are already tracked in Conv. Out.
+                // Only count the portion that was physically removed without being converted.
+                const convOutQty = (op.conversions || [])
+                    .filter(c => c.sourceItemId === itemId || c.sourceItemId === String(itemId))
+                    .reduce((s, c) => s + (parseFloat(c.sourceQuantity) || parseFloat(c.destQuantity) || 0), 0);
+                const netCleared = Math.max(0, clearedQty - convOutQty);
+                return {
+                    txId: null,
+                    txCode: op.OP_CODE,
+                    type: 'StockOp',
+                    typeLabel: 'Partial Clear',
+                    isIn: false,
+                    qty: parseFloat(netCleared.toFixed(3)),
+                    delta: parseFloat((-netCleared).toFixed(3)),
+                    storeNo: op.STORE_NO || 1,
+                    date: op.CREATED_DATE,
+                    comments: op.COMMENTS || null
+                };
+            })
+            .filter(a => a.qty > 0); // Skip if nothing remains after subtracting conversions
+
+        const allManualAdjustments = [...manualAdjustments, ...partialClearAdjs];
+
+        // Net stock impact of all manual adjustments (positive = stock added)
+        const netManualAdjustment = allManualAdjustments.reduce((s, a) => s + a.delta, 0);
 
         return res.json({
             success: true,
@@ -801,7 +984,11 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 transfers,
 
                 // Conversion analysis with P&L
-                conversions: conversionAnalysis,
+                conversions: filteredConversionAnalysis,
+
+                // Manual adjustments (AdjIn, AdjOut, Opening, StockClear, etc.)
+                manualAdjustments: allManualAdjustments,
+                netManualAdjustment: parseFloat(netManualAdjustment.toFixed(3)),
 
                 // Wastage summary from operations
                 operationWastage: {
@@ -826,10 +1013,12 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                     totalCost: parseFloat(totalCost.toFixed(2)),
                     grossProfit: parseFloat(grossProfit.toFixed(2)),
                     conversionImpact: parseFloat(conversionPL.toFixed(2)),
+                    totalReturnExpense: parseFloat(totalReturnExpense.toFixed(2)),
                     netProfit: parseFloat(netProfit.toFixed(2)),
                     totalBuyQty: parseFloat(totalAggregates.buying.qty.toFixed(2)),
                     totalSellQty: parseFloat(totalAggregates.selling.qty.toFixed(2)),
                     totalWastage: parseFloat(totalAggregates.wastage.qty.toFixed(2)),
+                    totalReturnedQty: parseFloat(enrichedOps.filter(op => op.OP_TYPE === 11).reduce((sum, op) => sum + (parseFloat(op.CLEARED_QUANTITY) || 0), 0).toFixed(2)),
                     avgBuyPrice: totalAggregates.buying.qty > 0
                         ? parseFloat((totalAggregates.buying.amount / totalAggregates.buying.qty).toFixed(2)) : 0,
                     avgSellPrice: totalAggregates.selling.qty > 0

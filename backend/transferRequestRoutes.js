@@ -218,7 +218,7 @@ router.post('/request', async (req, res) => {
         (local_id, main_item_id, main_item_code, main_item_name, main_item_qty, has_conversion,
             store_from_id, store_to_id, created_by, created_by_name, comments, status)
              VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
-            [localId, mainItemId, mainItemCode, mainItemName, mainItemQty, hasConversion,
+            [localId, mainItemId, mainItemCode, mainItemName, (mainItemQty === 'FULL' ? 0 : mainItemQty), hasConversion,
                 storeFrom, storeTo, createdBy || null, createdByName || null, comments]
         );
 

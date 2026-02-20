@@ -26,6 +26,7 @@ const NAV_ITEMS = [
     { label: 'Users', path: '/users', icon: <UserOutlined /> },
     { label: 'Weighting', path: '/weighting', icon: <ExperimentOutlined /> },
     { label: 'Trips', path: '/trips', icon: <TruckOutlined /> }, // Changed from CarOutlined
+    { key: '/stock-operations', label: 'Stock Ops', path: '/stock-operations', icon: <StockOutlined /> }, // New
     { label: 'Reports', path: '/reports', icon: <FileTextOutlined /> },
     { label: 'Dashboards', path: '/reports-dashboard', icon: <DashboardOutlined /> },
 ];

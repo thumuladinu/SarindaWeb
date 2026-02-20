@@ -121,6 +121,7 @@ const BottomNav = () => {
                         <DrawerItem path="/users" icon={<UserOutlined />} label="Users" />
                         <DrawerItem path="/weighting" icon={<ExperimentOutlined />} label="Weighting" />
                         <DrawerItem path="/trips" icon={<TruckOutlined />} label="Trips" />
+                        <DrawerItem path="/stock-operations" icon={<StockOutlined />} label="Stock Ops" />
                         <DrawerItem path="/reports" icon={<FileTextOutlined />} label="Reports" />
                         <DrawerItem path="/reports-dashboard" icon={<DashboardOutlined />} label="Dashboards" />
                     </div>

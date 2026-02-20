@@ -13,6 +13,7 @@ import Customers from './pages/customers/Customers';
 import Users from './pages/users/Users';
 import Weighting from './pages/weighting/Weighting';
 import Trips from './pages/TripsPage'; // New Import
+import StockOperations from './pages/StockOperations'; // New Import
 import Reports from './pages/reports/Reports';
 import ReportsDashboard from './pages/reports-dashboard/ReportsDashboard';
 
@@ -50,6 +51,7 @@ function App() {
                 <Route path="/users" element={<Users />} />
                 <Route path="/weighting" element={<Weighting />} />
                 <Route path="/trips" element={<Trips />} />
+                <Route path="/stock-operations" element={<StockOperations />} />
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/reports-dashboard" element={<ReportsDashboard />} />
             </Route>

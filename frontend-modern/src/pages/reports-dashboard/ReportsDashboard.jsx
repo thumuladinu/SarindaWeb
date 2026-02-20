@@ -14,7 +14,7 @@ import {
     SwapOutlined, DollarOutlined, LineChartOutlined, BarChartOutlined,
     InfoCircleOutlined, ReloadOutlined, CalendarOutlined, RiseOutlined,
     FallOutlined, CheckCircleOutlined, WarningOutlined, ShopOutlined,
-    CaretRightOutlined, UpOutlined, DownOutlined
+    CaretRightOutlined, UpOutlined, DownOutlined, ClockCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -163,8 +163,8 @@ const StoreAggregateRow = ({ label, s1, s2, total, color, icon }) => (
 // =====================================================
 // OP TYPE LABELS & COLORS
 // =====================================================
-const OP_TYPE_LABELS = { 1: 'Full Clear', 3: 'Full + Sale', 5: 'Transfer', 6: 'Transfer + Clear', 8: 'Full + Lorry', 9: 'Conversion', 11: 'Return' };
-const OP_TYPE_COLORS = { 1: 'blue', 3: 'orange', 5: 'purple', 6: 'purple', 8: 'cyan', 9: 'pink', 11: 'green' };
+const OP_TYPE_LABELS = { 1: 'Full Clear', 2: 'Partial Clear', 3: 'Full + Sale', 4: 'Partial + Sale', 5: 'Transfer', 6: 'Transfer + Clear', 7: 'Partial + Lorry', 8: 'Full + Lorry', 9: 'Conversion', 11: 'Return' };
+const OP_TYPE_COLORS = { 1: 'blue', 2: 'geekblue', 3: 'orange', 4: 'gold', 5: 'purple', 6: 'purple', 7: 'lime', 8: 'cyan', 9: 'pink', 11: 'green' };
 
 // =====================================================
 // MAIN COMPONENT
@@ -216,6 +216,16 @@ export default function ReportsDashboard() {
     const allClearanceEvents = useMemo(() => {
         if (!clearanceData) return [];
         const events = [];
+
+        // Add "Now" virtual event at the top
+        events.push({
+            id: 'now',
+            date: new Date().toISOString(),
+            source: 'now',
+            storeNo: null, opCode: null, opType: null,
+            originalStock: null, opId: null
+        });
+
         if (clearanceData.clearances) {
             for (const c of clearanceData.clearances) {
                 events.push({
@@ -229,13 +239,16 @@ export default function ReportsDashboard() {
         if (clearanceData.zeroDates) {
             for (const z of clearanceData.zeroDates) {
                 const dateStr = typeof z.date === 'string' ? z.date.split('T')[0] : z.date;
-                if (!events.some(e => (typeof e.date === 'string' ? e.date.split('T')[0] : '') === dateStr)) {
+                if (!events.some(e => e.source !== 'now' && (typeof e.date === 'string' ? e.date.split('T')[0] : '') === dateStr)) {
                     events.push({ id: `calc-${dateStr}`, date: z.date, source: 'calculated', storeNo: null, opCode: null, opType: null, originalStock: 0 });
                 }
             }
         }
-        events.sort((a, b) => new Date(b.date) - new Date(a.date));
-        return events;
+        // Sort but keep "Now" always at top
+        const nowEvent = events.find(e => e.id === 'now');
+        const rest = events.filter(e => e.id !== 'now');
+        rest.sort((a, b) => new Date(b.date) - new Date(a.date));
+        return [nowEvent, ...rest];
     }, [clearanceData]);
 
     const toggleClearance = (eventId) => {
@@ -253,7 +266,12 @@ export default function ReportsDashboard() {
         const event2 = allClearanceEvents.find(e => e.id === selectedClearances[1]);
         if (!event1 || !event2) return;
 
-        const date1 = new Date(event1.date), date2 = new Date(event2.date);
+        // Handle "Now" virtual event
+        const hasNow = event1.id === 'now' || event2.id === 'now';
+        const nowDate = new Date();
+
+        const date1 = event1.id === 'now' ? nowDate : new Date(event1.date);
+        const date2 = event2.id === 'now' ? nowDate : new Date(event2.date);
         const startDate = date1 < date2 ? date1 : date2;
         const endDate = date1 < date2 ? date2 : date1;
         const startEvent = date1 < date2 ? event1 : event2;
@@ -266,10 +284,12 @@ export default function ReportsDashboard() {
                 itemId: selectedItemId,
                 startDate: dayjs(startDate).format('YYYY-MM-DD'),
                 endDate: dayjs(endDate).format('YYYY-MM-DD'),
-                startOpId: startEvent.opId, endOpId: endEvent.opId
+                startOpId: startEvent.opId || null,
+                endOpId: endEvent.opId || null,
+                isNow: hasNow
             });
             if (res.data.success) {
-                setAnalysisData(res.data.data);
+                setAnalysisData({ ...res.data.data, isNow: hasNow });
                 setShowClearanceSelection(false);
             }
         } catch { message.error('Analysis failed'); }
@@ -338,22 +358,40 @@ export default function ReportsDashboard() {
                                         <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
                                             {allClearanceEvents.map((event) => {
                                                 const isSelected = selectedClearances.includes(event.id);
+                                                const isNow = event.id === 'now';
                                                 return (
                                                     <div key={event.id} onClick={() => toggleClearance(event.id)}
                                                         className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200 border
-                                                    ${isSelected ? 'bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}>
+                                                    ${isNow && isSelected ? 'bg-cyan-500/10 border-cyan-500/30 ring-1 ring-cyan-500/20' : ''}
+                                                    ${isNow && !isSelected ? 'bg-cyan-500/5 border-cyan-500/15 hover:bg-cyan-500/10' : ''}
+                                                    ${!isNow && isSelected ? 'bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20' : ''}
+                                                    ${!isNow && !isSelected ? 'bg-white/5 border-white/5 hover:bg-white/10' : ''}`}>
                                                         <Checkbox checked={isSelected} className="pointer-events-none" />
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <span className="text-sm font-semibold text-white">{dayjs(event.date).format('DD MMM YYYY')}</span>
-                                                                <span className="text-xs text-gray-500">{dayjs(event.date).format('hh:mm A')}</span>
-                                                                {event.source === 'operation' && <Tag color="blue" className="text-[10px] leading-none m-0">{OP_TYPE_LABELS[event.opType] || `Op ${event.opType}`}</Tag>}
-                                                                {event.source === 'calculated' && <Tag color="orange" className="text-[10px] leading-none m-0">Auto-detected</Tag>}
-                                                                {event.storeNo && <Tag className="text-[10px] leading-none m-0 bg-white/10 border-white/10 text-gray-300">S{event.storeNo}</Tag>}
+                                                        {isNow ? (
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="relative flex h-2.5 w-2.5">
+                                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                                                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
+                                                                    </span>
+                                                                    <span className="text-sm font-semibold text-cyan-400">Now — Current Time</span>
+                                                                    <Tag icon={<ClockCircleOutlined />} color="cyan" className="text-[10px] leading-none m-0">Live</Tag>
+                                                                </div>
+                                                                <div className="text-[10px] text-gray-500 mt-1">{dayjs().format('DD MMM YYYY hh:mm A')} • Analyze up to current moment</div>
                                                             </div>
-                                                            {event.opCode && <div className="text-[10px] text-gray-500 font-mono mt-1">{event.opCode}</div>}
-                                                        </div>
-                                                        {event.originalStock !== undefined && (
+                                                        ) : (
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="text-sm font-semibold text-white">{dayjs(event.date).format('DD MMM YYYY')}</span>
+                                                                    <span className="text-xs text-gray-500">{dayjs(event.date).format('hh:mm A')}</span>
+                                                                    {event.source === 'operation' && <Tag color="blue" className="text-[10px] leading-none m-0">{OP_TYPE_LABELS[event.opType] || `Op ${event.opType}`}</Tag>}
+                                                                    {event.source === 'calculated' && <Tag color="orange" className="text-[10px] leading-none m-0">Auto-detected</Tag>}
+                                                                    {event.storeNo && <Tag className="text-[10px] leading-none m-0 bg-white/10 border-white/10 text-gray-300">S{event.storeNo}</Tag>}
+                                                                </div>
+                                                                {event.opCode && <div className="text-[10px] text-gray-500 font-mono mt-1">{event.opCode}</div>}
+                                                            </div>
+                                                        )}
+                                                        {!isNow && event.originalStock !== undefined && (
                                                             <div className="text-right">
                                                                 <div className="text-[10px] text-gray-500">Stock</div>
                                                                 <div className="text-xs font-medium text-gray-300">{parseFloat(event.originalStock || 0).toFixed(1)}kg</div>
@@ -397,7 +435,11 @@ export default function ReportsDashboard() {
 // ANALYSIS RESULTS COMPONENT
 // =====================================================
 function AnalysisResults({ data, showSections, toggleSection }) {
-    const { item, period, initialStock, finalStock, storeAggregates, aggregates, chartData, financials, conversions, stockOperations, transfers, operationWastage } = data;
+    const { item, period, initialStock, finalStock, storeAggregates, aggregates, chartData, financials, conversions, stockOperations, transfers, operationWastage, manualAdjustments = [], netManualAdjustment = 0 } = data;
+
+    // Derived Variables (accessed by multiple sections)
+    const totalConverted = conversions ? conversions.reduce((s, c) => s + (c.type === 'out' ? c.sourceQty : 0), 0) : 0;
+    const totalConvertedIn = conversions ? conversions.reduce((s, c) => s + (c.type === 'in' ? c.destQty : 0), 0) : 0;
 
     const sectionToggle = (key, label) => (
         <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-400 hover:text-gray-200 transition-colors">
@@ -417,8 +459,11 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                         </h2>
                         <div className="flex items-center gap-2 mt-1">
                             <Tag icon={<CalendarOutlined />} className="bg-white/10 border-white/10 text-gray-300 m-0">
-                                {period.startDate} → {period.endDate}
+                                {period.startDate} → {data.isNow ? '📍 Now' : period.endDate}
                             </Tag>
+                            {data.isNow && (
+                                <Tag icon={<ClockCircleOutlined />} color="cyan" className="text-[10px] m-0">Live</Tag>
+                            )}
                             <span className="text-xs text-gray-500">{dayjs(period.endDate).diff(dayjs(period.startDate), 'day')} days</span>
                         </div>
                     </div>
@@ -437,19 +482,52 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                 </div> */}
             </div>
 
+            {/* Shared Derived Variables */}
+            {(() => {
+                // Determine these early so they can be injected down
+            })()}
 
             {/* STEP 7: Stock Summary */}
             {showSections.financials && (() => {
-                const totalConverted = conversions.reduce((s, c) => s + (c.type === 'out' ? c.sourceQty : 0), 0);
-                const totalConvertedIn = conversions.reduce((s, c) => s + (c.type === 'in' ? c.destQty : 0), 0);
+                // (totalConverted and totalConvertedIn moved to global render scope)
                 const netWS = (operationWastage?.totalWastage || 0) - (operationWastage?.totalSurplus || 0);
+                const returnOps = stockOperations.filter(op => op.OP_TYPE === 11);
+                // For returns with conversions, CLEARED_QUANTITY might be source quantity, not stock added
+                // We need to check if the return has conversions
+                const totalReturns = returnOps.reduce((s, op) => {
+                    if (op.conversions && op.conversions.length > 0) {
+                        // Return with conversions: customer returned items that were re-converted.
+                        // Check if selected item appears as SOURCE in the conversion chain.
+                        // If so, the total converted-out DEST_QUANTITY is what was returned (and then converted).
+                        // Use destQuantity (per user rule: DEST_QUANTITY is the canonical amount).
+                        const itemIsSource = op.conversions.some(
+                            c => c.sourceItemId === data.item.ITEM_ID
+                        );
+                        if (itemIsSource) {
+                            // Sum dest quantities for conversions where this item is source
+                            const returnedQty = op.conversions
+                                .filter(c => c.sourceItemId === data.item.ITEM_ID)
+                                .reduce((sum, c) => sum + (c.destQuantity || 0), 0);
+                            return s + returnedQty;
+                        }
+                        // Item is only a conversion destination → already counted in Converted In
+                        return s;
+                    }
+                    // Direct return (no conversions): CLEARED_QUANTITY is stock added back
+                    return s + (op.CLEARED_QUANTITY || 0);
+                }, 0);
+                const totalAdjIn = manualAdjustments.filter(a => a.isIn).reduce((s, a) => s + a.qty, 0);
+                const totalAdjOut = manualAdjustments.filter(a => !a.isIn).reduce((s, a) => s + a.qty, 0);
                 const summaryCards = [
                     { label: 'Initial Stock', value: initialStock.total, unit: 'kg', color: 'blue', icon: '📦' },
                     { label: 'Bought', value: aggregates.buying.qty, unit: 'kg', color: 'emerald', icon: '🛒' },
                     { label: 'Sold', value: aggregates.selling.qty, unit: 'kg', color: 'red', icon: '💰' },
                     { label: netWS > 0 ? 'Wastage' : 'Surplus', value: Math.abs(netWS), unit: 'kg', color: netWS > 0 ? 'orange' : 'cyan', icon: netWS > 0 ? '⚠️' : '✨' },
-                    { label: 'Converted Out', value: totalConverted, unit: 'kg', color: 'pink', icon: '⬅️' },
-                    { label: 'Converted In', value: totalConvertedIn, unit: 'kg', color: 'fuchsia', icon: '➡️' },
+                    { label: 'Conv. Out', value: totalConverted, unit: 'kg', color: 'pink', icon: '⬅️' },
+                    { label: 'Conv. In', value: totalConvertedIn, unit: 'kg', color: 'fuchsia', icon: '➡️' },
+                    { label: 'Returns', value: totalReturns, unit: 'kg', color: 'green', icon: '↩️', sub: `${returnOps.length} op${returnOps.length !== 1 ? 's' : ''}` },
+                    { label: 'Adj In', value: totalAdjIn, unit: 'kg', color: 'teal', icon: '🔧', sub: '+manual' },
+                    { label: 'Adj Out', value: totalAdjOut, unit: 'kg', color: 'amber', icon: '🔧', sub: '-manual' },
                     { label: 'Final Stock', value: finalStock.total, unit: 'kg', color: 'purple', icon: '📊' }
                 ];
                 return (
@@ -458,7 +536,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                             <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px] flex items-center justify-center font-bold">F</span>
                             Stock Summary
                         </div>
-                        <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
+                        <div className="grid grid-cols-5 md:grid-cols-10 gap-2">
                             {summaryCards.map((c, i) => (
                                 <div key={i} className={`bg-${c.color}-900/10 border border-${c.color}-900/20 rounded-xl p-2.5 text-center relative`}>
                                     <div className="text-base mb-1">{c.icon}</div>
@@ -473,42 +551,186 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                                 </div>
                             ))}
                         </div>
+
+                        {/* Stock Balance Validation */}
+                        <div className="mt-4 pt-4 border-t border-white/10">
+                            <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-400">Stock Balance Check:</span>
+                                {(() => {
+                                    // netWS = totalWastage - totalSurplus
+                                    // Wastage > 0: stock lost → subtract netWS (positive)
+                                    // Surplus > 0: stock gained → subtract netWS (negative) = add surplus
+                                    // netManualAdjustment: positive = stock added, negative = stock removed
+                                    const calculatedFinal = initialStock.total +
+                                        aggregates.buying.qty + totalConvertedIn + totalReturns +
+                                        netManualAdjustment -
+                                        aggregates.selling.qty - netWS - totalConverted;
+                                    const diff = Math.abs(finalStock.total - calculatedFinal);
+                                    const isBalanced = diff < 0.01;
+                                    const wsLabel = netWS > 0
+                                        ? `Wastage (-${netWS.toFixed(1)})`
+                                        : netWS < 0
+                                            ? `Surplus (+${Math.abs(netWS).toFixed(1)})`
+                                            : `W/S (0)`;
+                                    const adjLabel = `ManualAdj (${netManualAdjustment >= 0 ? '+' : ''}${netManualAdjustment.toFixed(1)})`;
+
+                                    return (
+                                        <div className="flex items-center gap-2">
+                                            {isBalanced ? (
+                                                <span className="text-emerald-400 font-medium">✓ Balanced ({diff.toFixed(3)}kg diff)</span>
+                                            ) : (
+                                                <span className="text-red-400 font-medium">⚠ Unbalanced ({diff.toFixed(3)}kg diff)</span>
+                                            )}
+                                            <Tooltip title={`Initial (${initialStock.total.toFixed(1)}) + Bought (${aggregates.buying.qty.toFixed(1)}) + Converted In (${totalConvertedIn.toFixed(1)}) + Returns (${totalReturns.toFixed(1)}) + ${adjLabel} - Sold (${aggregates.selling.qty.toFixed(1)}) - ${wsLabel} - Converted Out (${totalConverted.toFixed(1)}) = ${calculatedFinal.toFixed(1)} vs Final ${finalStock.total.toFixed(1)}`}>
+                                                <InfoCircleOutlined className="text-gray-500 cursor-help" />
+                                            </Tooltip>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </div>
                     </div>
                 );
             })()}
 
             {/* STEP 8: Financials */}
             {showSections.financials && (() => {
-                const stockDiff = finalStock.total - initialStock.total;
-                const stockDiffValue = stockDiff * financials.avgBuyPrice;
-                const salesVol = initialStock.total + aggregates.buying.qty - finalStock.total;
-                const avgNetProfit = financials.netProfit + stockDiffValue;
-                const avgProfitPerKg = salesVol > 0 ? avgNetProfit / salesVol : 0;
+                // 1. Income Amount per kg = revenue / sold amount
+                let incomePerKg = financials.totalSellQty > 0 ? financials.totalRevenue / financials.totalSellQty : 0;
+                incomePerKg = Number(incomePerKg.toFixed(5));
+
+                // 2. Out going Amount per kg = cost + return expenses / bought amount + return amount
+                // Note: user specifically requested "cost + return expnces / bout amount + return amount"
+                const outGoingTotal = financials.totalCost + (financials.totalReturnExpense || 0);
+                const outGoingQty = financials.totalBuyQty + (financials.totalReturnedQty || 0);
+                let outGoingPerKg = outGoingQty > 0 ? outGoingTotal / outGoingQty : 0;
+                outGoingPerKg = Number(outGoingPerKg.toFixed(5));
+
+                // 3. Conversion impact for sold kg = Conv. Impact / sold amount
+                let convImpactPerSoldKg = financials.totalSellQty > 0 ? (financials.conversionImpact || 0) / financials.totalSellQty : 0;
+                convImpactPerSoldKg = Number(convImpactPerSoldKg.toFixed(5));
+
+                // 4. Waste or surplus impact for sold kg(Y) = surplus or waste total kg / total sold kg
+                const wsTotalKg = (operationWastage?.totalWastage || 0) - (operationWastage?.totalSurplus || 0);
+                let wsImpactRatio = financials.totalSellQty > 0 ? wsTotalKg / financials.totalSellQty : 0;
+                wsImpactRatio = Number(wsImpactRatio.toFixed(5));
+
+                // 5. Its effect for sold amount for kg = sold amount per kg + or - sold amount per kg x Y
+                // The prompt says: "sold amount per kg x Y" -> which means revenue/kg * wsRatio
+                let wsFinancialImpactPerKg = incomePerKg * wsImpactRatio;
+                wsFinancialImpactPerKg = Number(wsFinancialImpactPerKg.toFixed(5));
+
+                // 6. Net profit per kg = cal from these
+                // Income - Outgoing + Conversion Impact - Wastage Impact (Wastage is bad, so minus)
+                let trueNetProfitPerKg = incomePerKg - outGoingPerKg + convImpactPerSoldKg - wsFinancialImpactPerKg;
+                trueNetProfitPerKg = Number(trueNetProfitPerKg.toFixed(5));
 
                 const finCards = [
-                    { label: 'Revenue', value: financials.totalRevenue, color: 'emerald', sub: `${financials.totalSellQty.toFixed(1)}kg sold` },
-                    { label: 'Cost', value: financials.totalCost, color: 'red', sub: `${financials.totalBuyQty.toFixed(1)}kg bought` },
-                    { label: 'Gross Profit', value: financials.grossProfit, color: financials.grossProfit >= 0 ? 'emerald' : 'red', sub: `Avg B:${financials.avgBuyPrice} S:${financials.avgSellPrice}` },
-                    { label: 'Conv. Impact', value: financials.conversionImpact, color: financials.conversionImpact >= 0 ? 'blue' : 'orange', sub: `${conversions.length} conversions` },
-                    { label: 'Net Profit', value: financials.netProfit, color: financials.netProfit >= 0 ? 'emerald' : 'red', sub: `Avg B:${financials.avgBuyPrice} S:${financials.avgSellPrice}` },
-                    { label: 'Stock Bal. Diff', value: stockDiffValue, color: stockDiffValue >= 0 ? 'blue' : 'orange', sub: `${initialStock.total.toFixed(1)}kg → ${finalStock.total.toFixed(1)}kg (${stockDiff > 0 ? '+' : ''}${stockDiff.toFixed(1)}kg)` },
-                    { label: 'Avg Profit/kg', value: avgProfitPerKg, color: avgProfitPerKg >= 0 ? 'emerald' : 'red', sub: `Based on ${salesVol.toFixed(1)}kg sales vol` }
+                    {
+                        label: 'Revenue',
+                        value: financials.totalRevenue,
+                        color: 'emerald',
+                        sub: `${financials.totalSellQty.toFixed(1)}kg sold`
+                    },
+                    {
+                        label: 'Cost',
+                        value: financials.totalCost,
+                        color: 'red',
+                        sub: `${financials.totalBuyQty.toFixed(1)}kg bought`
+                    },
+                    {
+                        label: 'Gross Profit',
+                        value: financials.grossProfit,
+                        color: financials.grossProfit >= 0 ? 'emerald' : 'red',
+                        sub: `Avg B:${financials.avgBuyPrice?.toFixed(2)} S:${financials.avgSellPrice?.toFixed(2)}`
+                    },
+                    {
+                        label: 'Return Expenses',
+                        value: financials.totalReturnExpense || 0,
+                        color: 'orange',
+                        sub: `${financials.totalReturnedQty?.toFixed(1) || 0}kg returned`
+                    },
+                    {
+                        label: 'Conv. Impact',
+                        value: financials.conversionImpact,
+                        color: financials.conversionImpact >= 0 ? 'blue' : 'orange',
+                        sub: `${conversions?.length || 0} conversions`
+                    },
+                    {
+                        label: 'Net Profit',
+                        value: financials.netProfit,
+                        color: financials.netProfit >= 0 ? 'emerald' : 'red',
+                        sub: 'Final stock operations profit'
+                    }
+                ];
+
+                const perKgCards = [
+                    {
+                        label: 'Income / Sold kg',
+                        value: incomePerKg,
+                        color: 'emerald',
+                        sub: `Rev / Sold Kg`
+                    },
+                    {
+                        label: 'Outgoing / Action kg',
+                        value: outGoingPerKg,
+                        color: 'red',
+                        sub: `(Cost+Ret) / (Buy+Ret)`
+                    },
+                    {
+                        label: 'Conv. Impact / Sold kg',
+                        value: convImpactPerSoldKg,
+                        color: convImpactPerSoldKg >= 0 ? 'blue' : 'orange',
+                        sub: `Conv Impact / Sold Kg`
+                    },
+                    {
+                        label: 'W/S Impact / Sold kg',
+                        value: -wsFinancialImpactPerKg, // negative because wastage reduces profit
+                        color: wsFinancialImpactPerKg <= 0 ? 'emerald' : 'red',
+                        sub: `(W/S Ratio) × Income/kg`
+                    },
+                    {
+                        label: 'True Net Profit / kg',
+                        value: trueNetProfitPerKg,
+                        color: trueNetProfitPerKg >= 0 ? 'emerald' : 'red',
+                        sub: 'Smoothed over Sold Stock'
+                    }
                 ];
 
                 return (
                     <div className="glass-card p-4 rounded-2xl bg-white/5 border border-white/10">
                         <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                             <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] flex items-center justify-center font-bold">G</span>
-                            Financial Summary
+                            Financial Totals
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
+                        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
                             {finCards.map((f, i) => (
-                                <div key={i} className={`bg-${f.color}-50/50 dark:bg-${f.color}-900/10 border border-${f.color}-100 dark:border-${f.color}-900/20 rounded-xl p-3`}>
-                                    <div className="text-[10px] font-semibold text-gray-500 uppercase">{f.label}</div>
-                                    <div className={`text-lg font-bold text-${f.color}-600 dark:text-${f.color}-400`}>
-                                        {f.value.toFixed(2)} <span className="text-xs font-normal">Rs</span>
+                                <div key={i} className={`flex flex-col bg-${f.color}-50/50 dark:bg-${f.color}-900/10 border border-${f.color}-100 dark:border-${f.color}-900/20 rounded-xl overflow-hidden`}>
+                                    <div className="p-3 pb-2 flex-grow">
+                                        <div className="text-[10px] font-semibold text-gray-500 uppercase">{f.label}</div>
+                                        <div className={`text-lg font-bold text-${f.color}-600 dark:text-${f.color}-400 mt-0.5`}>
+                                            {f.value.toFixed(2)} <span className="text-[10px] font-normal">Rs</span>
+                                        </div>
+                                        {f.sub && <div className="text-[9px] text-gray-400 mt-1 leading-tight">{f.sub}</div>}
                                     </div>
-                                    {f.sub && <div className="text-[10px] text-gray-400">{f.sub}</div>}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center font-bold">H</span>
+                            Per-Kg Smoothed Analysis
+                        </div>
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                            {perKgCards.map((f, i) => (
+                                <div key={i} className={`flex flex-col bg-${f.color}-50/50 dark:bg-${f.color}-900/10 border border-${f.color}-100 dark:border-${f.color}-900/20 rounded-xl overflow-hidden`}>
+                                    <div className="p-3 pb-2 flex-grow">
+                                        <div className="text-[10px] font-semibold text-gray-500 uppercase">{f.label}</div>
+                                        <div className={`text-lg font-bold text-${f.color}-600 dark:text-${f.color}-400 mt-0.5`}>
+                                            {f.value.toFixed(2)} <span className="text-[10px] font-normal">Rs</span>
+                                        </div>
+                                        {f.sub && <div className="text-[9px] text-gray-400 mt-1 leading-tight">{f.sub}</div>}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -742,7 +964,71 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                 );
             })()}
 
-            {/* STEP 8: Conversions */}
+            {/* STEP 8: Manual Adjustments */}
+            {manualAdjustments.length > 0 && (
+                <div className="glass-card p-4 rounded-2xl bg-white/5 border border-white/10">
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] flex items-center justify-center font-bold">M</span>
+                        Manual Adjustments
+                        <span className="text-[10px] text-gray-500 font-normal ml-1">({manualAdjustments.length} entries from Inventory)</span>
+                        <span className={`ml-auto text-xs font-bold ${netManualAdjustment >= 0 ? 'text-teal-400' : 'text-amber-400'}`}>
+                            Net: {netManualAdjustment >= 0 ? '+' : ''}{netManualAdjustment.toFixed(3)}kg
+                        </span>
+                    </div>
+                    <div className="text-[10px] text-gray-500 mb-3 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-teal-400 inline-block"></span>
+                        AdjIn / Opening add stock &nbsp;•&nbsp;
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>
+                        AdjOut / StockClear / Wastage remove stock
+                    </div>
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar">
+                        {manualAdjustments.map((adj, idx) => (
+                            <div key={idx} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border
+                                ${adj.isIn
+                                    ? 'bg-teal-500/5 border-teal-500/15'
+                                    : 'bg-amber-500/5 border-amber-500/15'}`}>
+                                {/* Type badge */}
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
+                                    ${adj.isIn ? 'bg-teal-500/15' : 'bg-amber-500/15'}`}>
+                                    <span className={`text-xs font-bold ${adj.isIn ? 'text-teal-400' : 'text-amber-400'}`}>
+                                        {adj.isIn ? '+' : '−'}
+                                    </span>
+                                </div>
+                                {/* Label + details */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-semibold text-gray-200">{adj.typeLabel}</span>
+                                        <Tag className={`text-[9px] m-0 leading-none px-1.5 py-0.5
+                                            ${adj.isIn
+                                                ? 'bg-teal-500/15 border-teal-500/20 text-teal-300'
+                                                : 'bg-amber-500/15 border-amber-500/20 text-amber-300'}`}>
+                                            Manual
+                                        </Tag>
+                                        <Tag className="text-[9px] m-0 leading-none px-1.5 py-0.5 bg-white/5 border-white/10 text-gray-400">
+                                            S{adj.storeNo}
+                                        </Tag>
+                                    </div>
+                                    {adj.comments && (
+                                        <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={adj.comments}>
+                                            {adj.comments}
+                                        </div>
+                                    )}
+                                    <div className="text-[10px] text-gray-600 mt-0.5">
+                                        {dayjs(adj.date).format('DD MMM YYYY hh:mm A')}
+                                        {adj.txCode && <span className="ml-2 font-mono">{adj.txCode}</span>}
+                                    </div>
+                                </div>
+                                {/* Signed delta */}
+                                <div className={`text-sm font-bold flex-shrink-0 ${adj.isIn ? 'text-teal-400' : 'text-amber-400'}`}>
+                                    {adj.delta >= 0 ? '+' : ''}{adj.delta.toFixed(3)}<span className="text-[10px] font-normal ml-0.5">kg</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* STEP 9: Conversions */}
             {showSections.conversions && conversions.length > 0 && (
                 <div className="glass-card p-4 rounded-2xl bg-white/5 border border-white/10">
                     <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -764,7 +1050,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                                 <div className="flex items-center gap-2 text-xs">
                                     <div className="flex-1 bg-red-900/10 rounded-lg p-2">
                                         <div className="text-[10px] text-gray-500">Source</div>
-                                        <div className="text-gray-300 font-medium">{conv.sourceItemName || item.NAME}</div>
+                                        <div className="text-gray-300 font-medium">{conv.sourceItemName || '—'}</div>
                                         <div className="text-gray-400">{conv.sourceQty.toFixed(2)}kg × Rs{conv.sourcePrice}</div>
                                     </div>
                                     <SwapOutlined className="text-gray-600" />

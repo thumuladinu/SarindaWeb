@@ -1,0 +1,142 @@
+/* Stock Operations Page CSS */
+.stock-ops-container {
+    padding: 1rem;
+    padding-bottom: 6rem;
+    /* Space for mobile nav */
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Operation Types Grid */
+.ops-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.op-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.op-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.op-card.selected {
+    border-color: #3b82f6;
+    background: #eff6ff;
+    box-shadow: 0 0 0 2px #3b82f6;
+}
+
+.op-icon {
+    font-size: 1.5rem;
+}
+
+.op-name {
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+/* Store Selector */
+.store-selector {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+/* Item Selection */
+.item-selection-area {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1.5rem;
+}
+
+.selected-item-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f3f4f6;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+/* Stock Preview Panel */
+.stock-preview-panel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.preview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+    text-align: center;
+}
+
+.preview-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.preview-label {
+    font-size: 0.75rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.preview-value {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.preview-value.decrease {
+    color: #ef4444;
+}
+
+.preview-value.increase {
+    color: #10b981;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .stock-ops-container {
+        padding: 0.5rem;
+        padding-bottom: 5rem;
+    }
+
+    .ops-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+
+    .item-selection-area {
+        padding: 1rem;
+    }
+
+    .preview-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+}

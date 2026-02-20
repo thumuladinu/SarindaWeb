@@ -91,10 +91,6 @@ router.get('/api/stock-ops/last-trip-id/:storeId', async (req, res) => {
     try {
         const { storeId } = req.params;
 
-        // Find the latest active operation with a TRIP_ID for this store
-        // Ordered by OP_ID DESC to get the absolute latest creation
-        // Find the latest active operation with a TRIP_ID for this store
-        // Ordered by OP_ID DESC to get the absolute latest creation
         const rows = await pool.query(
             `SELECT OP_ID, TRIP_ID, OP_CODE, CREATED_DATE 
              FROM store_stock_operations 
@@ -111,7 +107,7 @@ router.get('/api/stock-ops/last-trip-id/:storeId', async (req, res) => {
             return res.json({
                 success: true,
                 tripId: rows[0].TRIP_ID,
-                opId: rows[0].OP_ID, // Use OP_ID for strict versioning/sync
+                opId: rows[0].OP_ID,
                 opCode: rows[0].OP_CODE,
                 date: rows[0].CREATED_DATE
             });
@@ -120,6 +116,68 @@ router.get('/api/stock-ops/last-trip-id/:storeId', async (req, res) => {
         return res.json({ success: true, tripId: null, message: 'No trip IDs found' });
     } catch (error) {
         console.error('Error fetching last trip ID:', error);
+        return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    }
+});
+
+/**
+ * NEW: Get the next TRIP_ID for Web App (prefixed with W-)
+ * Logic: Letter-Number (e.g. A1-L9) wraps around.
+ */
+router.get('/api/stock-ops/next-web-trip-id/:storeId', async (req, res) => {
+    try {
+        const { storeId } = req.params;
+        const sNum = parseInt(storeId);
+
+        // Define Ranges (Same as local apps)
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const ranges = {
+            1: { startLetter: 'A', endLetter: 'L' },
+            2: { startLetter: 'M', endLetter: 'Z' }
+        };
+
+        const range = ranges[sNum];
+        if (!range) return res.status(400).json({ success: false, message: 'Invalid store ID' });
+
+        // Find the LATEST Trip ID with "W-" prefix for this store
+        const rows = await pool.query(
+            `SELECT TRIP_ID FROM store_stock_operations 
+             WHERE STORE_NO = ? AND TRIP_ID LIKE 'W-%' AND IS_ACTIVE = 1
+             ORDER BY OP_ID DESC LIMIT 1`,
+            [sNum]
+        );
+
+        let nextIdSuffix = "";
+        if (!rows || rows.length === 0) {
+            // Start of range
+            nextIdSuffix = `${range.startLetter}1`;
+        } else {
+            const lastTripId = rows[0].TRIP_ID; // e.g. "W-A1"
+            const rawId = lastTripId.replace('W-', ''); // e.g. "A1"
+            const lastLetter = rawId.charAt(0);
+            const lastNum = parseInt(rawId.substring(1));
+
+            if (isNaN(lastNum)) {
+                nextIdSuffix = `${range.startLetter}1`;
+            } else if (lastNum < 9) {
+                nextIdSuffix = `${lastLetter}${lastNum + 1}`;
+            } else {
+                // Number is 9, increment letter
+                const currentLetterIdx = alphabet.indexOf(lastLetter);
+                const endLetterIdx = alphabet.indexOf(range.endLetter);
+
+                if (currentLetterIdx === -1 || currentLetterIdx >= endLetterIdx) {
+                    // Reset to start of range
+                    nextIdSuffix = `${range.startLetter}1`;
+                } else {
+                    nextIdSuffix = `${alphabet[currentLetterIdx + 1]}1`;
+                }
+            }
+        }
+
+        return res.json({ success: true, nextTripId: `W-${nextIdSuffix}` });
+    } catch (error) {
+        console.error('Error generating next web trip ID:', error);
         return res.status(500).json({ success: false, message: 'Server error', error: error.message });
     }
 });
@@ -347,8 +405,11 @@ router.post('/api/stock-ops/create', async (req, res) => {
             const stockResult = await updateStockLevels(opType, data, clearanceType, opCode, itemStocks);
             if (stockResult?.billCode) {
                 billCode = stockResult.billCode;
-                // Update operation record with bill code
-                await pool.query('UPDATE store_stock_operations SET BILL_CODE = ? WHERE OP_ID = ?', [billCode, opId]);
+                // Update operation record with bill code and amount
+                await pool.query(
+                    'UPDATE store_stock_operations SET BILL_CODE = ?, BILL_AMOUNT = ? WHERE OP_ID = ?',
+                    [billCode, stockResult.billAmount || 0, opId]
+                );
             }
 
             // For ops 3, 4: Update the operation items record with actual values
@@ -848,6 +909,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
 
         return {
             billCode,
+            billAmount: billTotal,
             itemId,
             originalStock: currentStock,
             soldQty,
@@ -1533,7 +1595,9 @@ router.post('/api/stock-ops/get-returnable', async (req, res) => {
                 soi.ITEM_NAME,
                 soi.SOLD_QUANTITY,
                 soi.CLEARED_QUANTITY,
-                soi.ORIGINAL_STOCK
+                soi.ORIGINAL_STOCK,
+                soi.PRICE,
+                soi.TOTAL
             FROM store_stock_operations so
             JOIN store_stock_operation_items soi ON so.OP_ID = soi.OP_ID AND soi.IS_ACTIVE = 1
             WHERE so.IS_ACTIVE = 1
@@ -1607,15 +1671,16 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             TERMINAL_CODE
         } = data;
 
-        if (!REFERENCE_OP_ID) {
+        if (!REFERENCE_OP_ID && REFERENCE_OP_ID !== 'DIRECT' && REFERENCE_OP_ID !== null) {
             return res.status(400).json({ success: false, message: 'Reference operation ID required' });
         }
 
         console.log(`[Stock Ops] Return request for REF_OP_ID=${REFERENCE_OP_ID}, ITEM_CODE=${ITEM_CODE}, QTY=${RETURN_QUANTITY}`);
 
-        // Validate reference operation exists and is type 1, 2, 3 or 4
+        // Validate reference operation exists and is type 1, 2, 3, 4, 7, 8, 9
+        // (Any op that removes/adjusts stock except transfers/returns)
         let refOpResult = await pool.query(
-            'SELECT * FROM store_stock_operations WHERE OP_ID = ? AND OP_TYPE IN (1, 2, 3, 4) AND IS_ACTIVE = 1',
+            'SELECT * FROM store_stock_operations WHERE OP_ID = ? AND OP_TYPE IN (1, 2, 3, 4, 7, 8, 9) AND IS_ACTIVE = 1',
             [REFERENCE_OP_ID]
         );
         let validRefOpId = REFERENCE_OP_ID;
@@ -1628,7 +1693,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             if (lookupCode) {
                 console.log(`[Stock Ops] Lookup by ID failed, trying OP_CODE=${lookupCode}`);
                 const codeResult = await pool.query(
-                    'SELECT * FROM store_stock_operations WHERE OP_CODE = ? AND OP_TYPE IN (1, 2, 3, 4) AND IS_ACTIVE = 1 LIMIT 1',
+                    'SELECT * FROM store_stock_operations WHERE OP_CODE = ? AND OP_TYPE IN (1, 2, 3, 4, 7, 8, 9) AND IS_ACTIVE = 1 LIMIT 1',
                     [lookupCode]
                 );
 
@@ -1640,18 +1705,21 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             }
         }
 
-        if (refOpResult.length === 0) {
+        if (REFERENCE_OP_ID === null || REFERENCE_OP_ID === 'DIRECT') {
+            console.log(`[Stock Ops] Direct return (No reference) for ITEM_CODE=${ITEM_CODE}, QTY=${RETURN_QUANTITY}`);
+            // Direct return proceeds without a reference op
+        } else if (refOpResult.length === 0) {
             // Smart retry: If REFERENCE_OP_ID is an operation code (S2-OP-...), the operation might not be synced yet
             // Only mark as permanent if it's a numeric ID (truly doesn't exist in DB)
             console.warn(`[Stock Ops] Invalid reference operation: OP_ID=${REFERENCE_OP_ID} not found (or inactive/wrong type)`);
             return res.status(400).json({
                 success: false,
-                message: `Invalid reference operation (OP_ID=${REFERENCE_OP_ID} not found in DB)`,
+                message: `Invalid reference operation (OP_ID=${String(REFERENCE_OP_ID)} not found in DB)`,
                 permanent: !isNaN(REFERENCE_OP_ID) && Number.isInteger(Number(REFERENCE_OP_ID))  // Only permanent if numeric ID
             });
         }
 
-        const refOp = refOpResult[0];
+        const refOp = refOpResult[0] || {};
         const returnQty = parseFloat(RETURN_QUANTITY) || 0;
 
         // Check if return quantity is valid
@@ -1667,6 +1735,46 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
         const termCode = (TERMINAL_CODE || 'POS').slice(0, 5).toUpperCase();
         const opCode = await generateOpCode(storeNo, termCode);
 
+        // --- Handle Expenses if provided ---
+        const expenseAmt = parseFloat(data.returnExpenseAmount) || 0;
+        if (expenseAmt > 0) {
+            console.log(`[Stock Ops] Creating automated expense for return: ${expenseAmt} for item ${ITEM_ID}`);
+            try {
+                // Use pre-generated expense code from client (S1/S2 with terminal suffix),
+                // or generate WEB-format code if not provided
+                let expenseCode = data.returnExpenseCode || null;
+                if (!expenseCode) {
+                    // Web App fallback: RETURN-EXP-WEB-{YYMMDD}-{DayCounter}
+                    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, ''); // YYMMDD
+                    const counterKey = `returnExpCounter_${dateStr}`;
+                    // Use DB count as counter fallback (random 3 digits if no client-side counter)
+                    const dayCounter = String(Math.floor(Math.random() * 900) + 100); // fallback: 100-999
+                    expenseCode = `RETURN-EXP-WEB-${dateStr}-${dayCounter}`;
+                }
+
+                // Insert into store_transactions (Table used for Expenses)
+                const expenseRecord = {
+                    STORE_NO: storeNo,
+                    CODE: expenseCode,
+                    TYPE: 'Expenses',
+                    SUB_TOTAL: expenseAmt,
+                    PAYMENT_AMOUNT: expenseAmt,
+                    COMMENTS: `Automated: Expense for this return. Return code: ${opCode}`,
+                    CREATED_BY: CREATED_BY || 0,
+                    CREATED_DATE: new Date(),
+                    EDITED_DATE: new Date(),
+                    IS_ACTIVE: 1,
+                    BILL_DATA: JSON.stringify({ note: 'Automated Return Expense', relatedOp: opCode, itemId: ITEM_ID })
+                };
+
+                await pool.query('INSERT INTO store_transactions SET ?', expenseRecord);
+                console.log(`[Stock Ops] Automated expense created: ${expenseCode}`);
+            } catch (expErr) {
+                console.error('[Stock Ops] Automated expense failed:', expErr);
+                // We don't block the return if expense fails, but log it
+            }
+        }
+
         // Calculate conversion total if provided
         const hasConversion = conversions && conversions.length > 0;
         const totalConversionQty = hasConversion
@@ -1679,7 +1787,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             OP_TYPE: 11, // Stock Return
             STORE_NO: storeNo,
             CLEARANCE_TYPE: 'RETURN',
-            REFERENCE_OP_ID: validRefOpId, // Use the resolved numeric ID
+            REFERENCE_OP_ID: (validRefOpId === 'DIRECT') ? null : validRefOpId, // Use numeric ID or null
             RETURN_TYPE: hasConversion ? 'CONVERSION' : 'DIRECT',
             COMMENTS: COMMENTS || `Return from ${refOp.OP_CODE}`,
             DATE: new Date().toISOString(),
