@@ -1935,7 +1935,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 END AS OP_TYPE_NAME
             FROM store_stock_operations so
             LEFT JOIN store_stock_operations parent_op ON so.REFERENCE_OP_ID = parent_op.OP_ID
-            LEFT JOIN store_transactions st_bill ON so.BILL_CODE = st_bill.CODE AND st_bill.IS_ACTIVE = 1
+            LEFT JOIN store_transactions st_bill ON so.BILL_CODE COLLATE utf8mb4_unicode_ci = st_bill.CODE COLLATE utf8mb4_unicode_ci AND st_bill.IS_ACTIVE = 1
             WHERE so.IS_ACTIVE = 1
               ${req.body.startDate ? `AND so.CREATED_DATE >= '${req.body.startDate}'` : ''}
               ${req.body.endDate ? `AND so.CREATED_DATE <= '${req.body.endDate} 23:59:59'` : ''}
