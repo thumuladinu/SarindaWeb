@@ -955,6 +955,18 @@ router.post('/api/addTransaction', async (req, res) => {
                 }
             }
 
+            if (type === 'Return') {
+                const { createNotification } = require('./notificationService');
+                const itemName = req.body.ITEMS && req.body.ITEMS.length > 0 ? req.body.ITEMS[0].ITEM_NAME : 'items';
+                const qty = req.body.ITEMS && req.body.ITEMS.length > 0 ? req.body.ITEMS[0].QUANTITY : '';
+                await createNotification(
+                    'RETURN',
+                    insertId,
+                    'New Return Registered',
+                    `A return of ${qty} kg ${itemName} was recorded at Store ${storeNo}`
+                );
+            }
+
             return res.status(200).json({ success: true, message: 'transactions added successfully', transactionId: insertId, code: code });
         }
 

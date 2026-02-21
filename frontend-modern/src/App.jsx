@@ -16,6 +16,8 @@ import Trips from './pages/TripsPage'; // New Import
 import StockOperations from './pages/StockOperations'; // New Import
 import Reports from './pages/reports/Reports';
 import ReportsDashboard from './pages/reports-dashboard/ReportsDashboard';
+import Graphs from './pages/graphs/Graphs'; // New Import
+import Notifications from './pages/notifications/Notifications';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
@@ -54,6 +56,8 @@ function App() {
                 <Route path="/stock-operations" element={<StockOperations />} />
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/reports-dashboard" element={<ReportsDashboard />} />
+                <Route path="/graphs" element={<Graphs />} />
+                <Route path="/notifications" element={<Notifications />} />
             </Route>
 
             {/* Fallback */}

@@ -23,6 +23,7 @@ export default defineConfig({
             },
             workbox: {
                 maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // Increase limit to 10MB
+                importScripts: ['/push-sw.js']
             },
             manifest: {
                 name: 'Ishanka Stores Management System',

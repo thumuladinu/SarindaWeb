@@ -13,7 +13,8 @@ import {
     FileTextOutlined,
     StockOutlined, // New
     CloseOutlined,
-    DashboardOutlined
+    DashboardOutlined,
+    LineChartOutlined
 } from '@ant-design/icons';
 import { Drawer } from 'antd';
 
@@ -124,6 +125,7 @@ const BottomNav = () => {
                         <DrawerItem path="/stock-operations" icon={<StockOutlined />} label="Stock Ops" />
                         <DrawerItem path="/reports" icon={<FileTextOutlined />} label="Reports" />
                         <DrawerItem path="/reports-dashboard" icon={<DashboardOutlined />} label="Dashboards" />
+                        <DrawerItem path="/graphs" icon={<LineChartOutlined />} label="Graphs" />
                     </div>
                 </div>
             </Drawer>

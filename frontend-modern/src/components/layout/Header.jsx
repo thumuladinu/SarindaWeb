@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { SearchOutlined, SunOutlined, MoonOutlined, LogoutOutlined } from '@ant-design/icons';
-import { Dropdown, Button, message } from 'antd';
+import { BellOutlined, SunOutlined, MoonOutlined, LogoutOutlined } from '@ant-design/icons';
+import { Dropdown, Button, message, Badge } from 'antd';
 import { useTheme } from '../ui/ThemeProvider';
 import Cookies from 'js-cookie';
+import axios from 'axios';
+import { io } from 'socket.io-client';
 
 import InstallPWA from '../InstallPWA';
 
@@ -12,6 +14,40 @@ export default function Header() {
     const location = useLocation();
     const navigate = useNavigate();
     const pageTitle = location.pathname.split('/')[1]?.replace('-', ' ') || 'Dashboard';
+
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    const fetchUnreadCount = async () => {
+        try {
+            const res = await axios.get('/api/notifications/unread-count');
+            if (res.data.success) {
+                setUnreadCount(res.data.count);
+            }
+        } catch (error) {
+            console.error('Failed to fetch unread count', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchUnreadCount();
+        const interval = setInterval(fetchUnreadCount, 30000); // poll every 30s
+
+        // Socket.IO for real-time notification badge updates
+        const socket = io('/', { path: '/socket.io' });
+        socket.on('new_notification', (data) => {
+            setUnreadCount(prev => prev + 1);
+        });
+
+        // Listen for internal app event when notifications are read
+        const handleReadEvent = () => setUnreadCount(0);
+        window.addEventListener('notifications-read', handleReadEvent);
+
+        return () => {
+            clearInterval(interval);
+            socket.disconnect();
+            window.removeEventListener('notifications-read', handleReadEvent);
+        };
+    }, []);
 
     // Get user data from cookie (set during login)
     const getUserData = () => {
@@ -39,9 +75,9 @@ export default function Header() {
         window.location.href = '/login';
     };
 
-    // Handle search click
-    const handleSearchClick = () => {
-        navigate('/search');
+    // Handle notifications click
+    const handleNotificationsClick = () => {
+        navigate('/notifications');
     };
 
     // Profile dropdown - just show name and logout
@@ -102,12 +138,14 @@ export default function Header() {
                     <InstallPWA />
                 </div>
 
-                {/* Search Button */}
+                {/* Notifications Button */}
                 <button
-                    onClick={handleSearchClick}
-                    className="w-10 h-10 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-center text-gray-500 dark:text-gray-400 transition-colors active:scale-95"
+                    onClick={handleNotificationsClick}
+                    className="relative w-10 h-10 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-center text-gray-500 dark:text-gray-400 transition-colors active:scale-95"
                 >
-                    <SearchOutlined className="text-lg" />
+                    <Badge count={unreadCount} overflowCount={99} size="small" offset={[-2, 4]}>
+                        <BellOutlined className="text-xl" />
+                    </Badge>
                 </button>
 
                 {/* Theme Toggle */}

@@ -1911,6 +1911,19 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
 
         console.log(`[Stock Ops] Created return operation ${opCode} (ref: ${refOp.OP_CODE})`);
 
+        // --- NEW: Trigger Push Notification for RETURNS ---
+        try {
+            const { createNotification } = require('./notificationService');
+            await createNotification(
+                'RETURN',
+                opId,
+                'New Return Registered',
+                `A return of ${returnQty} kg ${itemName} was recorded at Store ${storeNo} (ref: ${refOp.OP_CODE})`
+            );
+        } catch (notifyErr) {
+            console.error('[Stock Ops] Error sending Return notification:', notifyErr);
+        }
+
         return res.status(200).json({
             success: true,
             message: 'Stock return created successfully',

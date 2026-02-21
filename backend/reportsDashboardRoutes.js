@@ -627,6 +627,63 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // IMPORTANT: Use DEST_QUANTITY directly as the conversion amount for BOTH source and
         // destination sides. SOURCE_QUANTITY is unreliable (often 0/null) in the DB.
         // The convention is: whatever was converted out of the source item became destQty of dest item.
+
+        const avgPriceCache = {};
+        const getAvgSellingPrice = async (targetId, defaultPrice) => {
+            if (avgPriceCache[targetId] !== undefined) {
+                // console.log(`[ReportsDashboard] Item ${targetId}: Using cached avg price:`, avgPriceCache[targetId]);
+                return avgPriceCache[targetId] !== null ? avgPriceCache[targetId] : defaultPrice;
+            }
+            try {
+                console.log(`\n[ReportsDashboard] --- Calculating Avg Selling Price ---`);
+                console.log(`[ReportsDashboard] DEBUG: Query params:`, { targetId, startBoundary, endBoundary });
+                console.log(`[ReportsDashboard] Item ID: ${targetId}`);
+                console.log(`[ReportsDashboard] Period: ${startBoundary} to ${endBoundary}`);
+
+                const rows = await pool.query(`
+                    SELECT SUM(sti.TOTAL) as sumTotal, SUM(sti.QUANTITY) as sumQty
+                    FROM store_transactions st
+                    JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                    WHERE sti.ITEM_ID = ? AND st.TYPE = 'Selling'
+                      AND st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1
+                      AND st.CREATED_DATE >= ? AND st.CREATED_DATE <= ?
+                      AND st.COMMENTS NOT LIKE '%[OP-%'
+                      AND st.COMMENTS NOT LIKE '%[S2-%'
+                      AND st.COMMENTS NOT LIKE '%[S1-%'
+                `, [targetId, startBoundary, endBoundary]);
+
+                const opRows = await pool.query(`
+                    SELECT SUM(ssoi.TOTAL) as sumTotal, SUM(ssoi.SOLD_QUANTITY) as sumQty
+                    FROM store_stock_operations sso
+                    JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
+                    WHERE ssoi.ITEM_ID = ? AND sso.OP_TYPE IN (3, 4)
+                      AND sso.IS_ACTIVE = 1
+                      AND sso.CREATED_DATE >= ? AND sso.CREATED_DATE <= ?
+                `, [targetId, startBoundary, endBoundary]);
+
+                const sumTotalRaw = (parseFloat(rows[0]?.sumTotal) || 0) + (parseFloat(opRows[0]?.sumTotal) || 0);
+                const sumQtyRaw = (parseFloat(rows[0]?.sumQty) || 0) + (parseFloat(opRows[0]?.sumQty) || 0);
+
+                const sumTotal = parseFloat(sumTotalRaw.toFixed(2));
+                const sumQty = parseFloat(sumQtyRaw.toFixed(2));
+
+                console.log(`[ReportsDashboard] Sum Total: ${sumTotal}, Sum Qty: ${sumQty} (Normal: ${parseFloat(rows[0]?.sumQty) || 0}, Ops: ${parseFloat(opRows[0]?.sumQty) || 0})`);
+
+                if (sumQty > 0) {
+                    const avg = parseFloat((sumTotal / sumQty).toFixed(2));
+                    console.log(`[ReportsDashboard] Calculated Avg Price: ${avg} (Fallback price was: ${defaultPrice})`);
+                    avgPriceCache[targetId] = avg;
+                    return avg;
+                } else {
+                    console.log(`[ReportsDashboard] No 'Selling' transactions found. Falling back to default list price: ${defaultPrice}`);
+                }
+            } catch (err) {
+                console.error('[ReportsDashboard] Error fetching avg price for conversion:', err);
+            }
+            avgPriceCache[targetId] = null;
+            return defaultPrice;
+        };
+
         const conversionAnalysis = [];
         for (const conv of conversionsOut) {
             // destQty = amount converted OUT of selected item (both source qty and dest qty treated as same)
@@ -635,8 +692,12 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 'SELECT SELLING_PRICE, BUYING_PRICE FROM store_items WHERE ITEM_ID = ?',
                 [conv.DEST_ITEM_ID]
             );
-            const sourcePrice = parseFloat(itemInfo.SELLING_PRICE) || 0;
-            const destPrice = parseFloat(destItem?.SELLING_PRICE) || 0;
+
+            const fallbackSourcePrice = parseFloat(itemInfo.SELLING_PRICE) || 0;
+            const fallbackDestPrice = parseFloat(destItem?.SELLING_PRICE) || 0;
+
+            const sourcePrice = await getAvgSellingPrice(conv.SOURCE_ITEM_ID, fallbackSourcePrice);
+            const destPrice = await getAvgSellingPrice(conv.DEST_ITEM_ID, fallbackDestPrice);
 
             conversionAnalysis.push({
                 opCode: conv.OP_CODE,
@@ -666,8 +727,12 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 'SELECT SELLING_PRICE, BUYING_PRICE FROM store_items WHERE ITEM_ID = ?',
                 [conv.SOURCE_ITEM_ID]
             );
-            const sourcePrice = parseFloat(srcItem?.SELLING_PRICE) || 0;
-            const destPrice = parseFloat(itemInfo.SELLING_PRICE) || 0;
+
+            const fallbackSourcePrice = parseFloat(srcItem?.SELLING_PRICE) || 0;
+            const fallbackDestPrice = parseFloat(itemInfo.SELLING_PRICE) || 0;
+
+            const sourcePrice = await getAvgSellingPrice(conv.SOURCE_ITEM_ID, fallbackSourcePrice);
+            const destPrice = await getAvgSellingPrice(conv.DEST_ITEM_ID, fallbackDestPrice);
 
             conversionAnalysis.push({
                 opCode: conv.OP_CODE,
@@ -1029,6 +1094,227 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
 
     } catch (error) {
         console.error('[ReportsDashboard] Analysis error:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+
+// =====================================================
+// 4. GRAPHS DATA ENDPOINT
+// =====================================================
+router.post('/api/graphs/item-data', async (req, res) => {
+    try {
+        const { itemId, startDate, endDate, period } = req.body;
+        // period: 'Daily', 'Weekly', 'Monthly', 'Yearly'
+
+        if (!itemId || !startDate || !endDate || !period) {
+            return res.status(400).json({ success: false, message: 'Missing required parameters' });
+        }
+
+        // Helper
+        function toLocalYYYYMMDD(dateObj) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+        function parseDbDate(dInput) {
+            if (!dInput) return null;
+            if (typeof dInput === 'string') return dInput.split('T')[0].split(' ')[0];
+            if (dInput instanceof Date) return toLocalYYYYMMDD(dInput);
+            return null;
+        }
+
+        // 1. Get running stock up to endDate
+        const runningStockQuery = `
+            SELECT 
+                DATE(st.CREATED_DATE) as tx_date,
+                SUM(CASE 
+                    WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
+                    WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
+                    ELSE 0
+                END) as day_change
+            FROM store_transactions st
+            JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+            WHERE sti.ITEM_ID = ?
+              AND st.IS_ACTIVE = 1
+              AND sti.IS_ACTIVE = 1
+              AND DATE(st.CREATED_DATE) <= ?
+            GROUP BY DATE(st.CREATED_DATE)
+            ORDER BY tx_date ASC
+        `;
+        const dailyStockChanges = await pool.query(runningStockQuery, [itemId, endDate]);
+
+        // 2. Get Buying and Selling transactions within the date range
+        const txQuery = `
+            SELECT 
+                DATE(st.CREATED_DATE) as tx_date,
+                st.TYPE,
+                sti.QUANTITY,
+                sti.TOTAL
+            FROM store_transactions st
+            JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+            WHERE sti.ITEM_ID = ?
+              AND st.IS_ACTIVE = 1
+              AND sti.IS_ACTIVE = 1
+              AND st.TYPE IN ('Buying', 'Selling')
+              AND st.COMMENTS NOT LIKE '%[OP-%'
+              AND st.COMMENTS NOT LIKE '%[S2-%'
+              AND st.COMMENTS NOT LIKE '%[S1-%'
+              AND DATE(st.CREATED_DATE) >= ?
+              AND DATE(st.CREATED_DATE) <= ?
+        `;
+        const transactions = await pool.query(txQuery, [itemId, startDate, endDate]);
+
+        const opsQuery = `
+            SELECT 
+                DATE(sso.CREATED_DATE) as tx_date,
+                'Selling' as TYPE,
+                ssoi.SOLD_QUANTITY as QUANTITY,
+                ssoi.TOTAL
+            FROM store_stock_operations sso
+            JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
+            WHERE ssoi.ITEM_ID = ?
+              AND sso.IS_ACTIVE = 1
+              AND ssoi.IS_ACTIVE = 1
+              AND sso.OP_TYPE IN (3, 4)
+              AND DATE(sso.CREATED_DATE) >= ?
+              AND DATE(sso.CREATED_DATE) <= ?
+        `;
+        const opTransactions = await pool.query(opsQuery, [itemId, startDate, endDate]);
+
+        const allPriceTransactions = [...transactions, ...opTransactions];
+
+        // 3. Generate date buckets based on period
+        const buckets = [];
+        let curr = new Date(startDate);
+        const endDay = new Date(endDate);
+
+        while (curr <= endDay) {
+            let bucketStart = new Date(curr);
+            let bucketEnd;
+            let label;
+
+            if (period === 'Daily') {
+                bucketEnd = new Date(curr);
+                label = toLocalYYYYMMDD(bucketStart);
+                curr.setDate(curr.getDate() + 1);
+            } else if (period === 'Weekly') {
+                const day = curr.getDay();
+                const diff = curr.getDate() - day + (day === 0 ? -6 : 1);
+                bucketStart = new Date(curr.getFullYear(), curr.getMonth(), diff);
+                bucketEnd = new Date(bucketStart);
+                bucketEnd.setDate(bucketStart.getDate() + 6);
+
+                label = `Week of ${toLocalYYYYMMDD(bucketStart)}`;
+
+                curr = new Date(bucketEnd);
+                curr.setDate(curr.getDate() + 1);
+            } else if (period === 'Monthly') {
+                bucketStart = new Date(curr.getFullYear(), curr.getMonth(), 1);
+                bucketEnd = new Date(curr.getFullYear(), curr.getMonth() + 1, 0);
+                label = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}`;
+
+                curr = new Date(bucketEnd);
+                curr.setDate(curr.getDate() + 1);
+            } else if (period === 'Yearly') {
+                bucketStart = new Date(curr.getFullYear(), 0, 1);
+                bucketEnd = new Date(curr.getFullYear(), 11, 31);
+                label = `${curr.getFullYear()}`;
+
+                curr = new Date(bucketEnd);
+                curr.setDate(curr.getDate() + 1);
+            }
+
+            buckets.push({
+                label,
+                startDate: toLocalYYYYMMDD(bucketStart),
+                endDate: toLocalYYYYMMDD(bucketEnd),
+                buyTotal: 0, buyQty: 0,
+                sellTotal: 0, sellQty: 0,
+                runningStock: 0
+            });
+        }
+
+        if (buckets.length > 100) {
+            return res.status(400).json({ success: false, message: 'Date range too large for selected period (max 100 data points)' });
+        }
+
+        // 4. Calculate daily running stock up to endDate
+        const runningStockByDate = {};
+        let currentStock = 0;
+
+        for (const record of dailyStockChanges) {
+            const dStr = parseDbDate(record.tx_date);
+            if (!dStr) continue;
+            currentStock += parseFloat(record.day_change) || 0;
+            runningStockByDate[dStr] = currentStock;
+        }
+
+        let earliestDateStr = dailyStockChanges.length > 0 ? parseDbDate(dailyStockChanges[0].tx_date) : startDate;
+        if (!earliestDateStr) earliestDateStr = startDate;
+
+        // Backfill / Forward fill dates so we have O(1) lookups for bucket.endDate
+        // We only really need to fill up to endDate.
+        let trackDateObj = new Date(earliestDateStr);
+        // Start trackStock at 0 (or whatever it was if we somehow missed data)
+        let trackStock = 0;
+
+        // Fast forward to make sure we don't start tracking before the first known date unnecessarily unless needed
+        if (new Date(startDate) < trackDateObj) {
+            trackDateObj = new Date(startDate);
+        }
+
+        const maxDateObj = new Date(endDate);
+
+        while (trackDateObj <= maxDateObj) {
+            const dStr = toLocalYYYYMMDD(trackDateObj);
+            if (runningStockByDate.hasOwnProperty(dStr)) {
+                trackStock = runningStockByDate[dStr];
+            } else {
+                runningStockByDate[dStr] = trackStock;
+            }
+            trackDateObj.setDate(trackDateObj.getDate() + 1);
+        }
+
+        // 5. Populate buckets with price data
+        for (const tx of allPriceTransactions) {
+            const txDate = parseDbDate(tx.tx_date);
+            const total = parseFloat(tx.TOTAL) || 0;
+            const qty = parseFloat(tx.QUANTITY) || 0;
+
+            if (qty <= 0 || !txDate) continue;
+
+            const bucket = buckets.find(b => txDate >= b.startDate && txDate <= b.endDate);
+            if (bucket) {
+                if (tx.TYPE === 'Buying') {
+                    bucket.buyTotal += total;
+                    bucket.buyQty += qty;
+                } else if (tx.TYPE === 'Selling') {
+                    bucket.sellTotal += total;
+                    bucket.sellQty += qty;
+                }
+            }
+        }
+
+        // 6. Compute final array
+        const result = buckets.map(b => {
+            let stockAtEndOfBucket = runningStockByDate[b.endDate];
+            if (stockAtEndOfBucket === undefined) stockAtEndOfBucket = trackStock;
+
+            return {
+                label: b.label,
+                avgBuyPrice: b.buyQty > 0 ? parseFloat((b.buyTotal / b.buyQty).toFixed(2)) : null,
+                avgSellPrice: b.sellQty > 0 ? parseFloat((b.sellTotal / b.sellQty).toFixed(2)) : null,
+                stock: parseFloat(stockAtEndOfBucket.toFixed(3))
+            };
+        });
+
+        // If bucket is entirely in the future (no stock data computed), it defaults to trackStock (last known stock).
+
+        return res.json({ success: true, result });
+    } catch (error) {
+        console.error('[GraphsAPI] Error fetching graph data:', error);
         return res.status(500).json({ success: false, message: error.message });
     }
 });

@@ -1012,6 +1012,23 @@ router.post('/api/transactions/sync', async (req, res) => {
             console.log(`[Sync] Inserted ${transaction.items.length} items for transaction ${transaction.code}`);
         }
 
+        // --- NEW: Trigger Push Notification for RETURNS from POS ---
+        if (transaction.type === 'Return') {
+            try {
+                const { createNotification } = require('./notificationService');
+                const itemName = transaction.items && transaction.items.length > 0 ? (transaction.items[0].productName || transaction.items[0].name || transaction.items[0].productCode || transaction.items[0].code) : 'items';
+                const qty = transaction.items && transaction.items.length > 0 ? (transaction.items[0].quantity || '') : '';
+                await createNotification(
+                    'RETURN',
+                    transactionId,
+                    'New Return Registered (Sync)',
+                    `A return of ${qty} kg ${itemName} was synced from Store ${transaction.storeNo || 1}`
+                );
+            } catch (notifyErr) {
+                console.error('[Sync] Error sending Return notification:', notifyErr);
+            }
+        }
+
         res.status(200).json({
             success: true,
             message: 'Transaction synced',

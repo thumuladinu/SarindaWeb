@@ -249,6 +249,14 @@ router.post('/request', async (req, res) => {
             }
         }
 
+        const { createNotification } = require('./notificationService');
+        await createNotification(
+            'TRANSFER_REQUEST',
+            transferId,
+            'New Transfer Request',
+            `${createdByName || 'Someone'} requested ${mainItemQty} kg of ${mainItemName}`
+        );
+
         res.json({ success: true, message: 'Request submitted', transferId, localId });
     } catch (error) {
         console.error('Request error:', error);
@@ -260,7 +268,7 @@ router.post('/request', async (req, res) => {
 router.get('/pending', async (req, res) => {
     try {
         const requests = await query(
-            `SELECT * FROM store_stock_transfers WHERE status = 'PENDING' ORDER BY request_date DESC`
+            `SELECT * FROM store_stock_transfers WHERE status = 'PENDING' ORDER BY request_date DESC LIMIT 25`
         );
 
         // Fetch conversions for each request

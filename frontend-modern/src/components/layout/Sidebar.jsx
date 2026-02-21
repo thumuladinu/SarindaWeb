@@ -11,7 +11,8 @@ import {
     TruckOutlined, // Changed from CarOutlined
     FileTextOutlined,
     StockOutlined, // New
-    DashboardOutlined
+    DashboardOutlined,
+    LineChartOutlined
 } from '@ant-design/icons';
 import { Tooltip } from 'antd';
 import logo from "../../assets/images/logo.png";
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
     { key: '/stock-operations', label: 'Stock Ops', path: '/stock-operations', icon: <StockOutlined /> }, // New
     { label: 'Reports', path: '/reports', icon: <FileTextOutlined /> },
     { label: 'Dashboards', path: '/reports-dashboard', icon: <DashboardOutlined /> },
+    { label: 'Graphs', path: '/graphs', icon: <LineChartOutlined /> }, // New
 ];
 
 export default function Sidebar() {
