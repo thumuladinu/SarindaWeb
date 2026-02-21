@@ -86,6 +86,29 @@ module.exports = {
                 }
             });
 
+            // 4. Remote Cache Management (Dev Only)
+            socket.on('admin:request_terminal_cache', (targetSocketId) => {
+                console.log(`[Socket] Admin ${socket.id} requested cache for terminal ${targetSocketId}`);
+                io.to(targetSocketId).emit('terminal:get_cache');
+            });
+
+            socket.on('terminal:cache_data', (data) => {
+                // Return data to all admins
+                const terminal = connectedTerminals.get(socket.id);
+                console.log(`[Socket] Cache data received from terminal ${socket.id}`);
+                io.emit('admin:terminal_cache_result', {
+                    socketId: socket.id,
+                    terminalId: terminal?.terminalId,
+                    cache: data.cache
+                });
+            });
+
+            socket.on('admin:delete_terminal_cache_item', (data) => {
+                const { targetSocketId, itemCode } = data;
+                console.log(`[Socket] Admin ${socket.id} requested deletion of ${itemCode} on terminal ${targetSocketId}`);
+                io.to(targetSocketId).emit('terminal:delete_cache_item', { code: itemCode });
+            });
+
             socket.on('disconnect', () => {
                 console.log('Client disconnected:', socket.id);
                 if (connectedTerminals.has(socket.id)) {

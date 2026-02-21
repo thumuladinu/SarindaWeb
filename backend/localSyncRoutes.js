@@ -178,7 +178,22 @@ router.post('/api/syncItemTableWithLocal', async (req, res) => {
         let skipped = 0;
         let created = 0;
 
-        for (const item of items) {
+        for (const rawItem of items) {
+            // Normalize properties
+            const item = {
+                ITEM_ID: rawItem.ITEM_ID || rawItem.id,
+                CODE: (rawItem.CODE || rawItem.code || '').trim(),
+                NAME: rawItem.NAME || rawItem.name || '',
+                BUYING_PRICE: rawItem.BUYING_PRICE !== undefined ? rawItem.BUYING_PRICE : (rawItem.price !== undefined ? rawItem.price : 0),
+                SELLING_PRICE: rawItem.SELLING_PRICE !== undefined ? rawItem.SELLING_PRICE : (rawItem.sellingPrice !== undefined ? rawItem.sellingPrice : 0),
+                IS_ACTIVE: (rawItem.IS_ACTIVE !== undefined) ? (rawItem.IS_ACTIVE === 1 || rawItem.IS_ACTIVE === true || rawItem.IS_ACTIVE === '1' ? 1 : 0) : (rawItem.isActive === true || rawItem.isActive === 1 ? 1 : 0),
+                EDITED_DATE: rawItem.EDITED_DATE || rawItem.editedDate || null,
+                CREATED_BY: rawItem.CREATED_BY || rawItem.createdBy || null,
+                STORE_NO: rawItem.STORE_NO || rawItem.storeNo || 1
+            };
+
+            if (!item.CODE) continue;
+
             // Format dates
             const incomingEditedDate = new Date(item.EDITED_DATE);
             const formattedEditedDate = toMySQLDateTime(item.EDITED_DATE);
@@ -281,12 +296,13 @@ router.post('/api/items/merge-sync', async (req, res) => {
         let webDupsRemoved = 0;
         for (const dup of duplicateCodes) {
             // Get all items with this CODE
+            // COMPARISON LOGIC: Newer EDITED_DATE always wins (keep newest)
             const items = await pool.query(
-                'SELECT ITEM_ID, IS_ACTIVE, EDITED_DATE FROM store_items WHERE CODE = ? ORDER BY IS_ACTIVE DESC, EDITED_DATE DESC',
+                'SELECT ITEM_ID, IS_ACTIVE, EDITED_DATE FROM store_items WHERE CODE = ? ORDER BY EDITED_DATE DESC, IS_ACTIVE DESC',
                 [dup.CODE]
             );
 
-            // Keep the first one (IS_ACTIVE=1 preferred, then newest), delete rest
+            // Keep the first one (newest EDITED_DATE wins), delete rest
             if (items.length > 1) {
                 const keepId = items[0].ITEM_ID;
                 const deleteIds = items.slice(1).map(i => i.ITEM_ID);
@@ -304,9 +320,19 @@ router.post('/api/items/merge-sync', async (req, res) => {
         webItems.forEach(item => { webItemMap[item.CODE] = item; });
         console.log('[MergeSync] Web DB has', webItems.length, 'valid items');
 
-        // 2. Filter and DEDUPLICATE local items by CODE
-        // Keep: IS_ACTIVE=1 preferred, then newest EDITED_DATE
-        const validLocalItems = localItems.filter(item => item.CODE && item.CODE.trim() !== '');
+        // 2. Normalize, Filter and DEDUPLICATE local items by CODE
+        // POS might send lowercase properties (code, isActive, editedDate)
+        const normalizedLocalItems = localItems.map(item => ({
+            ITEM_ID: item.ITEM_ID || item.id || null,
+            CODE: (item.CODE || item.code || '').trim(),
+            NAME: item.NAME || item.name || '',
+            BUYING_PRICE: item.BUYING_PRICE !== undefined ? item.BUYING_PRICE : (item.price !== undefined ? item.price : 0),
+            SELLING_PRICE: item.SELLING_PRICE !== undefined ? item.SELLING_PRICE : (item.sellingPrice !== undefined ? item.sellingPrice : 0),
+            IS_ACTIVE: (item.IS_ACTIVE !== undefined) ? (item.IS_ACTIVE === 1 || item.IS_ACTIVE === true || item.IS_ACTIVE === '1') : (item.isActive === true || item.isActive === 1 ? 1 : 0),
+            EDITED_DATE: item.EDITED_DATE || item.editedDate || null
+        }));
+
+        const validLocalItems = normalizedLocalItems.filter(item => item.CODE !== '');
         const localDedupMap = {};
 
         for (const item of validLocalItems) {
@@ -316,20 +342,20 @@ router.post('/api/items/merge-sync', async (req, res) => {
             if (!existing) {
                 localDedupMap[code] = item;
             } else {
-                // Compare: IS_ACTIVE=1 wins, then newest EDITED_DATE
-                const existingActive = existing.IS_ACTIVE === 1 || existing.IS_ACTIVE === '1';
-                const newActive = item.IS_ACTIVE === 1 || item.IS_ACTIVE === '1';
+                // COMPARISON LOGIC: Newer EDITED_DATE always wins
+                const existingDate = safeDate(existing.EDITED_DATE);
+                const newDate = safeDate(item.EDITED_DATE);
 
-                if (newActive && !existingActive) {
-                    // New is active, existing is not - keep new
+                if (newDate > existingDate) {
                     localDedupMap[code] = item;
-                } else if (existingActive === newActive) {
-                    // Same active status - compare dates
-                    if (safeDate(item.EDITED_DATE) > safeDate(existing.EDITED_DATE)) {
+                } else if (newDate.getTime() === existingDate.getTime()) {
+                    // Tie-break: active wins
+                    const existingActive = existing.IS_ACTIVE === 1 || existing.IS_ACTIVE === '1';
+                    const newActive = item.IS_ACTIVE === 1 || item.IS_ACTIVE === '1';
+                    if (newActive && !existingActive) {
                         localDedupMap[code] = item;
                     }
                 }
-                // else: existing is active, new is not - keep existing
             }
         }
 
@@ -340,17 +366,7 @@ router.post('/api/items/merge-sync', async (req, res) => {
         }
         console.log('[MergeSync] POS has', dedupedLocalItems.length, 'unique valid items');
 
-        // Helper to format date for MySQL
-        const formatDate = (d) => {
-            try {
-                if (!d) return new Date().toISOString().slice(0, 19).replace('T', ' ');
-                const date = new Date(d);
-                if (isNaN(date.getTime())) return new Date().toISOString().slice(0, 19).replace('T', ' ');
-                return date.toISOString().slice(0, 19).replace('T', ' ');
-            } catch (e) {
-                return new Date().toISOString().slice(0, 19).replace('T', ' ');
-            }
-        };
+
 
         // Results
         const itemsForPOS = [];      // Items POS should update (web is newer)
@@ -376,7 +392,7 @@ router.post('/api/items/merge-sync', async (req, res) => {
                             WHERE CODE = ?
                         `, [
                             localItem.NAME, localItem.BUYING_PRICE, localItem.SELLING_PRICE,
-                            localItem.IS_ACTIVE, formatDate(localItem.EDITED_DATE), localItem.CODE
+                            localItem.IS_ACTIVE, toMySQLDateTime(localItem.EDITED_DATE), localItem.CODE
                         ]);
                         itemsUpdatedOnWeb.push(localItem.CODE);
                     } else if (webDate > localDate) {
@@ -405,7 +421,7 @@ router.post('/api/items/merge-sync', async (req, res) => {
                             EDITED_DATE = VALUES(EDITED_DATE)
                     `, [
                         localItem.CODE, localItem.NAME, localItem.BUYING_PRICE,
-                        localItem.SELLING_PRICE, localItem.IS_ACTIVE, formatDate(localItem.EDITED_DATE)
+                        localItem.SELLING_PRICE, localItem.IS_ACTIVE, toMySQLDateTime(localItem.EDITED_DATE)
                     ]);
                     itemsCreatedOnWeb.push(localItem.CODE);
                 }
@@ -461,24 +477,25 @@ router.post('/api/items/merge-sync', async (req, res) => {
 
 function toMySQLDateTime(isoStr) {
     try {
+        if (!isoStr) isoStr = new Date();
+
         let date;
-        if (!isoStr) {
-            date = new Date();
+        // If it's a string missing timezone info (e.g., "2026-02-21 06:12:14" from POS localSync)
+        if (typeof isoStr === 'string' && !isoStr.includes('Z') && !isoStr.includes('T') && !isoStr.includes('+')) {
+            // Assume it's already Asia/Colombo time (SLT)
+            date = new Date(isoStr + " +05:30");
+            // If parsing fails with offset, fallback to normal
+            if (isNaN(date.getTime())) date = new Date(isoStr);
         } else {
+            // It's likely an ISO string or Date object
             date = new Date(isoStr);
-            if (isNaN(date.getTime())) {
-                date = new Date();
-            }
         }
 
-        // Convert to Sri Lanka Time (UTC+5:30) manually if server is not in SL, 
-        // OR simply format as Local Time if server is expected to be in SL.
-        // Since user said "mark at UTC time and updated time marked at srilanken time",
-        // we assume the server is running in SL time (or configured so).
-        // The issue was toISOString() FORCES UTC.
-        // We want YYYY-MM-DD HH:mm:ss in LOCAL time.
+        if (isNaN(date.getTime())) {
+            date = new Date();
+        }
 
-        // Use sv-SE locale trick for YYYY-MM-DD HH:mm:ss format in specific timezone
+        // Return YYYY-MM-DD HH:mm:ss in Asia/Colombo
         return date.toLocaleString('sv-SE', {
             timeZone: 'Asia/Colombo',
             year: 'numeric',
@@ -489,12 +506,9 @@ function toMySQLDateTime(isoStr) {
             second: '2-digit'
         }).replace('T', ' ');
 
-    } catch (e) {
-        // Fallback to simplistic local string construction
-        const now = new Date();
-        now.setHours(now.getHours() + 5); // Rough fallback if timezone fails
-        now.setMinutes(now.getMinutes() + 30);
-        return now.toISOString().slice(0, 19).replace('T', ' ');
+    } catch (error) {
+        console.error('[toMySQLDateTime] Error:', error);
+        return new Date().toISOString().slice(0, 19).replace('T', ' ');
     }
 }
 
@@ -780,7 +794,7 @@ router.post('/api/transactions/sync', async (req, res) => {
         }
 
         // Format dates
-        const createdDate = transaction.createdAt ? toMySQLDateTime(transaction.createdAt) : new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const createdDate = toMySQLDateTime(transaction.createdAt);
 
         // Build human-readable comments
         let commentParts = [];
@@ -1303,7 +1317,7 @@ router.post('/api/weights/sync', async (req, res) => {
     try {
         const createdDate = weightData.createdAt
             ? toMySQLDateTime(weightData.createdAt)
-            : new Date().toISOString().slice(0, 19).replace('T', ' ');
+            : toMySQLDateTime();
         const code = weightData.code || weightData.measureId || `WM-${Date.now()}`;
 
         // Handle delete
@@ -1407,7 +1421,7 @@ router.post('/api/weights/update-status', async (req, res) => {
 
         // ONLY update status fields, preserve everything else (items, weights, etc.)
         itemDetails.status = status || 'Money Collected';
-        itemDetails.collectedAt = new Date().toISOString();
+        itemDetails.collectedAt = toMySQLDateTime();
         itemDetails.transactionCode = transactionCode || null;
 
         // Update the record - preserving all other fields
@@ -1731,7 +1745,7 @@ router.post('/api/items/update', async (req, res) => {
         }
 
         if (!existing) {
-            console.log(`[Update] No item found for ${isNumeric ? 'ID' : 'CODE'}: ${itemId}`);
+            // console.log(`[Update] No item found for ${isNumeric ? 'ID' : 'CODE'}: ${itemId}`);
             return res.status(404).json({ success: false, message: 'Item not found' });
         }
 

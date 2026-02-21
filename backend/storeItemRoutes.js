@@ -66,12 +66,31 @@ router.post('/api/addItem', async (req, res) => {
             return res.status(500).json({ success: false, message: 'Internal server error' });
         }
 
-        // Helper to format date for MySQL
+        // Helper to format date for MySQL in Sri Lanka Time
         const toMySQLDateTime = (isoStr) => {
-            if (!isoStr) return null;
             try {
-                return new Date(isoStr).toISOString().slice(0, 19).replace('T', ' ');
-            } catch (e) { return isoStr; }
+                let date;
+                if (!isoStr) {
+                    date = new Date();
+                } else {
+                    date = new Date(isoStr);
+                    if (isNaN(date.getTime())) {
+                        date = new Date();
+                    }
+                }
+
+                return date.toLocaleString('sv-SE', {
+                    timeZone: 'Asia/Colombo',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }).replace('T', ' ');
+            } catch (e) {
+                return toMySQLDateTime();
+            }
         };
 
         // Format Date Fields if present
@@ -93,7 +112,7 @@ router.post('/api/addItem', async (req, res) => {
         delete req.body.STOCK;
 
         // UPSERT: Insert item or update if CODE already exists (prevents duplicates atomically)
-        const editedDate = req.body.EDITED_DATE || new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const editedDate = toMySQLDateTime(req.body.EDITED_DATE);
         const createdBy = req.body.CREATED_BY || null;
         const showInWeighing = req.body.SHOW_IN_WEIGHING !== undefined ? req.body.SHOW_IN_WEIGHING : 1;
 

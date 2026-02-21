@@ -18,6 +18,7 @@ import Reports from './pages/reports/Reports';
 import ReportsDashboard from './pages/reports-dashboard/ReportsDashboard';
 import Graphs from './pages/graphs/Graphs'; // New Import
 import Notifications from './pages/notifications/Notifications';
+import DevCache from './pages/DevCache';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
@@ -58,6 +59,7 @@ function App() {
                 <Route path="/reports-dashboard" element={<ReportsDashboard />} />
                 <Route path="/graphs" element={<Graphs />} />
                 <Route path="/notifications" element={<Notifications />} />
+                <Route path="/dev-cache" element={<DevCache />} />
             </Route>
 
             {/* Fallback */}

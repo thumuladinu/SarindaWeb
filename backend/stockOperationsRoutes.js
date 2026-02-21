@@ -187,7 +187,7 @@ router.get('/api/stock-ops/next-web-trip-id/:storeId', async (req, res) => {
 // =====================================================
 
 router.post('/api/stock-ops/create', async (req, res) => {
-    console.log('[Stock Ops] Create operation request:', req.body.OP_TYPE);
+    //console.log('[Stock Ops] Create operation request:', req.body.OP_TYPE);
 
     try {
         const data = req.body;
@@ -204,7 +204,7 @@ router.post('/api/stock-ops/create', async (req, res) => {
                 [data.LOCAL_ID]
             );
             if (existing && existing.length > 0) {
-                console.log(`[Stock Ops] Duplicate submission detected for LOCAL_ID: ${data.LOCAL_ID}. Returning existing.`);
+                //console.log(`[Stock Ops] Duplicate submission detected for LOCAL_ID: ${data.LOCAL_ID}. Returning existing.`);
                 return res.status(200).json({
                     success: true,
                     message: 'Operation already processed (Duplicate)',
@@ -224,7 +224,7 @@ router.post('/api/stock-ops/create', async (req, res) => {
         if (opCode) {
             const existingOp = await pool.query("SELECT OP_ID, OP_CODE FROM store_stock_operations WHERE OP_CODE = ?", [opCode]);
             if (existingOp && existingOp.length > 0) {
-                console.log(`[Stock Ops] Existing OP_CODE ${opCode} found. Archiving old record (Edit/Re-sync).`);
+                //console.log(`[Stock Ops] Existing OP_CODE ${opCode} found. Archiving old record (Edit/Re-sync).`);
                 const oldOpId = existingOp[0].OP_ID;
 
                 // Soft Delete Strategy:
@@ -305,7 +305,7 @@ router.post('/api/stock-ops/create', async (req, res) => {
                 // Use Unified Stock Calculator
                 const stock = await calculateCurrentStock(pool, item.ITEM_ID, data.STORE_NO || 1);
                 itemStocks.set(item.ITEM_ID, stock);
-                console.log(`[Stock Ops] Pre-fetch stock for item ${item.ITEM_ID}: ${stock.toFixed(2)}kg`);
+                //console.log(`[Stock Ops] Pre-fetch stock for item ${item.ITEM_ID}: ${stock.toFixed(2)}kg`);
             }
         }
 
@@ -439,7 +439,7 @@ router.post('/api/stock-ops/create', async (req, res) => {
             }
         }
 
-        console.log(`[Stock Ops] Created operation ${opCode} (Type: ${opType})${billCode ? `, Bill: ${billCode}` : ''}`);
+        //console.log(`[Stock Ops] Created operation ${opCode} (Type: ${opType})${billCode ? `, Bill: ${billCode}` : ''}`);
 
         return res.status(200).json({
             success: true,
@@ -463,7 +463,7 @@ router.post('/api/stock-ops/create', async (req, res) => {
 // =====================================================
 
 router.post('/api/stock-ops/update', async (req, res) => {
-    console.log('[Stock Ops] Update operation request:', req.body.OP_ID || req.body.LOCAL_ID);
+    //console.log('[Stock Ops] Update operation request:', req.body.OP_ID || req.body.LOCAL_ID);
 
     try {
         const data = req.body;
@@ -514,7 +514,7 @@ router.post('/api/stock-ops/update', async (req, res) => {
 // =====================================================
 
 router.post('/api/stock-ops/delete', async (req, res) => {
-    console.log('[Stock Ops] Delete operation request:', req.body);
+    //console.log('[Stock Ops] Delete operation request:', req.body);
 
     const connection = await pool.promise().getConnection();
     try {
@@ -535,7 +535,7 @@ router.post('/api/stock-ops/delete', async (req, res) => {
             if (rows.length > 0) op = rows[0];
         }
 
-        console.log('[Stock Ops] Found op:', op);
+        //console.log('[Stock Ops] Found op:', op);
 
         if (!op) {
             await connection.release();
@@ -545,7 +545,7 @@ router.post('/api/stock-ops/delete', async (req, res) => {
         const opId = op.OP_ID;
         const opCode = op.OP_CODE;
 
-        console.log(`[Stock Ops] Soft deleting operation: ${opCode} (ID: ${opId})`);
+        //console.log(`[Stock Ops] Soft deleting operation: ${opCode} (ID: ${opId})`);
 
         // 2. Soft Delete Operation Record
         await connection.query('UPDATE store_stock_operations SET IS_ACTIVE = 0 WHERE OP_ID = ?', [opId]);
@@ -571,7 +571,7 @@ router.post('/api/stock-ops/delete', async (req, res) => {
 
         if (txs.length > 0) {
             const txIds = txs.map(t => t.TRANSACTION_ID);
-            console.log(`[Stock Ops] Deactivating ${txIds.length} stock transactions: ${txIds.join(', ')}`);
+            //console.log(`[Stock Ops] Deactivating ${txIds.length} stock transactions: ${txIds.join(', ')}`);
 
             // Soft Delete Transaction Items
             await connection.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID IN (?)', [txIds]);
@@ -579,7 +579,7 @@ router.post('/api/stock-ops/delete', async (req, res) => {
             // Soft Delete Transactions
             await connection.query('UPDATE store_transactions SET IS_ACTIVE = 0 WHERE TRANSACTION_ID IN (?)', [txIds]);
         } else {
-            console.log(`[Stock Ops] Warning: No active stock transactions found for OpCode ${opCode}`);
+            //console.log(`[Stock Ops] Warning: No active stock transactions found for OpCode ${opCode}`);
         }
 
         // 4. Handle Selling Transactions (if Op 3/4)
@@ -601,7 +601,7 @@ router.post('/api/stock-ops/delete', async (req, res) => {
 
     } catch (error) {
         await connection.rollback();
-        console.error('[Stock Ops] Delete error:', error);
+        // console.error('[Stock Ops] Delete error:', error);
         return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
     } finally {
         connection.release();
@@ -628,9 +628,9 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
     const storeNo = data.STORE_NO || 1;
     const createdBy = data.CREATED_BY || 1;
 
-    console.log(`[Stock Ops] Updating stock for opType=${opType}, clearance=${clearanceType}`);
-    console.log(`[Stock Ops] Items:`, JSON.stringify(data.items?.map(i => ({ id: i.ITEM_ID, name: i.ITEM_NAME, qty: i.QUANTITY || i.CLEARED_QUANTITY })) || []));
-    console.log(`[Stock Ops] Conversions:`, JSON.stringify(data.conversions?.map(c => ({ src: c.SOURCE_ITEM_ID, dest: c.DEST_ITEM_ID, qty: c.DEST_QUANTITY })) || []));
+    //console.log(`[Stock Ops] Updating stock for opType=${opType}, clearance=${clearanceType}`);
+    //console.log(`[Stock Ops] Items:`, JSON.stringify(data.items?.map(i => ({ id: i.ITEM_ID, name: i.ITEM_NAME, qty: i.QUANTITY || i.CLEARED_QUANTITY })) || []));
+    //console.log(`[Stock Ops] Conversions:`, JSON.stringify(data.conversions?.map(c => ({ src: c.SOURCE_ITEM_ID, dest: c.DEST_ITEM_ID, qty: c.DEST_QUANTITY })) || []));
 
     // Generate transaction code
     const now = new Date();
@@ -675,7 +675,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
         };
         await pool.query('INSERT INTO store_transactions_items SET ?', txItemObj);
 
-        console.log(`[Stock Ops] Created ${txType} tx#${txId} for item ${itemId}: ${adjustmentQty > 0 ? '+' : ''}${adjustmentQty.toFixed(2)}kg`);
+        //console.log(`[Stock Ops] Created ${txType} tx#${txId} for item ${itemId}: ${adjustmentQty > 0 ? '+' : ''}${adjustmentQty.toFixed(2)}kg`);
         return txId;
     }
 
@@ -724,7 +724,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
             const totalDestQty = sourceInfo.totalDestQty;
             const currentStock = await getCurrentStock(sourceInfo.itemId);
 
-            console.log(`[Stock Ops] Conversion - Source ${sourceId} (${sourceInfo.itemName}): current=${currentStock}kg, destSum=${totalDestQty}kg`);
+            //console.log(`[Stock Ops] Conversion - Source ${sourceId} (${sourceInfo.itemName}): current=${currentStock}kg, destSum=${totalDestQty}kg`);
 
             if (clearanceType === 'FULL') {
                 // Full conversion: Clear source to 0, add all destinations
@@ -780,12 +780,12 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
         const totalConvertedQty = convs.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
         // Use pre-fetched current stock (consistent with DB record)
         const currentStock = itemStocks.get(itemId) || 0;
-        console.log(`[Stock Ops] Using pre-fetched stock for ${itemId}: ${currentStock.toFixed(2)}kg`);
+        //console.log(`[Stock Ops] Using pre-fetched stock for ${itemId}: ${currentStock.toFixed(2)}kg`);
 
-        console.log(`[Stock Ops] OP ${opType} - ${itemCode} ${itemName}`);
-        console.log(`[Stock Ops]   Current Stock: ${currentStock.toFixed(2)}kg`);
-        console.log(`[Stock Ops]   Sold: ${soldQty}kg @ Rs${pricePerKg}/kg = Rs${billTotal}`);
-        console.log(`[Stock Ops]   Converted: ${totalConvertedQty}kg to ${convs.length} items`);
+        //console.log(`[Stock Ops] OP ${opType} - ${itemCode} ${itemName}`);
+        //console.log(`[Stock Ops]   Current Stock: ${currentStock.toFixed(2)}kg`);
+        //console.log(`[Stock Ops]   Sold: ${soldQty}kg @ Rs${pricePerKg}/kg = Rs${billTotal}`);
+        //console.log(`[Stock Ops]   Converted: ${totalConvertedQty}kg to ${convs.length} items`);
 
         // Generate bill code - Format: S{STORE}-{YYMMDD}-SLO-{TERMINAL}-{COUNT}
         const now = new Date();
@@ -857,7 +857,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
             };
             await pool.query('INSERT INTO store_transactions_items SET ?', sellingItemObj);
 
-            console.log(`[Stock Ops] Created Selling tx#${sellingTxId} (${billCode}): ${soldQty}kg @ Rs${pricePerKg} = Rs${billTotal}`);
+            //console.log(`[Stock Ops] Created Selling tx#${sellingTxId} (${billCode}): ${soldQty}kg @ Rs${pricePerKg} = Rs${billTotal}`);
         }
 
         // Handle conversions - AdjOut from source, AdjIn to destinations
@@ -885,21 +885,21 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
                     // Positive remaining = wastage (needs AdjOut)
                     const wastageComment = `[${opCode}] Wastage: ${remainingAfterSaleConv.toFixed(2)}kg of ${itemCode} ${itemName} (Full Clear: ${currentStock.toFixed(2)}kg - Sold ${soldQty}kg - Converted ${totalConvertedQty}kg)`;
                     await createAdjustment(itemId, -remainingAfterSaleConv, 'AdjOut', wastageComment);
-                    console.log(`[Stock Ops] Wastage: ${remainingAfterSaleConv.toFixed(2)}kg`);
+                    //console.log(`[Stock Ops] Wastage: ${remainingAfterSaleConv.toFixed(2)}kg`);
                 } else {
                     // Negative remaining = surplus discovered (needs AdjIn)
                     const surplusQty = Math.abs(remainingAfterSaleConv);
                     const surplusComment = `[${opCode}] Surplus: ${surplusQty.toFixed(2)}kg of ${itemCode} ${itemName} (Full Clear: stock correction)`;
                     await createAdjustment(itemId, surplusQty, 'AdjIn', surplusComment);
-                    console.log(`[Stock Ops] Surplus: ${surplusQty.toFixed(2)}kg`);
+                    //console.log(`[Stock Ops] Surplus: ${surplusQty.toFixed(2)}kg`);
                 }
             }
 
-            console.log(`[Stock Ops] Full Clear complete: ${itemCode} stock now 0`);
+            //console.log(`[Stock Ops] Full Clear complete: ${itemCode} stock now 0`);
         } else {
             // Op 4 (Partial Clear): Stock = current - sold - converted
             const newStock = currentStock - soldQty - totalConvertedQty;
-            console.log(`[Stock Ops] Partial Clear complete: ${itemCode} stock ${currentStock.toFixed(2)}kg → ${newStock.toFixed(2)}kg`);
+            //console.log(`[Stock Ops] Partial Clear complete: ${itemCode} stock ${currentStock.toFixed(2)}kg → ${newStock.toFixed(2)}kg`);
         }
 
         // Calculate wastage for return  
@@ -924,7 +924,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
     // (Excluding 3, 4 which are handled above)
     // ========================================================
     if (!data.items || data.items.length === 0) {
-        console.log('[Stock Ops] No items to process');
+        //console.log('[Stock Ops] No items to process');
         return;
     }
 
@@ -935,14 +935,14 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
         const itemQty = getItemQty(item);
         const itemHasConversions = hasConversions(itemId);
 
-        console.log(`[Stock Ops] Processing item ${itemId} (${itemName}): qty=${itemQty}, hasConv=${itemHasConversions}`);
+        //console.log(`[Stock Ops] Processing item ${itemId} (${itemName}): qty=${itemQty}, hasConv=${itemHasConversions}`);
 
         if (clearanceType === 'FULL') {
             // FULL CLEARANCE: Make stock = 0
             const currentStock = await getCurrentStock(itemId);
 
             if (currentStock === 0) {
-                console.log(`[Stock Ops] Item ${itemId} already at 0, skipping clearance`);
+                //console.log(`[Stock Ops] Item ${itemId} already at 0, skipping clearance`);
             } else {
                 const adjustment = -currentStock;
                 const txType = adjustment > 0 ? 'AdjIn' : 'AdjOut';
@@ -970,7 +970,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
 
                 // Use explicitly provided quantity if it covers the conversion (as expected from new POS logic)
                 // Fallback to totalConvQty if itemQty is missing or less (legacy safety)
-                console.log(`[Stock Ops] Op 2 DEBUG: itemQty=${itemQty}, totalConvQty=${totalConvQty}, condition=${(itemQty && itemQty >= totalConvQty)}`);
+                //console.log(`[Stock Ops] Op 2 DEBUG: itemQty=${itemQty}, totalConvQty=${totalConvQty}, condition=${(itemQty && itemQty >= totalConvQty)}`);
                 const qtyToRemove = (itemQty && itemQty >= totalConvQty) ? itemQty : totalConvQty;
 
                 if (qtyToRemove > 0) {
@@ -1000,10 +1000,10 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
 
     // Log wastage/surplus from operation data
     if (data.WASTAGE_AMOUNT && parseFloat(data.WASTAGE_AMOUNT) > 0) {
-        console.log(`[Stock Ops] Wastage: ${data.WASTAGE_AMOUNT}kg`);
+        //console.log(`[Stock Ops] Wastage: ${data.WASTAGE_AMOUNT}kg`);
     }
     if (data.SURPLUS_AMOUNT && parseFloat(data.SURPLUS_AMOUNT) > 0) {
-        console.log(`[Stock Ops] Surplus: ${data.SURPLUS_AMOUNT}kg`);
+        //console.log(`[Stock Ops] Surplus: ${data.SURPLUS_AMOUNT}kg`);
     }
 }
 
@@ -1280,7 +1280,7 @@ router.post('/api/stock-ops/transfers/approve', async (req, res) => {
             }
         }
 
-        console.log(`[Stock Ops] Transfer ${TRANSFER_ID} approved`);
+        //console.log(`[Stock Ops] Transfer ${TRANSFER_ID} approved`);
         return res.status(200).json({ success: true, message: 'Transfer approved successfully' });
 
     } catch (error) {
@@ -1308,7 +1308,7 @@ router.post('/api/stock-ops/transfers/reject', async (req, res) => {
             WHERE TRANSFER_ID = ? AND STATUS = 'PENDING'
         `, [APPROVED_BY, APPROVED_BY_NAME, REJECT_REASON || '', TRANSFER_ID]);
 
-        console.log(`[Stock Ops] Transfer ${TRANSFER_ID} rejected`);
+        //console.log(`[Stock Ops] Transfer ${TRANSFER_ID} rejected`);
         return res.status(200).json({ success: true, message: 'Transfer rejected' });
 
     } catch (error) {
@@ -1462,7 +1462,7 @@ router.post('/api/stock-ops/lorry/returns', async (req, res) => {
             [newStatus, data.OP_ID]
         );
 
-        console.log(`[Stock Ops] Return added to operation ${data.OP_ID}`);
+        //console.log(`[Stock Ops] Return added to operation ${data.OP_ID}`);
         return res.status(200).json({
             success: true,
             message: 'Return recorded successfully',
@@ -1501,7 +1501,7 @@ router.post('/api/stock-ops/deactivate', async (req, res) => {
             await pool.query('UPDATE store_stock_transfer_items SET IS_ACTIVE = 0 WHERE TRANSFER_ID = ?', [ops[0].TRANSFER_ID]);
         }
 
-        console.log(`[Stock Ops] Operation ${OP_ID} deactivated`);
+        //console.log(`[Stock Ops] Operation ${OP_ID} deactivated`);
         return res.status(200).json({ success: true, message: 'Operation deactivated' });
 
     } catch (error) {
@@ -1563,7 +1563,7 @@ router.post('/api/stock-ops/reports/summary', async (req, res) => {
 // =====================================================
 
 router.post('/api/stock-ops/get-returnable', async (req, res) => {
-    console.log('[Stock Ops] Get returnable operations request', req.body);
+    //console.log('[Stock Ops] Get returnable operations request', req.body);
 
     try {
         const { storeNo, limit = 50, itemId, search } = req.body;
@@ -1625,7 +1625,7 @@ router.post('/api/stock-ops/get-returnable', async (req, res) => {
         query += ' ORDER BY so.CREATED_DATE DESC LIMIT ?';
         params.push(parseInt(limit));
 
-        console.log('[Stock Ops] returnable Query:', query);
+        //console.log('[Stock Ops] returnable Query:', query);
         const operations = await pool.query(query, params);
 
         // Enhance with BILL_CODE fallback if needed
@@ -1635,7 +1635,7 @@ router.post('/api/stock-ops/get-returnable', async (req, res) => {
             }
         }
 
-        console.log('[Stock Ops] Found returnable ops:', operations.length);
+        //console.log('[Stock Ops] Found returnable ops:', operations.length);
 
         return res.status(200).json({
             success: true,
@@ -1653,7 +1653,7 @@ router.post('/api/stock-ops/get-returnable', async (req, res) => {
 // =====================================================
 
 router.post('/api/stock-ops/create-return', async (req, res) => {
-    console.log('[Stock Ops] Create stock return request');
+    //console.log('[Stock Ops] Create stock return request');
 
     try {
         const data = req.body;
@@ -1675,7 +1675,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Reference operation ID required' });
         }
 
-        console.log(`[Stock Ops] Return request for REF_OP_ID=${REFERENCE_OP_ID}, ITEM_CODE=${ITEM_CODE}, QTY=${RETURN_QUANTITY}`);
+        //console.log(`[Stock Ops] Return request for REF_OP_ID=${REFERENCE_OP_ID}, ITEM_CODE=${ITEM_CODE}, QTY=${RETURN_QUANTITY}`);
 
         // Validate reference operation exists and is type 1, 2, 3, 4, 7, 8, 9
         // (Any op that removes/adjusts stock except transfers/returns)
@@ -1691,7 +1691,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             const lookupCode = data.REFERENCE_OP_CODE || (String(REFERENCE_OP_ID).startsWith('S') ? String(REFERENCE_OP_ID) : null);
 
             if (lookupCode) {
-                console.log(`[Stock Ops] Lookup by ID failed, trying OP_CODE=${lookupCode}`);
+                //console.log(`[Stock Ops] Lookup by ID failed, trying OP_CODE=${lookupCode}`);
                 const codeResult = await pool.query(
                     'SELECT * FROM store_stock_operations WHERE OP_CODE = ? AND OP_TYPE IN (1, 2, 3, 4, 7, 8, 9) AND IS_ACTIVE = 1 LIMIT 1',
                     [lookupCode]
@@ -1700,18 +1700,18 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
                 if (codeResult.length > 0) {
                     refOpResult = codeResult;
                     validRefOpId = codeResult[0].OP_ID;
-                    console.log(`[Stock Ops] Recovered reference Op: ${lookupCode} -> ID ${validRefOpId}`);
+                    //console.log(`[Stock Ops] Recovered reference Op: ${lookupCode} -> ID ${validRefOpId}`);
                 }
             }
         }
 
         if (REFERENCE_OP_ID === null || REFERENCE_OP_ID === 'DIRECT') {
-            console.log(`[Stock Ops] Direct return (No reference) for ITEM_CODE=${ITEM_CODE}, QTY=${RETURN_QUANTITY}`);
+            //console.log(`[Stock Ops] Direct return (No reference) for ITEM_CODE=${ITEM_CODE}, QTY=${RETURN_QUANTITY}`);
             // Direct return proceeds without a reference op
         } else if (refOpResult.length === 0) {
             // Smart retry: If REFERENCE_OP_ID is an operation code (S2-OP-...), the operation might not be synced yet
             // Only mark as permanent if it's a numeric ID (truly doesn't exist in DB)
-            console.warn(`[Stock Ops] Invalid reference operation: OP_ID=${REFERENCE_OP_ID} not found (or inactive/wrong type)`);
+            // console.warn(`[Stock Ops] Invalid reference operation: OP_ID=${REFERENCE_OP_ID} not found (or inactive/wrong type)`);
             return res.status(400).json({
                 success: false,
                 message: `Invalid reference operation (OP_ID=${String(REFERENCE_OP_ID)} not found in DB)`,
@@ -1738,7 +1738,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
         // --- Handle Expenses if provided ---
         const expenseAmt = parseFloat(data.returnExpenseAmount) || 0;
         if (expenseAmt > 0) {
-            console.log(`[Stock Ops] Creating automated expense for return: ${expenseAmt} for item ${ITEM_ID}`);
+            //console.log(`[Stock Ops] Creating automated expense for return: ${expenseAmt} for item ${ITEM_ID}`);
             try {
                 // Use pre-generated expense code from client (S1/S2 with terminal suffix),
                 // or generate WEB-format code if not provided
@@ -1768,7 +1768,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
                 };
 
                 await pool.query('INSERT INTO store_transactions SET ?', expenseRecord);
-                console.log(`[Stock Ops] Automated expense created: ${expenseCode}`);
+                //console.log(`[Stock Ops] Automated expense created: ${expenseCode}`);
             } catch (expErr) {
                 console.error('[Stock Ops] Automated expense failed:', expErr);
                 // We don't block the return if expense fails, but log it
@@ -1876,7 +1876,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
                 };
                 await pool.query('INSERT INTO store_stock_operation_conversions SET ?', convRecord);
 
-                console.log(`[Stock Ops] Return conversion: Added ${destQty}kg of ${conv.DEST_ITEM_NAME} to Store ${storeNo}`);
+                //console.log(`[Stock Ops] Return conversion: Added ${destQty}kg of ${conv.DEST_ITEM_NAME} to Store ${storeNo}`);
             }
         } else {
             // Direct return - add stock for the original item
@@ -1906,10 +1906,10 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             };
             await pool.query('INSERT INTO store_transactions_items SET ?', txItemObj);
 
-            console.log(`[Stock Ops] Direct return: Added ${returnQty}kg of ${itemName} to Store ${storeNo}`);
+            //console.log(`[Stock Ops] Direct return: Added ${returnQty}kg of ${itemName} to Store ${storeNo}`);
         }
 
-        console.log(`[Stock Ops] Created return operation ${opCode} (ref: ${refOp.OP_CODE})`);
+        //console.log(`[Stock Ops] Created return operation ${opCode} (ref: ${refOp.OP_CODE})`);
 
         // --- NEW: Trigger Push Notification for RETURNS ---
         try {

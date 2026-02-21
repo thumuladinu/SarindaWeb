@@ -1,5 +1,6 @@
 import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
+import Cookies from 'js-cookie';
 import {
     AppstoreOutlined,
     TransactionOutlined,
@@ -12,7 +13,8 @@ import {
     FileTextOutlined,
     StockOutlined, // New
     DashboardOutlined,
-    LineChartOutlined
+    LineChartOutlined,
+    DatabaseOutlined
 } from '@ant-design/icons';
 import { Tooltip } from 'antd';
 import logo from "../../assets/images/logo.png";
@@ -24,7 +26,7 @@ const NAV_ITEMS = [
     { label: 'Items', path: '/items', icon: <ShopOutlined /> },
     { label: 'Inventory', path: '/inventory', icon: <StockOutlined /> }, // New
     { label: 'Customers', path: '/customers', icon: <TeamOutlined /> },
-    { label: 'Users', path: '/users', icon: <UserOutlined /> },
+    // { label: 'Users', path: '/users', icon: <UserOutlined /> },
     { label: 'Weighting', path: '/weighting', icon: <ExperimentOutlined /> },
     { label: 'Trips', path: '/trips', icon: <TruckOutlined /> }, // Changed from CarOutlined
     { key: '/stock-operations', label: 'Stock Ops', path: '/stock-operations', icon: <StockOutlined /> }, // New
@@ -35,6 +37,10 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
     const location = useLocation();
+
+    // Get user role for conditional rendering
+    const userCookie = Cookies.get('rememberedUser');
+    const userRole = userCookie ? JSON.parse(userCookie).ROLE?.toLowerCase() : '';
 
     return (
         <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 z-50 glass-sidebar border-r border-white/10">
@@ -74,6 +80,28 @@ export default function Sidebar() {
                         </Link>
                     );
                 })}
+
+                {/* Dev Only: Local Cache Inspector */}
+                {userRole === 'dev' && (
+                    <Link
+                        to="/dev-cache"
+                        className={`
+                            relative flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 group
+                            ${location.pathname === '/dev-cache'
+                                ? 'bg-gradient-to-r from-purple-500/20 to-purple-500/10 text-purple-400 font-semibold'
+                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }
+                        `}
+                    >
+                        {location.pathname === '/dev-cache' && (
+                            <div className="absolute left-0 w-1 h-6 bg-purple-500 rounded-r-full shadow-[0_0_12px_rgba(168,85,247,0.5)]" />
+                        )}
+                        <span className={`text-xl transition-transform duration-300 ${location.pathname === '/dev-cache' ? 'scale-110' : 'group-hover:scale-110'}`}>
+                            <DatabaseOutlined />
+                        </span>
+                        <span>Local Cache</span>
+                    </Link>
+                )}
             </nav>
 
             {/* User Profile Mini - Optional Footer */}

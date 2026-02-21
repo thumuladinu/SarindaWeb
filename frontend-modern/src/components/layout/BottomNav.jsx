@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import Cookies from 'js-cookie';
 import {
     HomeFilled,
     TransactionOutlined,
@@ -14,7 +15,8 @@ import {
     StockOutlined, // New
     CloseOutlined,
     DashboardOutlined,
-    LineChartOutlined
+    LineChartOutlined,
+    DatabaseOutlined
 } from '@ant-design/icons';
 import { Drawer } from 'antd';
 
@@ -126,6 +128,9 @@ const BottomNav = () => {
                         <DrawerItem path="/reports" icon={<FileTextOutlined />} label="Reports" />
                         <DrawerItem path="/reports-dashboard" icon={<DashboardOutlined />} label="Dashboards" />
                         <DrawerItem path="/graphs" icon={<LineChartOutlined />} label="Graphs" />
+                        {Cookies.get('rememberedUser') && JSON.parse(Cookies.get('rememberedUser')).ROLE?.toLowerCase() === 'dev' && (
+                            <DrawerItem path="/dev-cache" icon={<DatabaseOutlined />} label="Local Cache" />
+                        )}
                     </div>
                 </div>
             </Drawer>
