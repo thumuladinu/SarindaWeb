@@ -1129,6 +1129,7 @@ router.post('/api/graphs/item-data', async (req, res) => {
         const runningStockQuery = `
             SELECT 
                 DATE(st.CREATED_DATE) as tx_date,
+                st.STORE_NO,
                 SUM(CASE 
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
                     WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
@@ -1140,12 +1141,12 @@ router.post('/api/graphs/item-data', async (req, res) => {
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
               AND DATE(st.CREATED_DATE) <= ?
-            GROUP BY DATE(st.CREATED_DATE)
+            GROUP BY DATE(st.CREATED_DATE), st.STORE_NO
             ORDER BY tx_date ASC
         `;
         const dailyStockChanges = await pool.query(runningStockQuery, [itemId, endDate]);
 
-        // 2. Get Buying and Selling transactions within the date range
+        // ... (Price transactions query remains same) ...
         const txQuery = `
             SELECT 
                 DATE(st.CREATED_DATE) as tx_date,
@@ -1231,8 +1232,7 @@ router.post('/api/graphs/item-data', async (req, res) => {
                 startDate: toLocalYYYYMMDD(bucketStart),
                 endDate: toLocalYYYYMMDD(bucketEnd),
                 buyTotal: 0, buyQty: 0,
-                sellTotal: 0, sellQty: 0,
-                runningStock: 0
+                sellTotal: 0, sellQty: 0
             });
         }
 
@@ -1240,40 +1240,39 @@ router.post('/api/graphs/item-data', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Date range too large for selected period (max 100 data points)' });
         }
 
-        // 4. Calculate daily running stock up to endDate
-        const runningStockByDate = {};
-        let currentStock = 0;
+        // 4. Calculate daily running stock by store
+        const runningStockByDate = {}; // will store { date: { s1, s2, total } }
+        let currentS1 = 0;
+        let currentS2 = 0;
 
+        // Group changes by date first to handle same-day changes in both stores
+        const changesByDateAndStore = {};
         for (const record of dailyStockChanges) {
             const dStr = parseDbDate(record.tx_date);
             if (!dStr) continue;
-            currentStock += parseFloat(record.day_change) || 0;
-            runningStockByDate[dStr] = currentStock;
+            if (!changesByDateAndStore[dStr]) changesByDateAndStore[dStr] = { 1: 0, 2: 0 };
+            changesByDateAndStore[dStr][record.STORE_NO] = parseFloat(record.day_change) || 0;
         }
 
         let earliestDateStr = dailyStockChanges.length > 0 ? parseDbDate(dailyStockChanges[0].tx_date) : startDate;
         if (!earliestDateStr) earliestDateStr = startDate;
 
-        // Backfill / Forward fill dates so we have O(1) lookups for bucket.endDate
-        // We only really need to fill up to endDate.
         let trackDateObj = new Date(earliestDateStr);
-        // Start trackStock at 0 (or whatever it was if we somehow missed data)
-        let trackStock = 0;
-
-        // Fast forward to make sure we don't start tracking before the first known date unnecessarily unless needed
-        if (new Date(startDate) < trackDateObj) {
-            trackDateObj = new Date(startDate);
-        }
-
+        if (new Date(startDate) < trackDateObj) trackDateObj = new Date(startDate);
         const maxDateObj = new Date(endDate);
 
         while (trackDateObj <= maxDateObj) {
             const dStr = toLocalYYYYMMDD(trackDateObj);
-            if (runningStockByDate.hasOwnProperty(dStr)) {
-                trackStock = runningStockByDate[dStr];
-            } else {
-                runningStockByDate[dStr] = trackStock;
-            }
+            const changes = changesByDateAndStore[dStr] || { 1: 0, 2: 0 };
+
+            currentS1 += parseFloat(changes[1]) || 0;
+            currentS2 += parseFloat(changes[2]) || 0;
+
+            runningStockByDate[dStr] = {
+                s1: currentS1,
+                s2: currentS2,
+                total: currentS1 + currentS2
+            };
             trackDateObj.setDate(trackDateObj.getDate() + 1);
         }
 
@@ -1299,14 +1298,15 @@ router.post('/api/graphs/item-data', async (req, res) => {
 
         // 6. Compute final array
         const result = buckets.map(b => {
-            let stockAtEndOfBucket = runningStockByDate[b.endDate];
-            if (stockAtEndOfBucket === undefined) stockAtEndOfBucket = trackStock;
+            let stockAtEndOfBucket = runningStockByDate[b.endDate] || { s1: currentS1, s2: currentS2, total: currentS1 + currentS2 };
 
             return {
                 label: b.label,
                 avgBuyPrice: b.buyQty > 0 ? parseFloat((b.buyTotal / b.buyQty).toFixed(2)) : null,
                 avgSellPrice: b.sellQty > 0 ? parseFloat((b.sellTotal / b.sellQty).toFixed(2)) : null,
-                stock: parseFloat(stockAtEndOfBucket.toFixed(3))
+                stockS1: parseFloat(stockAtEndOfBucket.s1.toFixed(3)),
+                stockS2: parseFloat(stockAtEndOfBucket.s2.toFixed(3)),
+                stock: parseFloat(stockAtEndOfBucket.total.toFixed(3))
             };
         });
 

@@ -121,15 +121,30 @@ export default function Graphs() {
         return null;
     };
 
+    const [hiddenSeries, setHiddenSeries] = useState([]);
+
+    const handleLegendClick = (e) => {
+        const { dataKey } = e;
+        setHiddenSeries(prev =>
+            prev.includes(dataKey)
+                ? prev.filter(k => k !== dataKey)
+                : [...prev, dataKey]
+        );
+    };
+
     const CustomTooltipStock = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
             return (
                 <div className="bg-[#18181b]/95 backdrop-blur-3xl p-4 rounded-xl border border-white/10 shadow-2xl z-50 ring-1 ring-white/5">
                     <p className="text-gray-300 font-bold mb-3 border-b border-white/10 pb-2">{label}</p>
-                    <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                        <span className="text-gray-400 text-sm">Total Stock:</span>
-                        <span className="font-bold text-emerald-400 tracking-wide">{formatStock(payload[0].value)}</span>
+                    <div className="space-y-2">
+                        {payload.map((entry, idx) => (
+                            <div key={idx} className="flex items-center gap-3">
+                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color || entry.stroke || '#ccc' }} />
+                                <span className="text-gray-400 text-sm">{entry.name}:</span>
+                                <span className="font-bold text-white tracking-wide">{formatStock(entry.value)}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
             );
@@ -240,71 +255,59 @@ export default function Graphs() {
                                 </span>
                                 Price Action Trends
                             </h2>
-                            <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period}</span>
+                            <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period} Avg</span>
                         </div>
 
                         <div className="h-[280px] md:h-[450px] w-full -ml-4 md:ml-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
-                                    <XAxis
-                                        dataKey="label"
-                                        stroke="#6b7280"
-                                        fontSize={10}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickMargin={10}
-                                        fontWeight={600}
-                                    />
-                                    <YAxis
-                                        stroke="#6b7280"
-                                        fontSize={10}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickFormatter={(value) => `Rs ${value}`}
-                                        domain={['auto', 'auto']}
-                                        fontWeight={600}
-                                        width={65}
-                                    />
-                                    <RechartsTooltip content={<CustomTooltipPrice />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20, fill: 'rgba(255,255,255,0.02)' }} />
+                                    <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
+                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value}`} domain={['auto', 'auto']} fontWeight={600} width={65} />
+                                    <RechartsTooltip content={<CustomTooltipPrice />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20 }} />
                                     <Legend
+                                        onClick={handleLegendClick}
                                         iconType="circle"
-                                        wrapperStyle={{ paddingTop: '20px', fontSize: '11px' }}
-                                        formatter={(value) => <span className="text-gray-400 font-semibold tracking-wide ml-1">{value}</span>}
+                                        wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
+                                        formatter={(value, entry) => (
+                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                                {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
+                                            </span>
+                                        )}
                                     />
 
                                     <Line
+                                        hide={hiddenSeries.includes('avgBuyPrice')}
                                         type="monotone"
                                         name="Avg Buying Price"
                                         dataKey="avgBuyPrice"
-                                        stroke="#f97316" // orange-500
+                                        stroke="#f97316"
                                         strokeWidth={3}
                                         dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }}
                                         activeDot={{ r: 5, stroke: '#f97316', strokeWidth: 3, fill: '#fff' }}
                                         connectNulls={true}
                                         animationDuration={1500}
-                                        animationEasing="ease-out"
                                     />
                                     <Line
+                                        hide={hiddenSeries.includes('avgSellPrice')}
                                         type="monotone"
                                         name="Avg Selling Price"
                                         dataKey="avgSellPrice"
-                                        stroke="#10b981" // emerald-500
+                                        stroke="#10b981"
                                         strokeWidth={3}
                                         dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }}
                                         activeDot={{ r: 5, stroke: '#10b981', strokeWidth: 3, fill: '#fff' }}
                                         connectNulls={true}
                                         animationDuration={1500}
-                                        animationEasing="ease-out"
                                     />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
 
-                    {/* Stock Changes */}
-                    <div className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg md:shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/5 relative overflow-hidden group">
-                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-500 to-blue-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    {/* Inventory Volume Evolution */}
+                    <div className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
+                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-500 via-violet-500 to-blue-500 opacity-50 group-hover:opacity-100 transition-opacity" />
 
                         <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
                             <h2 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 md:gap-3">
@@ -316,46 +319,71 @@ export default function Graphs() {
                             <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period}</span>
                         </div>
 
-                        <div className="h-[240px] md:h-[400px] w-full -ml-4 md:ml-0">
+                        <div className="h-[300px] md:h-[500px] w-full -ml-4 md:ml-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
                                     <defs>
-                                        <linearGradient id="colorStock" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.4} />
+                                        <linearGradient id="colorS1" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
                                             <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                                        </linearGradient>
+                                        <linearGradient id="colorS2" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                        </linearGradient>
+                                        <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
+                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
-                                    <XAxis
-                                        dataKey="label"
-                                        stroke="#6b7280"
-                                        fontSize={10}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickMargin={10}
-                                        fontWeight={600}
+                                    <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
+                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value} kg`} fontWeight={600} width={55} />
+                                    <RechartsTooltip content={<CustomTooltipStock />} />
+                                    <Legend
+                                        onClick={handleLegendClick}
+                                        iconType="circle"
+                                        wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
+                                        formatter={(value, entry) => (
+                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                                {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
+                                            </span>
+                                        )}
                                     />
-                                    <YAxis
-                                        stroke="#6b7280"
-                                        fontSize={10}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickFormatter={(value) => `${value} kg`}
-                                        fontWeight={600}
-                                        width={55}
-                                    />
-                                    <RechartsTooltip content={<CustomTooltipStock />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20, fill: 'rgba(255,255,255,0.02)' }} />
 
                                     <Area
+                                        hide={hiddenSeries.includes('stockS1')}
+                                        type="monotone"
+                                        dataKey="stockS1"
+                                        name="Store 1 Stock"
+                                        stroke="#14b8a6"
+                                        strokeWidth={2}
+                                        fillOpacity={1}
+                                        fill="url(#colorS1)"
+                                        animationDuration={1500}
+                                    />
+                                    <Area
+                                        hide={hiddenSeries.includes('stockS2')}
+                                        type="monotone"
+                                        dataKey="stockS2"
+                                        name="Store 2 Stock"
+                                        stroke="#8b5cf6"
+                                        strokeWidth={2}
+                                        fillOpacity={1}
+                                        fill="url(#colorS2)"
+                                        animationDuration={1500}
+                                    />
+                                    <Area
+                                        hide={hiddenSeries.includes('stock')}
                                         type="monotone"
                                         dataKey="stock"
-                                        stroke="#14b8a6" // teal-500
-                                        strokeWidth={3}
+                                        name="Total Stock"
+                                        stroke="#3b82f6"
+                                        strokeWidth={4}
                                         fillOpacity={1}
-                                        fill="url(#colorStock)"
+                                        fill="url(#colorTotal)"
                                         animationDuration={1500}
-                                        animationEasing="ease-out"
-                                        activeDot={{ r: 5, stroke: '#14b8a6', strokeWidth: 3, fill: '#fff' }}
+                                        activeDot={{ r: 6, stroke: '#3b82f6', strokeWidth: 3, fill: '#fff' }}
                                     />
                                 </AreaChart>
                             </ResponsiveContainer>
