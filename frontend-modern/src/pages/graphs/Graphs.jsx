@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Select, DatePicker, Button, Spin, App, Empty } from 'antd';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
-import { SearchOutlined, LineChartOutlined, StockOutlined, BarChartOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Select, DatePicker, Button, Spin, App, Empty, Dropdown } from 'antd';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, AreaChart, Area, Legend, ComposedChart, Bar, Tooltip } from 'recharts';
+import { SearchOutlined, LineChartOutlined, StockOutlined, BarChartOutlined, DownloadOutlined, FilePdfOutlined, FileImageOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import html2canvas from 'html2canvas';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -96,6 +97,75 @@ export default function Graphs() {
         return 'Rs ' + val.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
+    // Calculate evenly spaced ticks for export charts to perfectly align gridline and labels
+    const exportTicks = useMemo(() => {
+        if (!graphData || graphData.length === 0) return [];
+        const maxTicks = 15;
+        if (graphData.length <= maxTicks) return graphData.map(d => d.label);
+        const step = Math.ceil(graphData.length / maxTicks);
+        return graphData.filter((_, i) => i % step === 0).map(d => d.label);
+    }, [graphData]);
+
+    const exportReport = async (format) => {
+        let itemName = 'Unknown_Item';
+        let itemCode = 'Unknown_Code';
+        if (selectedItem) {
+            const found = items.find(i => i.ITEM_ID === selectedItem);
+            if (found) {
+                itemName = found.NAME.replace(/[^a-z0-9]/gi, '_');
+                itemCode = found.CODE;
+            }
+        }
+        const dateStr = dayjs().format('YYYY-MM-DD_HH-mm');
+        const fileName = `Analytics_Report_${itemName}_${dateStr} `;
+
+        try {
+            message.loading({ content: 'Generating report...', key: 'export' });
+
+            // Allow DOM to settle before capturing
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            if (format === 'png') {
+                const element = document.getElementById('full-report-export');
+                // Temporarily make it visible for html2canvas but keep it completely off-screen
+                const originalDisplay = element.style.display;
+                const originalPosition = element.style.position;
+                const originalLeft = element.style.left;
+                const originalTop = element.style.top;
+
+                element.style.display = 'block';
+                element.style.position = 'fixed';
+                element.style.left = '-20000px';
+                element.style.top = '-20000px';
+
+                const canvas = await html2canvas(element, {
+                    backgroundColor: '#18181b',
+                    scale: 2,
+                    logging: false,
+                    useCORS: true,
+                    width: 1600, // Use the width of the export container
+                    windowWidth: 1600
+                });
+
+                // Restore original styles
+                element.style.display = originalDisplay;
+                element.style.position = originalPosition;
+                element.style.left = originalLeft;
+                element.style.top = originalTop;
+
+                const imgData = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = `${fileName}.png`;
+                link.href = imgData;
+                link.click();
+            }
+
+            message.success({ content: 'Report generated successfully!', key: 'export', duration: 2 });
+        } catch (error) {
+            console.error('Export error:', error);
+            message.error({ content: 'Report generation failed.', key: 'export', duration: 2 });
+        }
+    };
     const formatStock = (val) => {
         if (val === null || val === undefined) return '-';
         return val.toLocaleString('en-LK', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg';
@@ -155,13 +225,23 @@ export default function Graphs() {
     return (
         <div className="animate-fade-in pb-24 md:pb-8">
             {/* Header */}
-            <div className="hidden md:flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
                 <div>
                     <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                         <LineChartOutlined className="text-emerald-400" /> Graphs & Analytics
                     </h1>
                     <p className="text-xs text-gray-400 mt-1">Visualize item price trends and stock lifecycle history</p>
                 </div>
+                {graphData.length > 0 && (
+                    <Button
+                        type="primary"
+                        icon={<DownloadOutlined />}
+                        onClick={() => exportReport('png')}
+                        className="bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-white shadow-lg w-full md:w-auto"
+                    >
+                        Download as Image (PNG)
+                    </Button>
+                )}
             </div>
 
             <div className="space-y-4 mb-6">
@@ -245,7 +325,7 @@ export default function Graphs() {
             ) : (
                 <div className="flex flex-col gap-6 md:gap-8">
                     {/* Item Price Changes */}
-                    <div className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg md:shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/5 relative overflow-hidden group">
+                    <div id="price-action-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg md:shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/5 relative overflow-hidden group">
                         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-500 to-emerald-500 opacity-50 group-hover:opacity-100 transition-opacity" />
 
                         <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
@@ -255,22 +335,24 @@ export default function Graphs() {
                                 </span>
                                 Price Action Trends
                             </h2>
-                            <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period} Avg</span>
+                            <div className="flex items-center gap-2 md:gap-3">
+                                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period} Avg</span>
+                            </div>
                         </div>
 
                         <div className="h-[280px] md:h-[450px] w-full -ml-4 md:ml-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
                                     <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
-                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value}`} domain={['auto', 'auto']} fontWeight={600} width={65} />
-                                    <RechartsTooltip content={<CustomTooltipPrice />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20 }} />
+                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value} `} domain={['auto', 'auto']} fontWeight={600} width={65} />
+                                    <Tooltip content={<CustomTooltipPrice />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20 }} />
                                     <Legend
                                         onClick={handleLegendClick}
                                         iconType="circle"
                                         wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
                                         formatter={(value, entry) => (
-                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                            <span className={`font - semibold tracking - wide ml - 1 transition - opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'} `} style={{ color: entry.color }}>
                                                 {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
                                             </span>
                                         )}
@@ -306,7 +388,7 @@ export default function Graphs() {
                     </div>
 
                     {/* Inventory Volume Evolution */}
-                    <div className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
+                    <div id="inventory-volume-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
                         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-500 via-violet-500 to-blue-500 opacity-50 group-hover:opacity-100 transition-opacity" />
 
                         <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
@@ -316,7 +398,9 @@ export default function Graphs() {
                                 </span>
                                 Inventory Volume Evolution
                             </h2>
-                            <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period}</span>
+                            <div className="flex items-center gap-2 md:gap-3">
+                                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period}</span>
+                            </div>
                         </div>
 
                         <div className="h-[300px] md:h-[500px] w-full -ml-4 md:ml-0">
@@ -336,16 +420,16 @@ export default function Graphs() {
                                             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
                                     <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
                                     <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value} kg`} fontWeight={600} width={55} />
-                                    <RechartsTooltip content={<CustomTooltipStock />} />
+                                    <Tooltip content={<CustomTooltipStock />} />
                                     <Legend
                                         onClick={handleLegendClick}
                                         iconType="circle"
                                         wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
                                         formatter={(value, entry) => (
-                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                            <span className={`font - semibold tracking - wide ml - 1 transition - opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'} `} style={{ color: entry.color }}>
                                                 {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
                                             </span>
                                         )}
@@ -391,6 +475,97 @@ export default function Graphs() {
                     </div>
                 </div>
             )}
+
+            {/* Hidden Export Container - Simplified to just hold charts for snapshots */}
+            <div
+                id="full-report-export"
+                style={{
+                    position: 'absolute',
+                    left: '-9999px',
+                    top: 0,
+                    width: '1600px', // Wider container for Landscape A4 optimal scaling
+                    backgroundColor: '#18181b',
+                    padding: '20px',
+                    display: 'none',
+                    zIndex: -1
+                }}
+            >
+                {graphData.length > 0 && (
+                    <>
+                        {/* Header for PNG export. PDF export temporarily hides this via class name. */}
+                        <div className="hide-for-pdf-capture" style={{ paddingBottom: '30px', borderBottom: '1px solid rgba(255,255,255,0.1)', marginBottom: '40px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <h1 style={{ color: 'white', fontSize: '32px', fontWeight: 'bold', margin: '0 0 10px 0' }}>Analytics Report</h1>
+                                    {selectedItem && (() => {
+                                        const stItem = items.find(i => i.ITEM_ID === selectedItem);
+                                        return stItem ? (
+                                            <h2 style={{ color: '#34d399', fontSize: '24px', margin: 0 }}>
+                                                {stItem.CODE} - {stItem.NAME}
+                                            </h2>
+                                        ) : null;
+                                    })()}
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <p style={{ color: '#9ca3af', margin: '0 0 5px 0', fontSize: '16px' }}>Generated: {dayjs().format('MMMM D, YYYY')} at {dayjs().format('h:mm A')}</p>
+                                    <p style={{ color: '#9ca3af', margin: 0, fontSize: '16px' }}>
+                                        Range: {dates?.[0]?.format('MMM D, YYYY')} - {dates?.[1]?.format('MMM D, YYYY')}
+                                    </p>
+                                    <p style={{ color: '#9ca3af', margin: '5px 0 0 0', fontSize: '16px' }}>Period: {period.charAt(0).toUpperCase() + period.slice(1)}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="export-price-chart" style={{ width: '100%', marginBottom: '40px', backgroundColor: 'transparent' }}>
+                            <div className="hide-for-pdf-capture" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                                <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Price Action Trends</h2>
+                            </div>
+                            <div style={{ height: '400px', width: '100%' }}>
+                                <LineChart width={1520} height={400} data={graphData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickMargin={15} ticks={exportTicks} tickFormatter={(val) => dayjs(val).format('MMM DD')} />
+                                    <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value}`} width={80} />
+                                    <Legend verticalAlign="bottom" height={40} iconSize={0} wrapperStyle={{ paddingTop: '40px', fontSize: '16px', fontWeight: 600 }} cursor="default" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />
+                                    {!hiddenSeries.includes('avgBuyPrice') && <Line type="monotone" name="Avg Buying Price" dataKey="avgBuyPrice" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls={true} isAnimationActive={false} />}
+                                    {!hiddenSeries.includes('avgSellPrice') && <Line type="monotone" name="Avg Selling Price" dataKey="avgSellPrice" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls={true} isAnimationActive={false} />}
+                                </LineChart>
+                            </div>
+                        </div>
+
+                        <div id="export-inventory-chart" style={{ width: '100%', backgroundColor: 'transparent' }}>
+                            <div className="hide-for-pdf-capture" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                                <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Inventory Volume Evolution</h2>
+                            </div>
+                            <div style={{ height: '400px', width: '100%' }}>
+                                <AreaChart width={1520} height={400} data={graphData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
+                                    <defs>
+                                        <linearGradient id="colorS1Exp" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                                        </linearGradient>
+                                        <linearGradient id="colorS2Exp" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                        </linearGradient>
+                                        <linearGradient id="colorTotalExp" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
+                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickMargin={15} ticks={exportTicks} tickFormatter={(val) => dayjs(val).format('MMM DD')} />
+                                    <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(value) => `${value} kg`} width={80} />
+                                    <Legend verticalAlign="bottom" height={40} iconSize={0} wrapperStyle={{ paddingTop: '40px', fontSize: '16px', fontWeight: 600 }} cursor="default" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />
+                                    {!hiddenSeries.includes('stockS1') && <Area type="monotone" dataKey="stockS1" name="Store 1 Stock" stroke="#14b8a6" strokeWidth={2} fillOpacity={1} fill="url(#colorS1Exp)" isAnimationActive={false} />}
+                                    {!hiddenSeries.includes('stockS2') && <Area type="monotone" dataKey="stockS2" name="Store 2 Stock" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorS2Exp)" isAnimationActive={false} />}
+                                    {!hiddenSeries.includes('stock') && <Area type="monotone" dataKey="stock" name="Total Stock" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorTotalExp)" isAnimationActive={false} />}
+                                </AreaChart>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+
         </div>
     );
 }

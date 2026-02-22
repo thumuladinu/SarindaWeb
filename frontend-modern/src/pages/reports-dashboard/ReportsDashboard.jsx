@@ -14,10 +14,14 @@ import {
     SwapOutlined, DollarOutlined, LineChartOutlined, BarChartOutlined,
     InfoCircleOutlined, ReloadOutlined, CalendarOutlined, RiseOutlined,
     FallOutlined, CheckCircleOutlined, WarningOutlined, ShopOutlined,
-    CaretRightOutlined, UpOutlined, DownOutlined, ClockCircleOutlined
+    CaretRightOutlined, UpOutlined, DownOutlined, ClockCircleOutlined,
+    FilePdfOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { registerSinhalaFont } from '../../fonts/sinhalaFont';
 
 const { Option } = Select;
 const { Panel } = Collapse;
@@ -289,7 +293,7 @@ export default function ReportsDashboard() {
                 isNow: hasNow
             });
             if (res.data.success) {
-                setAnalysisData({ ...res.data.data, isNow: hasNow });
+                setAnalysisData({ ...res.data.data, isNow: hasNow, startEvent, endEvent });
                 setShowClearanceSelection(false);
             }
         } catch { message.error('Analysis failed'); }
@@ -370,14 +374,14 @@ export default function ReportsDashboard() {
                                                         {isNow ? (
                                                             <div className="flex-1 min-w-0">
                                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                                    <span className="relative flex h-2.5 w-2.5">
+                                                                    <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
                                                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                                                                         <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
                                                                     </span>
-                                                                    <span className="text-sm font-semibold text-cyan-400">Now — Current Time</span>
-                                                                    <Tag icon={<ClockCircleOutlined />} color="cyan" className="text-[10px] leading-none m-0">Live</Tag>
+                                                                    <span className="text-sm font-semibold text-cyan-400 break-words whitespace-normal text-left">Now — Current Time</span>
+                                                                    <Tag icon={<ClockCircleOutlined />} color="cyan" className="text-[10px] leading-none m-0 shrink-0">Live</Tag>
                                                                 </div>
-                                                                <div className="text-[10px] text-gray-500 mt-1">{dayjs().format('DD MMM YYYY hh:mm A')} • Analyze up to current moment</div>
+                                                                <div className="text-[10px] text-gray-500 mt-1 whitespace-normal text-left">{dayjs().format('DD MMM YYYY hh:mm A')} • Analyze up to current moment</div>
                                                             </div>
                                                         ) : (
                                                             <div className="flex-1 min-w-0">
@@ -437,9 +441,331 @@ export default function ReportsDashboard() {
 function AnalysisResults({ data, showSections, toggleSection }) {
     const { item, period, initialStock, finalStock, storeAggregates, aggregates, chartData, financials, conversions, stockOperations, transfers, operationWastage, manualAdjustments = [], netManualAdjustment = 0 } = data;
 
-    // Derived Variables (accessed by multiple sections)
+    // Derived Variables (accessed by multiple sections & PDF)
     const totalConverted = conversions ? conversions.reduce((s, c) => s + (c.type === 'out' ? c.sourceQty : 0), 0) : 0;
     const totalConvertedIn = conversions ? conversions.reduce((s, c) => s + (c.type === 'in' ? c.destQty : 0), 0) : 0;
+
+    const netWS = (operationWastage?.totalWastage || 0) - (operationWastage?.totalSurplus || 0);
+    const returnOps = stockOperations.filter(op => op.OP_TYPE === 11);
+
+    // Total Returns logic
+    const totalReturns = returnOps.reduce((s, op) => {
+        if (op.conversions && op.conversions.length > 0) {
+            const itemIsSource = op.conversions.some(c => c.sourceItemId === data.item.ITEM_ID);
+            if (itemIsSource) {
+                const returnedQty = op.conversions
+                    .filter(c => c.sourceItemId === data.item.ITEM_ID)
+                    .reduce((sum, c) => sum + (c.destQuantity || 0), 0);
+                return s + returnedQty;
+            }
+            return s;
+        }
+        return s + (op.CLEARED_QUANTITY || 0);
+    }, 0);
+    const totalAdjIn = manualAdjustments.filter(a => a.isIn).reduce((s, a) => s + a.qty, 0);
+    const totalAdjOut = manualAdjustments.filter(a => !a.isIn).reduce((s, a) => s + a.qty, 0);
+
+    // Financial Smoothed Logic
+    let incomePerKg = financials.totalSellQty > 0 ? financials.totalRevenue / financials.totalSellQty : 0;
+    incomePerKg = Number(incomePerKg.toFixed(5));
+
+    const outGoingTotal = financials.totalCost + (financials.totalReturnExpense || 0);
+    const outGoingQty = financials.totalBuyQty + (financials.totalReturnedQty || 0);
+    let outGoingPerKg = outGoingQty > 0 ? outGoingTotal / outGoingQty : 0;
+    outGoingPerKg = Number(outGoingPerKg.toFixed(5));
+
+    let convImpactPerSoldKg = financials.totalSellQty > 0 ? (financials.conversionImpact || 0) / financials.totalSellQty : 0;
+    convImpactPerSoldKg = Number(convImpactPerSoldKg.toFixed(5));
+
+    let wsImpactRatio = financials.totalSellQty > 0 ? netWS / financials.totalSellQty : 0;
+    wsImpactRatio = Number(wsImpactRatio.toFixed(5));
+
+    let wsFinancialImpactPerKg = incomePerKg * wsImpactRatio;
+    wsFinancialImpactPerKg = Number(wsFinancialImpactPerKg.toFixed(5));
+
+    let trueNetProfitPerKg = incomePerKg - outGoingPerKg + convImpactPerSoldKg - wsFinancialImpactPerKg;
+    trueNetProfitPerKg = Number(trueNetProfitPerKg.toFixed(5));
+
+    const generatePDF = () => {
+        const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
+        registerSinhalaFont(doc);
+
+        const formatEvent = (event) => {
+            if (!event || event.id === 'now') return 'Now';
+            const dateStr = dayjs(event.date).format('YYYY-MM-DD hh.mmA');
+            const opStr = event.opCode ? ` (${event.opCode})` : '';
+            return `${dateStr}${opStr}`;
+        };
+        const periodStr = `Period: ${formatEvent(data.startEvent)} to ${formatEvent(data.endEvent)}`;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text("Stock Lifecycle Analysis Report", 14, 15);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(`Item: ${item.CODE} - ${item.NAME}`, 14, 22);
+        doc.text(periodStr, 14, 27);
+        doc.text(`Generated: ${dayjs().format('YYYY-MM-DD HH:mm')}`, 14, 32);
+
+        let currentY = 38;
+
+        // Table 1: Stock Summary
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text("Stock Summary (kg)", 14, currentY);
+        currentY += 4;
+
+        autoTable(doc, {
+            startY: currentY,
+            head: [['Initial', 'Bought', 'Sold', 'Returns', 'Wastage/Surplus', 'Conv. In', 'Conv. Out', 'Adj In', 'Adj Out', 'Final']],
+            body: [[
+                initialStock.total.toFixed(1),
+                aggregates.buying.qty.toFixed(1),
+                aggregates.selling.qty.toFixed(1),
+                totalReturns.toFixed(1),
+                Math.abs(netWS).toFixed(1) + (netWS > 0 ? ' (W)' : netWS < 0 ? ' (S)' : ''),
+                totalConvertedIn.toFixed(1),
+                totalConverted.toFixed(1),
+                totalAdjIn.toFixed(1),
+                totalAdjOut.toFixed(1),
+                finalStock.total.toFixed(1)
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [16, 185, 129], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+            styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+        });
+
+        currentY = doc.lastAutoTable.finalY + 10;
+
+        // Table 2: Financial Totals
+        doc.setFont('helvetica', 'bold');
+        doc.text("Financial Totals (Rs)", 14, currentY);
+        currentY += 4;
+
+        autoTable(doc, {
+            startY: currentY,
+            head: [['Revenue', 'Cost', 'Gross Profit', 'Return Expenses', 'Conv. Impact', 'Net Profit']],
+            body: [[
+                financials.totalRevenue.toFixed(2),
+                financials.totalCost.toFixed(2),
+                financials.grossProfit.toFixed(2),
+                (financials.totalReturnExpense || 0).toFixed(2),
+                financials.conversionImpact.toFixed(2),
+                financials.netProfit.toFixed(2)
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [59, 130, 246], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+            styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+        });
+
+        currentY = doc.lastAutoTable.finalY + 10;
+
+        // Table 3: Per-Kg Smoothed Analysis
+        doc.setFont('helvetica', 'bold');
+        doc.text("Per-Kg Smoothed Analysis (Rs/kg)", 14, currentY);
+        currentY += 4;
+
+        autoTable(doc, {
+            startY: currentY,
+            head: [['Income / Sold kg', 'Outgoing / Action kg', 'Conv. Impact / Sold kg', 'W/S Impact / Sold kg', 'True Net Profit / kg']],
+            body: [[
+                incomePerKg.toFixed(2),
+                outGoingPerKg.toFixed(2),
+                convImpactPerSoldKg.toFixed(2),
+                (-wsFinancialImpactPerKg).toFixed(2),
+                trueNetProfitPerKg.toFixed(2)
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [139, 92, 246], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+            styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+        });
+
+        currentY = doc.lastAutoTable.finalY + 10;
+
+        // Split Layout: 2 tables side by side
+        const splitY = currentY;
+
+        // Table 4: Initial and Final Stock
+        doc.setFont('helvetica', 'bold');
+        doc.text("Initial and Final Stock", 14, currentY);
+        currentY += 4;
+
+        autoTable(doc, {
+            startY: currentY,
+            margin: { left: 14, right: 150 }, // Half width
+            head: [['Phase', 'Store 1 (kg)', 'Store 2 (kg)', 'Combined (kg)']],
+            body: [
+                ['Initial Stock', initialStock.store1.toFixed(2), initialStock.store2.toFixed(2), initialStock.total.toFixed(2)],
+                ['Final Stock', finalStock.store1.toFixed(2), finalStock.store2.toFixed(2), finalStock.total.toFixed(2)]
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [249, 115, 22], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+            styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+        });
+
+        const leftTable1FinalY = doc.lastAutoTable.finalY;
+
+        // Table 5: Stock Changes by Store
+        let rightY = splitY;
+        doc.setFont('helvetica', 'bold');
+        doc.text("Stock Changes by Store", 155, rightY);
+        rightY += 4;
+
+        autoTable(doc, {
+            startY: rightY,
+            margin: { left: 155 },
+            head: [['Type', 'Store 1', 'Store 2', 'Total']],
+            body: [
+                ['Buying (kg)', storeAggregates.store1.buying.qty.toFixed(2), storeAggregates.store2.buying.qty.toFixed(2), aggregates.buying.qty.toFixed(2)],
+                ['Selling (kg)', storeAggregates.store1.selling.qty.toFixed(2), storeAggregates.store2.selling.qty.toFixed(2), aggregates.selling.qty.toFixed(2)],
+                ['Adj In (kg)', storeAggregates.store1.adjIn.qty.toFixed(2), storeAggregates.store2.adjIn.qty.toFixed(2), aggregates.adjIn.qty.toFixed(2)],
+                ['Adj Out (kg)', storeAggregates.store1.adjOut.qty.toFixed(2), storeAggregates.store2.adjOut.qty.toFixed(2), aggregates.adjOut.qty.toFixed(2)],
+                ['Revenue (Rs)', storeAggregates.store1.selling.amount.toFixed(0), storeAggregates.store2.selling.amount.toFixed(0), aggregates.selling.amount.toFixed(0)],
+                ['Cost (Rs)', storeAggregates.store1.buying.amount.toFixed(0), storeAggregates.store2.buying.amount.toFixed(0), aggregates.buying.amount.toFixed(0)]
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [14, 165, 233], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+            styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+        });
+
+        currentY = Math.max(doc.lastAutoTable.finalY, leftTable1FinalY) + 10;
+
+        // Add new page if space is running out
+        if (currentY > 160) { doc.addPage(); currentY = 15; }
+
+        // Table 6: Stock Operations
+        if (stockOperations && stockOperations.length > 0) {
+            doc.setFont('helvetica', 'bold');
+            doc.text("Stock Operations Details", 14, currentY);
+            currentY += 4;
+
+            const opsBody = stockOperations.map(op => [
+                dayjs(op.CREATED_DATE).format('YYYY-MM-DD HH:mm'),
+                op.opTypeLabel + (op.isReturnAfterClear ? ' (After Clear)' : ''),
+                op.OP_CODE || '-',
+                `S${op.STORE_NO}`,
+                op.ORIGINAL_STOCK.toFixed(2),
+                op.WASTAGE_AMOUNT > 0 ? op.WASTAGE_AMOUNT.toFixed(2) : '-',
+                op.SURPLUS_AMOUNT > 0 ? op.SURPLUS_AMOUNT.toFixed(2) : '-',
+                op.BILL_AMOUNT > 0 ? op.BILL_AMOUNT.toFixed(0) : '-'
+            ]);
+
+            autoTable(doc, {
+                startY: currentY,
+                head: [['Date', 'Type', 'Op Code', 'Store', 'Stock (kg)', 'Wastage (kg)', 'Surplus (kg)', 'Bill (Rs)']],
+                body: opsBody,
+                theme: 'grid',
+                headStyles: { fillColor: [234, 179, 8], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+                styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+            });
+            currentY = doc.lastAutoTable.finalY + 10;
+        }
+
+        if (currentY > 160) { doc.addPage(); currentY = 15; }
+
+        // Table 7: Wastage Summary
+        if (operationWastage && operationWastage.operations && operationWastage.operations.length > 0) {
+            doc.setFont('helvetica', 'bold');
+            doc.text("Wastage & Surplus Summary", 14, currentY);
+            currentY += 4;
+
+            const wstBody = operationWastage.operations.map(op => [
+                op.opTypeLabel,
+                op.opCode || '-',
+                op.wastage > 0 ? op.wastage.toFixed(2) : '-',
+                op.surplus > 0 ? op.surplus.toFixed(2) : '-'
+            ]);
+
+            // Add Net Row
+            const netWastage = operationWastage.totalWastage - operationWastage.totalSurplus;
+            const isWastage = netWastage > 0;
+            wstBody.push([
+                { content: 'NET', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+                { content: isWastage ? netWastage.toFixed(2) : '-', styles: { fontStyle: 'bold', textColor: isWastage ? [220, 38, 38] : [100, 100, 100] } },
+                { content: !isWastage && netWastage !== 0 ? Math.abs(netWastage).toFixed(2) : '-', styles: { fontStyle: 'bold', textColor: !isWastage && netWastage !== 0 ? [37, 99, 235] : [100, 100, 100] } }
+            ]);
+
+            autoTable(doc, {
+                startY: currentY,
+                head: [['Operation Type', 'Code', 'Wastage (kg)', 'Surplus (kg)']],
+                body: wstBody,
+                theme: 'grid',
+                headStyles: { fillColor: [249, 115, 22], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+                styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+            });
+            currentY = doc.lastAutoTable.finalY + 10;
+        }
+
+        if (currentY > 160) { doc.addPage(); currentY = 15; }
+
+        // Table 8: Manual Adjustments
+        if (manualAdjustments && manualAdjustments.length > 0) {
+            doc.setFont('helvetica', 'bold');
+            doc.text("Manual Adjustments", 14, currentY);
+            currentY += 4;
+
+            const adjBody = manualAdjustments.map(adj => [
+                dayjs(adj.date).format('MM-DD HH:mm'),
+                adj.typeLabel,
+                `S${adj.storeNo}`,
+                (adj.isIn ? '+' : '') + adj.delta.toFixed(2),
+                adj.txCode || '-',
+                adj.comments ? (adj.comments.length > 25 ? adj.comments.substring(0, 25) + '...' : adj.comments) : '-'
+            ]);
+
+            autoTable(doc, {
+                startY: currentY,
+                head: [['Date', 'Type', 'Store', 'Delta (kg)', 'Tx Code', 'Comments']],
+                body: adjBody,
+                theme: 'grid',
+                headStyles: { fillColor: [20, 184, 166], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+                styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+            });
+            currentY = doc.lastAutoTable.finalY + 10;
+        }
+
+        if (currentY > 160) { doc.addPage(); currentY = 15; }
+
+        // Table 9: Item Conversions
+        if (conversions && conversions.length > 0) {
+            doc.setFont('helvetica', 'bold');
+            doc.text("Item Conversions Details", 14, currentY);
+            currentY += 4;
+
+            const convBody = conversions.map(conv => [
+                dayjs(conv.date).format('YYYY-MM-DD'),
+                conv.opCode || '-',
+                conv.type === 'out' ? 'OUT' : 'IN',
+                conv.sourceItemCode ? `${conv.sourceItemCode} - ${conv.sourceItemName}` : (conv.sourceItemName || '-'),
+                conv.destItemCode ? `${conv.destItemCode} - ${conv.destItemName}` : (conv.destItemName || '-'),
+                (conv.profitLoss >= 0 ? '+' : '') + conv.profitLoss.toFixed(2) + ' Rs'
+            ]);
+
+            autoTable(doc, {
+                startY: currentY,
+                head: [['Date', 'Op Code', 'Direction', 'Source Item', 'Dest Item', 'Profit/Loss']],
+                body: convBody,
+                theme: 'grid',
+                headStyles: { fillColor: [168, 85, 247], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+                styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 },
+                didParseCell: (data) => {
+                    if (data.section === 'body' && (data.column.index === 3 || data.column.index === 4)) {
+                        const content = data.cell.raw || '';
+                        // Simple regex to detect Sinhala characters (Unicode range 0D80-0DFF)
+                        if (/[^\x00-\x7F]/.test(content)) {
+                            data.cell.styles.font = 'NotoSansSinhala';
+                        } else {
+                            data.cell.styles.font = 'helvetica';
+                        }
+                    }
+                }
+            });
+        }
+
+        doc.save(`Stock_Lifecycle_Report_${item.NAME.replace(/[^a-z0-9]/gi, '_')}_${dayjs().format('YYYY-MM-DD_HH-mm')}.pdf`);
+        message.success("PDF Downloaded Successfully");
+    };
 
     const sectionToggle = (key, label) => (
         <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-400 hover:text-gray-200 transition-colors">
@@ -451,73 +777,34 @@ function AnalysisResults({ data, showSections, toggleSection }) {
     return (
         <div className="space-y-4 animate-fade-in">
             {/* Header with toggles */}
-            <div className="glass-card p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-blue-500/10 border border-white/10">
+            <div className="glass-card p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-blue-500/10 border border-white/10 overflow-hidden">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div>
-                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                            <CheckCircleOutlined className="text-emerald-400" /> {item.CODE} - {item.NAME}
+                    <div className="flex-1 min-w-0 pr-2">
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2 break-all overflow-hidden line-clamp-2">
+                            <CheckCircleOutlined className="text-emerald-400 shrink-0" /> {item.CODE} - {item.NAME}
                         </h2>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-2 flex-wrap text-xs md:text-sm">
                             <Tag icon={<CalendarOutlined />} className="bg-white/10 border-white/10 text-gray-300 m-0">
                                 {period.startDate} → {data.isNow ? '📍 Now' : period.endDate}
                             </Tag>
-                            {data.isNow && (
-                                <Tag icon={<ClockCircleOutlined />} color="cyan" className="text-[10px] m-0">Live</Tag>
-                            )}
-                            <span className="text-xs text-gray-500">{dayjs(period.endDate).diff(dayjs(period.startDate), 'day')} days</span>
+                            {data.isNow && <Tag icon={<ClockCircleOutlined />} color="cyan" className="text-[10px] m-0">Live</Tag>}
+                            <span className="text-gray-500 whitespace-nowrap">{dayjs(period.endDate).diff(dayjs(period.startDate), 'day')} days</span>
                         </div>
                     </div>
+                    <Button
+                        type="primary"
+                        icon={<FilePdfOutlined />}
+                        onClick={generatePDF}
+                        danger
+                        className="h-8 md:h-10 px-3 md:px-4 text-xs md:text-sm rounded-xl font-semibold shadow-lg shadow-red-500/20 bg-red-600 hover:bg-red-500 border-none w-auto"
+                    >
+                        <span className="hidden sm:inline">Download </span>PDF
+                    </Button>
                 </div>
-                {/* Section toggles */}
-                {/* <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 pt-3 border-t border-white/10">
-                    {sectionToggle('initialStock', 'Initial Stock')}
-                    {sectionToggle('buysSells', 'Buys & Sells')}
-                    {sectionToggle('transfers', 'Transfers')}
-                    {sectionToggle('operations', 'Operations')}
-                    {sectionToggle('conversions', 'Conversions')}
-                    {sectionToggle('wastage', 'Wastage')}
-                    {sectionToggle('finalStock', 'Final Stock')}
-                    {sectionToggle('charts', 'Charts')}
-                    {sectionToggle('financials', 'Financials')}
-                </div> */}
             </div>
-
-            {/* Shared Derived Variables */}
-            {(() => {
-                // Determine these early so they can be injected down
-            })()}
 
             {/* STEP 7: Stock Summary */}
             {showSections.financials && (() => {
-                // (totalConverted and totalConvertedIn moved to global render scope)
-                const netWS = (operationWastage?.totalWastage || 0) - (operationWastage?.totalSurplus || 0);
-                const returnOps = stockOperations.filter(op => op.OP_TYPE === 11);
-                // For returns with conversions, CLEARED_QUANTITY might be source quantity, not stock added
-                // We need to check if the return has conversions
-                const totalReturns = returnOps.reduce((s, op) => {
-                    if (op.conversions && op.conversions.length > 0) {
-                        // Return with conversions: customer returned items that were re-converted.
-                        // Check if selected item appears as SOURCE in the conversion chain.
-                        // If so, the total converted-out DEST_QUANTITY is what was returned (and then converted).
-                        // Use destQuantity (per user rule: DEST_QUANTITY is the canonical amount).
-                        const itemIsSource = op.conversions.some(
-                            c => c.sourceItemId === data.item.ITEM_ID
-                        );
-                        if (itemIsSource) {
-                            // Sum dest quantities for conversions where this item is source
-                            const returnedQty = op.conversions
-                                .filter(c => c.sourceItemId === data.item.ITEM_ID)
-                                .reduce((sum, c) => sum + (c.destQuantity || 0), 0);
-                            return s + returnedQty;
-                        }
-                        // Item is only a conversion destination → already counted in Converted In
-                        return s;
-                    }
-                    // Direct return (no conversions): CLEARED_QUANTITY is stock added back
-                    return s + (op.CLEARED_QUANTITY || 0);
-                }, 0);
-                const totalAdjIn = manualAdjustments.filter(a => a.isIn).reduce((s, a) => s + a.qty, 0);
-                const totalAdjOut = manualAdjustments.filter(a => !a.isIn).reduce((s, a) => s + a.qty, 0);
                 const summaryCards = [
                     { label: 'Initial Stock', value: initialStock.total, unit: 'kg', color: 'blue', icon: '📦' },
                     { label: 'Bought', value: aggregates.buying.qty, unit: 'kg', color: 'emerald', icon: '🛒' },
@@ -536,7 +823,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                             <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px] flex items-center justify-center font-bold">F</span>
                             Stock Summary
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
                             {summaryCards.map((c, i) => (
                                 <div key={i} className={`bg-${c.color}-900/10 border border-${c.color}-900/20 rounded-xl p-2.5 text-center relative`}>
                                     <div className="text-base mb-1">{c.icon}</div>
@@ -595,36 +882,6 @@ function AnalysisResults({ data, showSections, toggleSection }) {
 
             {/* STEP 8: Financials */}
             {showSections.financials && (() => {
-                // 1. Income Amount per kg = revenue / sold amount
-                let incomePerKg = financials.totalSellQty > 0 ? financials.totalRevenue / financials.totalSellQty : 0;
-                incomePerKg = Number(incomePerKg.toFixed(5));
-
-                // 2. Out going Amount per kg = cost + return expenses / bought amount + return amount
-                // Note: user specifically requested "cost + return expnces / bout amount + return amount"
-                const outGoingTotal = financials.totalCost + (financials.totalReturnExpense || 0);
-                const outGoingQty = financials.totalBuyQty + (financials.totalReturnedQty || 0);
-                let outGoingPerKg = outGoingQty > 0 ? outGoingTotal / outGoingQty : 0;
-                outGoingPerKg = Number(outGoingPerKg.toFixed(5));
-
-                // 3. Conversion impact for sold kg = Conv. Impact / sold amount
-                let convImpactPerSoldKg = financials.totalSellQty > 0 ? (financials.conversionImpact || 0) / financials.totalSellQty : 0;
-                convImpactPerSoldKg = Number(convImpactPerSoldKg.toFixed(5));
-
-                // 4. Waste or surplus impact for sold kg(Y) = surplus or waste total kg / total sold kg
-                const wsTotalKg = (operationWastage?.totalWastage || 0) - (operationWastage?.totalSurplus || 0);
-                let wsImpactRatio = financials.totalSellQty > 0 ? wsTotalKg / financials.totalSellQty : 0;
-                wsImpactRatio = Number(wsImpactRatio.toFixed(5));
-
-                // 5. Its effect for sold amount for kg = sold amount per kg + or - sold amount per kg x Y
-                // The prompt says: "sold amount per kg x Y" -> which means revenue/kg * wsRatio
-                let wsFinancialImpactPerKg = incomePerKg * wsImpactRatio;
-                wsFinancialImpactPerKg = Number(wsFinancialImpactPerKg.toFixed(5));
-
-                // 6. Net profit per kg = cal from these
-                // Income - Outgoing + Conversion Impact - Wastage Impact (Wastage is bad, so minus)
-                let trueNetProfitPerKg = incomePerKg - outGoingPerKg + convImpactPerSoldKg - wsFinancialImpactPerKg;
-                trueNetProfitPerKg = Number(trueNetProfitPerKg.toFixed(5));
-
                 const finCards = [
                     {
                         label: 'Revenue',
@@ -703,7 +960,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                             <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] flex items-center justify-center font-bold">G</span>
                             Financial Totals
                         </div>
-                        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
                             {finCards.map((f, i) => (
                                 <div key={i} className={`flex flex-col bg-${f.color}-50/50 dark:bg-${f.color}-900/10 border border-${f.color}-100 dark:border-${f.color}-900/20 rounded-xl overflow-hidden`}>
                                     <div className="p-3 pb-2 flex-grow">
@@ -721,7 +978,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                             <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center font-bold">H</span>
                             Per-Kg Smoothed Analysis
                         </div>
-                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                             {perKgCards.map((f, i) => (
                                 <div key={i} className={`flex flex-col bg-${f.color}-50/50 dark:bg-${f.color}-900/10 border border-${f.color}-100 dark:border-${f.color}-900/20 rounded-xl overflow-hidden`}>
                                     <div className="p-3 pb-2 flex-grow">
@@ -767,7 +1024,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                         <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center font-bold">A</span>
                         Initial Stock <span className="font-normal text-gray-500">— after first clearance</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <StoreStockBox storeNo={1} stock={initialStock.store1} label="Store 1" color="blue" />
                         <StoreStockBox storeNo={2} stock={initialStock.store2} label="Store 2" color="purple" />
                         <div className="flex flex-col items-center p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
@@ -790,7 +1047,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                         <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 text-[10px] flex items-center justify-center font-bold">E</span>
                         Final Stock <span className="font-normal text-gray-500">— after final clearance</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <StoreStockBox storeNo={1} stock={finalStock.store1} label="Store 1" color="blue" />
                         <StoreStockBox storeNo={2} stock={finalStock.store2} label="Store 2" color="purple" />
                         <div className="flex flex-col items-center p-3 rounded-xl bg-orange-500/5 border border-orange-500/20">
@@ -1050,13 +1307,17 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                                 <div className="flex items-center gap-2 text-xs">
                                     <div className="flex-1 bg-red-900/10 rounded-lg p-2">
                                         <div className="text-[10px] text-gray-500">Source</div>
-                                        <div className="text-gray-300 font-medium">{conv.sourceItemName || '—'}</div>
+                                        <div className="text-gray-300 font-medium">
+                                            {conv.sourceItemCode ? `${conv.sourceItemCode} - ` : ''}{conv.sourceItemName || '—'}
+                                        </div>
                                         <div className="text-gray-400">{conv.sourceQty.toFixed(2)}kg × Rs{conv.sourcePrice}</div>
                                     </div>
                                     <SwapOutlined className="text-gray-600" />
                                     <div className="flex-1 bg-emerald-900/10 rounded-lg p-2">
                                         <div className="text-[10px] text-gray-500">Destination</div>
-                                        <div className="text-gray-300 font-medium">{conv.destItemName}</div>
+                                        <div className="text-gray-300 font-medium">
+                                            {conv.destItemCode ? `${conv.destItemCode} - ` : ''}{conv.destItemName || '—'}
+                                        </div>
                                         <div className="text-gray-400">{conv.destQty.toFixed(2)}kg × Rs{conv.destPrice}</div>
                                     </div>
                                 </div>

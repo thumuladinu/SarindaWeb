@@ -2391,6 +2391,8 @@ router.post('/api/reports/items', async (req, res) => {
                 si.ITEM_ID,
                 si.CODE,
                 si.NAME,
+                si.BUYING_PRICE,
+                si.SELLING_PRICE,
                 t.TYPE,
                 SUM(sti.QUANTITY) as total_qty,
                 SUM(sti.TOTAL) as total_amount
@@ -2398,7 +2400,7 @@ router.post('/api/reports/items', async (req, res) => {
             JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
             JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
             WHERE ${whereClause} AND sti.IS_ACTIVE = 1
-            GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE
+            GROUP BY si.ITEM_ID, si.CODE, si.NAME, si.BUYING_PRICE, si.SELLING_PRICE, t.TYPE
         `;
 
         const rows = await pool.query(sql, params);
@@ -2412,6 +2414,8 @@ router.post('/api/reports/items', async (req, res) => {
                     id: row.ITEM_ID,
                     code: row.CODE,
                     name: row.NAME,
+                    masterBuyPrice: parseFloat(row.BUYING_PRICE || 0),
+                    masterSellPrice: parseFloat(row.SELLING_PRICE || 0),
                     soldQty: 0,
                     soldAmount: 0,
                     boughtQty: 0,

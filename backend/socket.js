@@ -99,7 +99,8 @@ module.exports = {
                 io.emit('admin:terminal_cache_result', {
                     socketId: socket.id,
                     terminalId: terminal?.terminalId,
-                    cache: data.cache
+                    cache: data.cache,
+                    storage: data.storage // New: Full localStorage dump
                 });
             });
 
@@ -107,6 +108,12 @@ module.exports = {
                 const { targetSocketId, itemCode } = data;
                 console.log(`[Socket] Admin ${socket.id} requested deletion of ${itemCode} on terminal ${targetSocketId}`);
                 io.to(targetSocketId).emit('terminal:delete_cache_item', { code: itemCode });
+            });
+
+            socket.on('admin:update_terminal_storage', (data) => {
+                const { targetSocketId, key, value, action } = data;
+                console.log(`[Socket] Admin ${socket.id} requested ${action} for key ${key} on terminal ${targetSocketId}`);
+                io.to(targetSocketId).emit('terminal:update_storage', { key, value, action });
             });
 
             socket.on('disconnect', () => {

@@ -70,96 +70,208 @@ export default function ReportItemProfit() {
         doc.text(`Period: ${startDate} to ${endDate}`, 14, 28);
         doc.text(`Generated: ${dayjs().format('YYYY-MM-DD HH:mm')}`, 14, 33);
 
-        const tableBody = data.map(item => [
-            item.code || '-',
-            item.name || '-',
-            Number(item.soldQty || 0).toFixed(2),
-            Number(item.soldAmount).toFixed(2),
-            Number(item.boughtAmount).toFixed(2),
-            Number(item.profit).toFixed(2)
-        ]);
+        const tableBody = data.map(item => {
+            const avgSale = item.soldQty > 0 ? (item.soldAmount / item.soldQty) : (item.masterSellPrice || 0);
+            const avgBuy = item.boughtQty > 0 ? (item.boughtAmount / item.boughtQty) : (item.masterBuyPrice || 0);
+            const netProfit = (item.soldAmount || 0) - (item.boughtAmount || 0);
+            const salesProfit = (avgSale - avgBuy) * (item.soldQty || 0);
+
+            return [
+                `${item.code || ''} - ${item.name || ''}`,
+                `${Number(item.soldAmount || 0).toFixed(2)}\n(${Number(item.soldQty || 0).toFixed(2)}kg)`,
+                `${Number(item.boughtAmount || 0).toFixed(2)}\n(${Number(item.boughtQty || 0).toFixed(2)}kg)`,
+                Number(netProfit).toFixed(2),
+                Number(avgSale).toFixed(2),
+                Number(avgBuy).toFixed(2),
+                `${Number(salesProfit).toFixed(2)}\n(${Number(item.soldQty || 0).toFixed(2)}kg)`
+            ];
+        });
 
         autoTable(doc, {
             startY: 40,
-            head: [['Code', 'Item Name', 'Sold Qty', 'Sales', 'Buying', 'Profit']],
+            head: [['Item', 'Sales', 'Buying', 'Net Profit', 'Avg Sale/kg', 'Avg Buy/kg', 'Profit (Sold Amt)']],
             body: tableBody,
             theme: 'striped',
             headStyles: { fillColor: [147, 51, 234], font: 'helvetica', fontStyle: 'bold' },
-            styles: { font: 'helvetica', fontSize: 9 },
-            columnStyles: { 1: { font: 'NotoSansSinhala' } }
+            styles: { font: 'helvetica', fontSize: 7 },
+            columnStyles: {
+                0: { cellWidth: 55 },
+                1: { align: 'right' },
+                2: { align: 'right' },
+                3: { align: 'right' },
+                4: { align: 'right' },
+                5: { align: 'right' },
+                6: { align: 'right' }
+            },
+            didParseCell: (data) => {
+                if (data.section === 'body' && data.column.index === 0) {
+                    const content = data.cell.raw || '';
+                    if (/[^\x00-\x7F]/.test(content)) {
+                        data.cell.styles.font = 'NotoSansSinhala';
+                    } else {
+                        data.cell.styles.font = 'helvetica';
+                    }
+                }
+            }
         });
-
         doc.save(`Item_Profit_Report_${startDate}.pdf`);
         message.success('PDF downloaded!');
     };
 
     // Desktop table columns
     const columns = [
-        { title: 'Code', dataIndex: 'code', width: 80 },
-        { title: 'Item Name', dataIndex: 'name', width: 140, ellipsis: true },
-        { title: 'Qty', dataIndex: 'soldQty', align: 'center', width: 60, render: val => val ? Number(val).toFixed(2) : '-' },
+        {
+            title: 'Item',
+            key: 'item',
+            width: 140,
+            render: (_, r) => (
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-mono leading-none">{r.code}</span>
+                    <span className="text-xs font-medium truncate">{r.name}</span>
+                </div>
+            )
+        },
         {
             title: 'Sales',
             dataIndex: 'soldAmount',
             align: 'right',
-            width: 90,
-            render: val => <span className="text-xs text-emerald-600">Rs.{Number(val).toLocaleString()}</span>
+            width: 85,
+            render: (val, r) => (
+                <div className="flex flex-col items-end leading-tight">
+                    <span className="text-[11px] text-emerald-600">Rs.{Number(val).toLocaleString()}</span>
+                    <span className="text-[9px] text-gray-400">({Number(r.soldQty || 0).toFixed(2)}kg)</span>
+                </div>
+            )
         },
         {
             title: 'Buying',
             dataIndex: 'boughtAmount',
             align: 'right',
-            width: 90,
-            render: val => <span className="text-xs text-red-500">Rs.{Number(val).toLocaleString()}</span>
+            width: 85,
+            render: (val, r) => (
+                <div className="flex flex-col items-end leading-tight">
+                    <span className="text-[11px] text-red-500">Rs.{Number(val).toLocaleString()}</span>
+                    <span className="text-[9px] text-gray-400">({Number(r.boughtQty || 0).toFixed(2)}kg)</span>
+                </div>
+            )
         },
         {
-            title: 'Profit',
-            dataIndex: 'profit',
+            title: 'Net Profit',
+            key: 'netProfit',
             align: 'right',
             width: 90,
-            render: val => (
-                <span className={`text-xs font-bold ${val >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                    Rs.{Number(val).toLocaleString()}
-                </span>
-            )
+            render: (_, r) => {
+                const profit = (r.soldAmount || 0) - (r.boughtAmount || 0);
+                return (
+                    <span className={`text-[11px] font-bold ${profit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                        Rs.{profit.toLocaleString()}
+                    </span>
+                );
+            }
+        },
+        {
+            title: 'Avg Sale/kg',
+            key: 'avgSale',
+            align: 'right',
+            width: 75,
+            render: (_, r) => {
+                const avg = r.soldQty > 0 ? (r.soldAmount / r.soldQty) : (r.masterSellPrice || 0);
+                return <span className="text-[11px]">Rs.{avg.toFixed(2)}</span>;
+            }
+        },
+        {
+            title: 'Avg Buy/kg',
+            key: 'avgBuy',
+            align: 'right',
+            width: 75,
+            render: (_, r) => {
+                const avg = r.boughtQty > 0 ? (r.boughtAmount / r.boughtQty) : (r.masterBuyPrice || 0);
+                return <span className="text-[11px]">Rs.{avg.toFixed(2)}</span>;
+            }
+        },
+        {
+            title: 'Profit (Sold Amt)',
+            key: 'calculatedProfit',
+            align: 'right',
+            width: 110,
+            render: (_, r) => {
+                const avgSale = r.soldQty > 0 ? (r.soldAmount / r.soldQty) : (r.masterSellPrice || 0);
+                const avgBuy = r.boughtQty > 0 ? (r.boughtAmount / r.boughtQty) : (r.masterBuyPrice || 0);
+                const profit = (avgSale - avgBuy) * (r.soldQty || 0);
+                return (
+                    <div className="flex flex-col items-end leading-tight">
+                        <span className={`text-[11px] font-bold ${profit >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+                            Rs.{profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[9px] text-gray-400">({Number(r.soldQty || 0).toFixed(2)}kg)</span>
+                    </div>
+                );
+            }
         }
     ];
 
     // Mobile Item Card
-    const ItemCard = ({ item }) => (
-        <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 border border-gray-100 dark:border-white/5 shadow-sm">
-            <div className="flex justify-between items-start mb-2">
-                <div className="flex-1 min-w-0 pr-2">
-                    <div className="text-[10px] text-gray-400 font-mono tracking-wide">{item.code}</div>
-                    <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
-                </div>
-                <div className={`text-right font-bold text-base ${item.profit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                    <span className="text-[10px] text-gray-400 font-normal block">Profit</span>
-                    Rs.{Number(item.profit).toLocaleString()}
-                </div>
-            </div>
-            <div className="flex items-center justify-between text-xs bg-gray-50 dark:bg-black/20 rounded-lg p-2 mt-2">
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-400">Sales</span>
-                    <span className="text-emerald-600 font-medium">Rs.{Number(item.soldAmount).toLocaleString()}</span>
-                </div>
-                <div className="h-6 w-px bg-gray-200 dark:bg-white/10 mx-2"></div>
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-400">Cost</span>
-                    <span className="text-red-500 font-medium">Rs.{Number(item.boughtAmount).toLocaleString()}</span>
-                </div>
-                {item.soldQty && (
-                    <>
-                        <div className="h-6 w-px bg-gray-200 dark:bg-white/10 mx-2"></div>
-                        <div className="flex flex-col text-right">
-                            <span className="text-[10px] text-gray-400">Qty</span>
-                            <span className="text-gray-600 dark:text-gray-300 font-medium">{Number(item.soldQty).toFixed(2)}</span>
+    const ItemCard = ({ item }) => {
+        const avgSale = item.soldQty > 0 ? (item.soldAmount / item.soldQty) : (item.masterSellPrice || 0);
+        const avgBuy = item.boughtQty > 0 ? (item.boughtAmount / item.boughtQty) : (item.masterBuyPrice || 0);
+        const netProfit = (item.soldAmount || 0) - (item.boughtAmount || 0);
+        const salesProfit = (avgSale - avgBuy) * (item.soldQty || 0);
+
+        return (
+            <div className="bg-white/50 dark:bg-white/5 rounded-xl p-3 border border-gray-100 dark:border-white/5 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1 min-w-0 pr-2">
+                        <div className="text-[10px] text-gray-400 font-mono tracking-wide">{item.code}</div>
+                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-[10px] text-gray-400 font-normal block uppercase">Net Profit</span>
+                        <div className={`font-bold text-base ${netProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                            Rs.{netProfit.toLocaleString()}
                         </div>
-                    </>
-                )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div className="bg-gray-50/50 dark:bg-black/20 rounded-lg p-2">
+                        <span className="text-[9px] text-gray-400 uppercase block">Total Sales</span>
+                        <div className="flex flex-col">
+                            <span className="text-emerald-600 font-bold text-xs">Rs.{Number(item.soldAmount).toLocaleString()}</span>
+                            <span className="text-[9px] text-gray-400">({Number(item.soldQty || 0).toFixed(2)}kg)</span>
+                        </div>
+                    </div>
+                    <div className="bg-gray-50/50 dark:bg-black/20 rounded-lg p-2">
+                        <span className="text-[9px] text-gray-400 uppercase block">Total Buying</span>
+                        <div className="flex flex-col">
+                            <span className="text-red-500 font-bold text-xs">Rs.{Number(item.boughtAmount).toLocaleString()}</span>
+                            <span className="text-[9px] text-gray-400">({Number(item.boughtQty || 0).toFixed(2)}kg)</span>
+                        </div>
+                    </div>
+                    <div className="bg-gray-50/50 dark:bg-black/20 rounded-lg p-2">
+                        <span className="text-[9px] text-gray-400 uppercase block">Avg Sale</span>
+                        <span className="text-gray-700 dark:text-gray-300 font-semibold text-xs">Rs.{avgSale.toFixed(2)}</span>
+                    </div>
+                    <div className="bg-gray-50/50 dark:bg-black/20 rounded-lg p-2">
+                        <span className="text-[9px] text-gray-400 uppercase block">Avg Buy</span>
+                        <span className="text-gray-700 dark:text-gray-300 font-semibold text-xs">Rs.{avgBuy.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-white/5 flex justify-between items-center">
+                    <div className="flex flex-col">
+                        <span className="text-[9px] text-gray-400 uppercase">Sold Qty</span>
+                        <span className="text-gray-600 dark:text-gray-300 font-medium text-xs font-mono">{Number(item.soldQty || 0).toFixed(2)} kg</span>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-[9px] text-gray-400 uppercase block">Profit (Sold Amt)</span>
+                        <span className={`text-sm font-bold ${salesProfit >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+                            Rs.{salesProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </span>
+                    </div>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
 
 
