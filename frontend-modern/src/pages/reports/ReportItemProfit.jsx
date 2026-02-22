@@ -70,6 +70,16 @@ export default function ReportItemProfit() {
         doc.text(`Period: ${startDate} to ${endDate}`, 14, 28);
         doc.text(`Generated: ${dayjs().format('YYYY-MM-DD HH:mm')}`, 14, 33);
 
+        const totalProfitSoldAmt = data.reduce((sum, item) => {
+            const avgSale = item.soldQty > 0 ? (item.soldAmount / item.soldQty) : (item.masterSellPrice || 0);
+            const avgBuy = item.boughtQty > 0 ? (item.boughtAmount / item.boughtQty) : (item.masterBuyPrice || 0);
+            return sum + ((avgSale - avgBuy) * (item.soldQty || 0));
+        }, 0);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(`Total Net Profit (Sold Amt): Rs. ${totalProfitSoldAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 14, 40);
+
         const tableBody = data.map(item => {
             const avgSale = item.soldQty > 0 ? (item.soldAmount / item.soldQty) : (item.masterSellPrice || 0);
             const avgBuy = item.boughtQty > 0 ? (item.boughtAmount / item.boughtQty) : (item.masterBuyPrice || 0);
@@ -88,7 +98,7 @@ export default function ReportItemProfit() {
         });
 
         autoTable(doc, {
-            startY: 40,
+            startY: 45,
             head: [['Item', 'Sales', 'Buying', 'Net Profit', 'Avg Sale/kg', 'Avg Buy/kg', 'Profit (Sold Amt)']],
             body: tableBody,
             theme: 'striped',
@@ -345,30 +355,53 @@ export default function ReportItemProfit() {
 
             {/* Data Display */}
             {data.length > 0 && !loading && (
-                <div className="animate-fade-in">
-                    {/* Desktop: Table */}
-                    <div className="hidden md:block">
-                        <div className="glass-card rounded-xl p-3 overflow-hidden">
-                            <Table
-                                dataSource={data}
-                                columns={columns}
-                                rowKey="id"
-                                size="small"
-                                pagination={{ pageSize: 15, size: 'small' }}
-                                scroll={{ x: 600 }}
-                            />
-                        </div>
-                    </div>
+                <div className="animate-fade-in flex flex-col gap-4">
+                    {/* Summary Card */}
+                    {(() => {
+                        const totalProfit = data.reduce((sum, item) => {
+                            const avgSale = item.soldQty > 0 ? (item.soldAmount / item.soldQty) : (item.masterSellPrice || 0);
+                            const avgBuy = item.boughtQty > 0 ? (item.boughtAmount / item.boughtQty) : (item.masterBuyPrice || 0);
+                            return sum + ((avgSale - avgBuy) * (item.soldQty || 0));
+                        }, 0);
+                        return (
+                            <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-5 text-white shadow-xl shadow-purple-500/20">
+                                <div className="text-xs font-medium text-purple-100 uppercase tracking-wider mb-1">Total Net Profit (Sold Amt)</div>
+                                <div className="text-3xl font-black tracking-tight flex items-baseline">
+                                    <span className="text-lg font-bold opacity-80 mr-1">Rs.</span>
+                                    {totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                                <div className="mt-2 text-[10px] text-purple-200 bg-white/10 w-fit px-2 py-0.5 rounded-full border border-white/5">
+                                    Based on {data.length} selected items
+                                </div>
+                            </div>
+                        );
+                    })()}
 
-                    {/* Mobile: Card List */}
-                    <div className="md:hidden">
-                        <div className="text-xs text-gray-500 mb-2">
-                            Items ({data.length})
+                    <div className="animate-fade-in">
+                        {/* Desktop: Table */}
+                        <div className="hidden md:block">
+                            <div className="glass-card rounded-xl p-3 overflow-hidden">
+                                <Table
+                                    dataSource={data}
+                                    columns={columns}
+                                    rowKey="id"
+                                    size="small"
+                                    pagination={{ pageSize: 15, size: 'small' }}
+                                    scroll={{ x: 600 }}
+                                />
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-2">
-                            {data.map((item, index) => (
-                                <ItemCard key={item.id || index} item={item} />
-                            ))}
+
+                        {/* Mobile: Card List */}
+                        <div className="md:hidden">
+                            <div className="text-xs text-gray-500 mb-2">
+                                Items ({data.length})
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                {data.map((item, index) => (
+                                    <ItemCard key={item.id || index} item={item} />
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>

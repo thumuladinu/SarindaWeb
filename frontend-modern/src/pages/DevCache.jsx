@@ -266,9 +266,9 @@ const DevCache = () => {
 
     return (
         <div className="animate-fade-in p-4 pb-24 md:pb-8 max-w-[1600px] mx-auto">
-            <header className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-1">
-                    <DatabaseOutlined className="mr-3" />
+            <header className="mb-8 hidden md:block">
+                <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-1 flex items-center gap-3">
+                    <DatabaseOutlined />
                     Remote Storage Inspector
                 </h1>
                 <p className="text-gray-500 dark:text-gray-400">Manage localStorage of connected terminals directly</p>

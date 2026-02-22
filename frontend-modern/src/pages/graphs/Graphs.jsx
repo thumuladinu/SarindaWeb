@@ -226,7 +226,7 @@ export default function Graphs() {
         <div className="animate-fade-in pb-24 md:pb-8">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-                <div>
+                <div className="hidden md:block">
                     <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                         <LineChartOutlined className="text-emerald-400" /> Graphs & Analytics
                     </h1>
