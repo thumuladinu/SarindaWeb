@@ -5,8 +5,11 @@ import TransactionFilters from './transactions/TransactionFilters';
 import TransactionForm from './transactions/TransactionForm';
 import TransactionView from './transactions/TransactionView';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import axios from 'axios';
 import { generateReceiptHTML } from '../utils/receiptGenerator';
+
+dayjs.extend(utc);
 
 export default function Transactions() {
     const { message } = App.useApp();
@@ -318,8 +321,8 @@ export default function Transactions() {
             key: 'CREATED_DATE',
             render: (date) => (
                 <div className="flex flex-col text-xs">
-                    <span className="font-semibold text-gray-800 dark:text-gray-200">{dayjs(date).format('YYYY-MM-DD')}</span>
-                    <span className="text-gray-500">{dayjs(date).format('h:mm A')}</span>
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">{dayjs(date).utcOffset(330).format('YYYY-MM-DD')}</span>
+                    <span className="text-gray-500">{dayjs(date).utcOffset(330).format('h:mm A')}</span>
                 </div>
             )
         },
@@ -366,7 +369,7 @@ export default function Transactions() {
             render: (id, record) => (
                 <div className="flex flex-col">
                     <span className="font-medium text-gray-800 dark:text-gray-200">{users[id] || id}</span>
-                    <span className="text-[10px] text-gray-400">at {dayjs(record.EDITED_DATE).format('YYYY-MM-DD h:mmA')}</span>
+                    <span className="text-[10px] text-gray-400">at {dayjs(record.EDITED_DATE).utcOffset(330).format('YYYY-MM-DD h:mmA')}</span>
                 </div>
             )
         },
@@ -439,7 +442,7 @@ export default function Transactions() {
                             <div className="flex flex-col">
                                 <span className="text-xs text-gray-500 font-mono">{item.CODE}</span>
                                 <span className="text-gray-800 dark:text-white font-semibold text-lg">
-                                    {dayjs(item.CREATED_DATE).format('DD MMM, h:mm A')}
+                                    {dayjs(item.CREATED_DATE).utcOffset(330).format('DD MMM, h:mm A')}
                                 </span>
                             </div>
                             <div className="flex gap-1 items-center">
@@ -473,7 +476,7 @@ export default function Transactions() {
                                 <div className="flex flex-col mt-1">
                                     <span className="text-[10px] text-gray-400 uppercase tracking-wider">Cashier</span>
                                     <span className="text-[10px] dark:text-gray-300">{users[item.CREATED_BY] || item.CREATED_BY}</span>
-                                    <span className="text-[8px] text-gray-500">at {dayjs(item.EDITED_DATE).format('YYYY-MM-DD h:mmA')}</span>
+                                    <span className="text-[8px] text-gray-500">at {dayjs(item.EDITED_DATE).utcOffset(330).format('YYYY-MM-DD h:mmA')}</span>
                                 </div>
                             </div>
                             <div className="flex flex-col items-end">
