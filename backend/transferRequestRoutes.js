@@ -37,9 +37,12 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
     // Similar to Op 5 logic but triggered by approval.
 
     // Get conversions
-    const conversions = await query(
+    const allConversions = await query(
         `SELECT * FROM store_stock_transfer_conversions WHERE transfer_id = ?`, [transferId]
     );
+    // Filter out invalid conversions (missing item ID)
+    const conversions = allConversions.filter(c => c.dest_item_id);
+
     const totalConverted = conversions.reduce((sum, c) => sum + (parseFloat(c.dest_qty) || 0), 0);
     const remainingMain = mainQty - totalConverted; // Assuming simple subtraction if partial
 
@@ -58,7 +61,9 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
 
 
     // Fetch Real-time Stock
-    const currentStockS1 = await getCurrentStock(request.main_item_id, 1);
+    const sourceStoreId = request.store_from_id || 1;
+    const targetStoreId = request.store_to_id || 2;
+    const currentStockSource = await getCurrentStock(request.main_item_id, sourceStoreId);
 
     // Determine Quantities and OpType
 
@@ -69,15 +74,15 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
 
     if (clearanceType === 'FULL') {
         opType = 6; // Transfer + Full Clear
-        removeQtyS1 = currentStockS1;
-        console.log(`[ApproveTransfer] FULL Clear. Current Stock: ${currentStockS1}, Removing: ${removeQtyS1}`);
+        removeQtyS1 = currentStockSource;
+        console.log(`[ApproveTransfer] FULL Clear. Current Stock: ${currentStockSource}, Removing: ${removeQtyS1}`);
 
         // Calculate Wastage/Surplus
         const totalOutput = request.has_conversion && conversions.length > 0
             ? conversions.reduce((sum, c) => sum + (parseFloat(c.dest_qty) || 0), 0) // Sum of converted outputs
             : mainQty; // Or just the main item moving
 
-        const diff = currentStockS1 - totalOutput;
+        const diff = currentStockSource - totalOutput;
         if (diff > 0) wastage = diff;     // Had more than needed -> Loss/Wastage
         else if (diff < 0) surplus = Math.abs(diff); // Had less than output -> Found extra/Surplus
     } else {
@@ -99,35 +104,35 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
 
     // Standard OpCode format: S{STORE}-{YYMMDD}-CLR-{TYPE}-{RANDOM}
     // Matches regex: [S%-%-CLR-%
-    const opCode = `S1-${dateStr}-CLR-TRA-${randomSuffix}`;
-    const s1OpLocalId = `S1-AUTO-OP-TRA-${Date.now()}`;
+    const opCode = `S${sourceStoreId}-${dateStr}-CLR-TRA-${randomSuffix}`;
+    const sourceOpLocalId = `S${sourceStoreId}-AUTO-OP-TRA-${Date.now()}`;
 
     const opResult = await query(
         `INSERT INTO store_stock_operations
         (LOCAL_ID, OP_TYPE, STORE_NO, CREATED_BY, CREATED_BY_NAME, COMMENTS, OP_CODE, CLEARANCE_TYPE, WASTAGE_AMOUNT, SURPLUS_AMOUNT, SYNCED)
-         VALUES(?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        [s1OpLocalId, opType, approvedBy, approvedByName, (request.comments ? request.comments + '\n' : '') + `Approved Request ${request.local_id}`, opCode, clearanceType, wastage, surplus]
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [sourceOpLocalId, opType, sourceStoreId, approvedBy, approvedByName, (request.comments ? request.comments + '\n' : '') + `Approved Request ${request.local_id}`, opCode, clearanceType, wastage, surplus]
     );
     const opId = opResult.insertId;
 
-    // Insert Operation Items for Store 1 (source)
+    // Insert Operation Items for Source Store
     await query(
         `INSERT INTO store_stock_operation_items
         (OP_ID, ITEM_ID, ITEM_CODE, ITEM_NAME, ORIGINAL_STOCK, CLEARED_QUANTITY, REMAINING_STOCK, IS_ACTIVE, STORE_NO)
-        VALUES(?, ?, ?, ?, ?, ?, ?, 1, 1)`,
-        [opId, request.main_item_id, request.main_item_code, request.main_item_name, currentStockS1, removeQtyS1, (clearanceType === 'FULL' ? 0 : currentStockS1 - removeQtyS1)]
+        VALUES(?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+        [opId, request.main_item_id, request.main_item_code, request.main_item_name, currentStockSource, removeQtyS1, (clearanceType === 'FULL' ? 0 : currentStockSource - removeQtyS1), sourceStoreId]
     );
 
-    // Insert Operation Items for Store 2 (destination) - Track where stock is added
+    // Insert Operation Items for Target Store - Track where stock is added
     if (request.has_conversion && conversions.length > 0) {
         for (const c of conversions) {
-            const destStockBefore = await getCurrentStock(c.dest_item_id, 2);
+            const destStockBefore = await getCurrentStock(c.dest_item_id, targetStoreId);
             const destQty = parseFloat(c.dest_qty) || 0;
             await query(
                 `INSERT INTO store_stock_operation_items
         (OP_ID, ITEM_ID, ITEM_CODE, ITEM_NAME, ORIGINAL_STOCK, CLEARED_QUANTITY, REMAINING_STOCK, IS_ACTIVE, STORE_NO)
-                VALUES(?, ?, ?, ?, ?, ?, ?, 1, 2)`,
-                [opId, c.dest_item_id, c.dest_item_code, c.dest_item_name, destStockBefore, -destQty, destStockBefore + destQty]
+                VALUES(?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+                [opId, c.dest_item_id, c.dest_item_code, c.dest_item_name, destStockBefore, -destQty, destStockBefore + destQty, targetStoreId]
             );
         }
 
@@ -141,13 +146,13 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
             );
         }
     } else {
-        // No conversion - main item goes to Store 2
-        const destStockBefore = await getCurrentStock(request.main_item_id, 2);
+        // No conversion - main item goes to Target Store
+        const destStockBefore = await getCurrentStock(request.main_item_id, targetStoreId);
         await query(
             `INSERT INTO store_stock_operation_items
         (OP_ID, ITEM_ID, ITEM_CODE, ITEM_NAME, ORIGINAL_STOCK, CLEARED_QUANTITY, REMAINING_STOCK, IS_ACTIVE, STORE_NO)
-            VALUES(?, ?, ?, ?, ?, ?, ?, 1, 2)`,
-            [opId, request.main_item_id, request.main_item_code, request.main_item_name, destStockBefore, -mainQty, destStockBefore + mainQty]
+            VALUES(?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+            [opId, request.main_item_id, request.main_item_code, request.main_item_name, destStockBefore, -mainQty, destStockBefore + mainQty, targetStoreId]
         );
     }
 
@@ -171,20 +176,20 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
         );
     };
 
-    // Transaction 1: Store 1 Transfer Out (Active Item)
+    // Transaction 1: Source Store Transfer Out (Active Item)
     // Comment format: [OP_CODE] Description
-    await createTransaction(1, 'AdjOut', request.main_item_id, removeQtyS1, opId, `[${opCode}][TransferOut] Fulfilled Request ${request.local_id}`);
+    await createTransaction(sourceStoreId, 'AdjOut', request.main_item_id, removeQtyS1, opId, `[${opCode}][TransferOut] Fulfilled Request ${request.local_id}`);
 
-    // --- STOCK UPDATES STORE 2 ---
-    // Transaction 2: Store 2 Transfer In
+    // --- STOCK UPDATES TARGET STORE ---
+    // Transaction 2: Target Store Transfer In
     if (request.has_conversion && conversions.length > 0) {
         for (const c of conversions) {
             // Using 'AdjIn'
-            await createTransaction(2, 'AdjIn', c.dest_item_id, c.dest_qty, opId, `[${opCode}][TransferIn] From Req ${request.local_id}(Conv)`);
+            await createTransaction(targetStoreId, 'AdjIn', c.dest_item_id, c.dest_qty, opId, `[${opCode}][TransferIn] From Req ${request.local_id}(Conv)`);
         }
     } else {
         // No conversion, just move main item
-        await createTransaction(2, 'AdjIn', request.main_item_id, mainQty, opId, `[${opCode}][TransferIn] From Req ${request.local_id}`);
+        await createTransaction(targetStoreId, 'AdjIn', request.main_item_id, mainQty, opId, `[${opCode}][TransferIn] From Req ${request.local_id}`);
     }
 
     // --- UPDATE REQUEST STATUS ---

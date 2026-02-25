@@ -39,7 +39,8 @@ const OPERATION_TYPES = [
     { id: 4, name: 'Partial Clear + Sales Bill', shortName: 'Half + Bill', icon: '📝', color: '#17a2b8' },
     { id: 9, name: 'Item Conversion', shortName: 'Convert', icon: '🔄', color: '#007bff' },
     { id: 11, name: 'Stock Return', shortName: 'Return', icon: '↩️', color: '#20c997' },
-    { id: 12, name: 'Stock Transfer (Store 1 -> Store 2)', shortName: 'S1 -> S2', icon: '📥', color: '#6f42c1' }
+    { id: 12, name: 'Stock Transfer (Store 1 -> Store 2)', shortName: 'S1 -> S2', icon: '📥', color: '#6f42c1' },
+    { id: 13, name: 'Stock Transfer (Store 2 -> Store 1)', shortName: 'S2 -> S1', icon: '📤', color: '#6f42c1' }
 ];
 
 export default function StockOperations() {
@@ -159,6 +160,14 @@ export default function StockOperations() {
         setReturnExpenseAmount('');
         if (type === 11) {
             fetchReturnableOps('');
+        }
+        if (type === 12) {
+            setSelectedStore(1);
+            setStep(3);
+        }
+        if (type === 13) {
+            setSelectedStore(2);
+            setStep(3);
         }
     };
 
@@ -322,7 +331,8 @@ export default function StockOperations() {
                 if (conversionType === 'FULL') deduction = currentStock;
                 else deduction = convTotal; // Partial: Deduct only what is being converted
                 break;
-            case 12: // Transfer
+            case 12: // Transfer S1 -> S2
+            case 13: // Transfer S2 -> S1
                 if (transferType === 'FULL') deduction = currentStock;
                 else if (conversionEnabled) deduction = convTotal; // If conversion enabled, deduct converted total (Main Qty header hidden)
                 else deduction = qty; // Direct partial transfer
@@ -343,11 +353,11 @@ export default function StockOperations() {
             curr.destId === selectedItem?.ITEM_ID ? acc + (parseFloat(curr.val) || 0) : acc, 0
         ) : 0;
 
-        const isFullOp = [1, 3, 6, 8].includes(selectedOpType) || (selectedOpType === 12 && transferType === 'FULL') || (selectedOpType === 9 && conversionType === 'FULL');
+        const isFullOp = [1, 3, 6, 8].includes(selectedOpType) || ([12, 13].includes(selectedOpType) && transferType === 'FULL') || (selectedOpType === 9 && conversionType === 'FULL');
 
-        // For Transfers (Op 12), if selectedStore is S1 (the source), we do NOT add selfAddition to THIS store's projection.
-        // selfAddition in a transfer strictly belongs to Store 2.
-        const effectiveSelfAddition = (selectedOpType === 12 && selectedStore === 1) ? 0 : selfAddition;
+        // For Transfers (Op 12/13), if selectedStore is the source, we do NOT add selfAddition to THIS store's projection.
+        // selfAddition in a transfer strictly belongs to the target store.
+        const effectiveSelfAddition = ([12, 13].includes(selectedOpType)) ? 0 : selfAddition;
 
         let newStock = isFullOp ? effectiveSelfAddition : (currentStock - deduction + effectiveSelfAddition);
         // if (newStock < 0) newStock = 0; // Removed clamp to allow negative stock for partial ops as requested
@@ -360,14 +370,14 @@ export default function StockOperations() {
         // Op 1 (Full Clear): Wastage = ActualFound (Input) - CurrentStock
         // Op 3 (Full Sales): Wastage = SoldQty - CurrentStock
         // Op 9 (Full Conv):  Wastage = TotalConverted - CurrentStock
-        // Op 12 (Full Trans): Wastage = ActualTransfer (Input) - CurrentStock
+        // Op 12/13 (Full Trans): Wastage = ActualTransfer (Input) - CurrentStock
 
-        if ([1, 3].includes(selectedOpType) || (selectedOpType === 12 && transferType === 'FULL') || (selectedOpType === 9 && conversionType === 'FULL')) {
+        if ([1, 3].includes(selectedOpType) || ([12, 13].includes(selectedOpType) && transferType === 'FULL') || (selectedOpType === 9 && conversionType === 'FULL')) {
 
             let primaryOutput = 0;
             if (selectedOpType === 1) primaryOutput = qty; // Input is "Actual Quantity Found"
             else if (selectedOpType === 3) primaryOutput = sQty; // Input is Sold Qty
-            else if (selectedOpType === 12) primaryOutput = qty; // Input is Transfer Qty
+            else if ([12, 13].includes(selectedOpType)) primaryOutput = qty; // Input is Transfer Qty
 
             // Total Output includes Primary Input + All Conversions
             // For Op 9, primaryOutput is 0, so actualQty = convTotal
@@ -379,34 +389,31 @@ export default function StockOperations() {
             wastage = actualQty - currentStock;
         }
 
-        // Transfer specialized preview (Op 12)
+        // Transfer specialized preview (Op 12/13)
         let transferPreview = null;
-        if (selectedOpType === 12) {
-            const s1Current = parseFloat(selectedItem?.STOCK_S1) || 0;
-            const s2Current = parseFloat(selectedItem?.STOCK_S2) || 0;
+        if ([12, 13].includes(selectedOpType)) {
+            const sourceCurrent = selectedStore === 1 ? (parseFloat(selectedItem?.STOCK_S1) || 0) : (parseFloat(selectedItem?.STOCK_S2) || 0);
+            const targetCurrent = transferTargetStore === 1 ? (parseFloat(selectedItem?.STOCK_S1) || 0) : (parseFloat(selectedItem?.STOCK_S2) || 0);
 
-            // S1 is always the source for Op 12 (Transfer)
-            const s1Deduction = deduction; // calculated above as currentStock if FULL, else convTotal or qty
-            const s1Projected = transferType === 'FULL' ? 0 : (s1Current - s1Deduction); // S1 never gets selfAddition from transfer list
+            const sourceDeduction = deduction; // calculated above as currentStock if FULL, else convTotal or qty
+            const sourceProjected = transferType === 'FULL' ? 0 : (sourceCurrent - sourceDeduction);
 
-            // S2 Addition: The amount of main item moving to S2
-            // If conversion enabled, addition to main item at S2 is only what's in selfAddition
+            // Target Addition: The amount of main item moving to target store
+            // If conversion enabled, addition to main item at target is only what's in selfAddition
             // If conversion disabled, addition is full 'qty'
-            const s2Addition = conversionEnabled ? selfAddition : qty;
-            const s2Projected = s2Current + s2Addition;
+            const targetAddition = conversionEnabled ? selfAddition : qty;
+            const targetProjected = targetCurrent + targetAddition;
 
             transferPreview = {
-                s1: { current: s1Current, projected: s1Projected, diff: s1Projected - s1Current },
-                s2: { current: s2Current, projected: s2Projected, diff: s2Projected - s2Current }
+                source: { current: sourceCurrent, projected: sourceProjected, diff: sourceProjected - sourceCurrent, store: selectedStore },
+                target: { current: targetCurrent, projected: targetProjected, diff: targetProjected - targetCurrent, store: transferTargetStore }
             };
 
             // Specialized Wastage for Transfer
-            // Wastage = (Arrived at S2) - (Left S1)
-            // Left S1 = s1Deduction (what left the system at Store 1)
-            // Arrived at S2 = convTotal (if conversions) OR qty (if direct)
+            // Wastage = (Arrived at Target) - (Left Source)
             if (transferType === 'FULL') {
                 const totalOutput = conversionEnabled ? convTotal : qty;
-                wastage = totalOutput - s1Current;
+                wastage = totalOutput - sourceCurrent;
             }
         }
 
@@ -424,9 +431,8 @@ export default function StockOperations() {
             const destItem = products.find(p => p.ITEM_ID === c.destId);
             if (!destItem) return null;
 
-            // For Op 12 (Transfer), destination stock is ALWAYS from the TARGET store
-            // For other conversions (Op 2, 4, 9, 10), it's the CURRENT store
-            const targetStoreNum = selectedOpType === 12 ? transferTargetStore : selectedStore;
+            // For Transfer (Op 12/13), destination stock is ALWAYS from the TARGET store
+            const targetStoreNum = [12, 13].includes(selectedOpType) ? transferTargetStore : selectedStore;
             const destCurrent = targetStoreNum === 1 ? (destItem.STOCK_S1 || 0) : (destItem.STOCK_S2 || 0);
             const added = parseFloat(c.val) || 0;
             // Dest stock increases
@@ -467,7 +473,7 @@ export default function StockOperations() {
         const currentStock = parseFloat(selectedStore === 1 ? item.STOCK_S1 : item.STOCK_S2) || 0;
 
         // For "Full" operations, default main/sell qty to current stock
-        if ([1, 3, 9, 12].includes(selectedOpType)) {
+        if ([1, 3, 9, 12, 13].includes(selectedOpType)) {
             setMainQuantity(currentStock > 0 ? currentStock.toFixed(2) : '');
             if (selectedOpType === 3) {
                 setSellQuantity(currentStock > 0 ? currentStock.toFixed(2) : '');
@@ -542,8 +548,8 @@ export default function StockOperations() {
         // Conversion (9) MUST have at least one conversion destination
         if (selectedOpType === 9 && conversions.length === 0) return false;
 
-        // Transfer (12)
-        if (selectedOpType === 12) {
+        // Transfer (12/13)
+        if ([12, 13].includes(selectedOpType)) {
             if (transferType === 'FULL') return true;
             if (conversionEnabled) return conversions.length > 0;
             return parseFloat(mainQuantity) > 0;
@@ -599,7 +605,7 @@ export default function StockOperations() {
                 if (conversionType === 'FULL') quantityToRemove = 'FULL';
                 else quantityToRemove = cQty;
             }
-            else if (selectedOpType === 12) {
+            else if ([12, 13].includes(selectedOpType)) {
                 if (transferType === 'FULL') quantityToRemove = 'FULL';
                 else if (conversionEnabled) quantityToRemove = cQty; // Matches preview logic
                 else quantityToRemove = mQty;
@@ -609,7 +615,7 @@ export default function StockOperations() {
 
             let finalOpType = selectedOpType;
             let finalClearanceType = null;
-            if (selectedOpType === 12) finalClearanceType = transferType;
+            if ([12, 13].includes(selectedOpType)) finalClearanceType = transferType;
             if (selectedOpType === 9) finalClearanceType = conversionType; // Save conversion type as clearance type for clarity
 
             const payload = {
@@ -631,7 +637,7 @@ export default function StockOperations() {
                 SELL_QUANTITY: [3, 4].includes(selectedOpType) ? sQty : 0,
                 SELL_PRICE: parseFloat(sellPrice) || 0,
                 BILL_AMOUNT: ([3, 4].includes(selectedOpType) ? sQty : 0) * (parseFloat(sellPrice) || 0),
-                conversions: (conversionEnabled || selectedOpType === 9) ? conversions.map(c => ({
+                conversions: (conversionEnabled || selectedOpType === 9) ? conversions.filter(c => c.destId).map(c => ({
                     SOURCE_ITEM_ID: selectedItem.ITEM_ID,
                     SOURCE_ITEM_CODE: selectedItem.CODE,
                     DEST_ITEM_ID: c.destId,
@@ -651,12 +657,12 @@ export default function StockOperations() {
                 TRIP_ID: tripId,
                 OP_CODE: opCode,
 
-                STORE_TO: selectedOpType === 12 ? transferTargetStore : null,
+                STORE_TO: [12, 13].includes(selectedOpType) ? transferTargetStore : null,
                 CLEARANCE_TYPE: finalClearanceType
             };
 
             let endpoint = '/api/stock-ops/create';
-            if (selectedOpType === 12) {
+            if ([12, 13].includes(selectedOpType)) {
                 endpoint = '/api/stock-transfers/request';
                 const transferPayload = {
                     mainItemId: selectedItem.ITEM_ID,
@@ -668,8 +674,8 @@ export default function StockOperations() {
                     storeTo: transferTargetStore,
                     createdBy: user?.USER_ID,
                     createdByName: user?.NAME,
-                    comments: comments || 'Direct Web Transfer',
-                    conversions: conversionEnabled ? conversions.map(c => ({
+                    comments: comments || `Direct Web Transfer (S${selectedStore} -> S${transferTargetStore})`,
+                    conversions: conversionEnabled ? conversions.filter(c => c.destId).map(c => ({
                         DEST_ITEM_ID: c.destId,
                         DEST_ITEM_CODE: c.destCode,
                         DEST_ITEM_NAME: c.destName,
@@ -682,7 +688,8 @@ export default function StockOperations() {
                 };
 
                 await axios.post(endpoint, transferPayload);
-            } else if (selectedOpType === 11) {
+            }
+            else if (selectedOpType === 11) {
                 endpoint = '/api/stock-ops/create-return';
                 const retQuantity = conversionEnabled ? cQty : parseFloat(returnQty);
                 const returnPayload = {
@@ -694,7 +701,7 @@ export default function StockOperations() {
                     ITEM_ID: selectedItem.ITEM_ID,
                     ITEM_CODE: selectedItem.CODE,
                     ITEM_NAME: selectedItem.NAME,
-                    conversions: conversionEnabled ? conversions.map(c => ({
+                    conversions: conversionEnabled ? conversions.filter(c => c.destId).map(c => ({
                         DEST_ITEM_ID: c.destId,
                         DEST_ITEM_CODE: c.destCode,
                         DEST_ITEM_NAME: c.destName,
@@ -953,12 +960,8 @@ export default function StockOperations() {
                                     className="p-4 md:p-8 rounded-2xl md:rounded-3xl border border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 cursor-pointer flex flex-col items-center gap-3 md:gap-6 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl hover:scale-105 group"
                                     onClick={() => {
                                         handleOpTypeChange(op.id);
-                                        if (op.id === 12) {
-                                            // Transfer: Auto-select Source=1, Step=3 (Skip Store)
-                                            setSelectedStore(1);
-                                            setTransferTargetStore(2); // Auto target
-                                            setStep(3);
-                                        } else {
+                                        // Non-transfer ops go to store selection step
+                                        if (![12, 13].includes(op.id)) {
                                             setStep(2);
                                         }
                                     }}
@@ -1024,7 +1027,7 @@ export default function StockOperations() {
                             <div className="flex gap-4 mb-6">
                                 <Button
                                     icon={<UndoOutlined />}
-                                    onClick={() => setStep(selectedOpType === 12 ? 1 : 2)}
+                                    onClick={() => setStep([12, 13].includes(selectedOpType) ? 1 : 2)}
                                     className="h-12 px-6 rounded-xl border-gray-300 hover:border-gray-400 hover:text-gray-600"
                                 >
                                     Back
@@ -1179,26 +1182,26 @@ export default function StockOperations() {
 
                                                     {/* Stock Projection (Only if NOT Return) */}
                                                     {!selectedReturnOp && (
-                                                        selectedOpType === 12 && previewStock.transfer ? (
+                                                        [12, 13].includes(selectedOpType) && previewStock.transfer ? (
                                                             <div className="flex flex-col gap-1 mt-2 border-t border-blue-100 dark:border-blue-800/20 pt-2">
                                                                 <div className="flex items-center justify-between bg-white/30 dark:bg-black/10 px-2 py-0.5 rounded">
-                                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">S1 (Removal)</span>
+                                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">S{previewStock.transfer.source.store} (Removal)</span>
                                                                     <div className="flex items-center gap-2">
-                                                                        <span className="font-mono text-xs text-gray-500">{Number(previewStock.transfer.s1.current).toFixed(1)}</span>
+                                                                        <span className="font-mono text-xs text-gray-500">{Number(previewStock.transfer.source.current).toFixed(1)}</span>
                                                                         <span className="text-gray-300 text-[10px]">→</span>
-                                                                        <span className={`font-mono text-xs font-bold ${previewStock.transfer.s1.projected < 0 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
-                                                                            {Number(previewStock.transfer.s1.projected).toFixed(1)}
+                                                                        <span className={`font-mono text-xs font-bold ${previewStock.transfer.source.projected < 0 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                                                                            {Number(previewStock.transfer.source.projected).toFixed(1)}
                                                                         </span>
                                                                         <span className="text-[10px] text-gray-400">kg</span>
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex items-center justify-between bg-emerald-500/5 px-2 py-0.5 rounded">
-                                                                    <span className="text-[10px] font-bold text-emerald-500 uppercase">S2 (Addition)</span>
+                                                                    <span className="text-[10px] font-bold text-emerald-500 uppercase">S{previewStock.transfer.target.store} (Addition)</span>
                                                                     <div className="flex items-center gap-2">
-                                                                        <span className="font-mono text-xs text-gray-500">{Number(previewStock.transfer.s2.current).toFixed(1)}</span>
+                                                                        <span className="font-mono text-xs text-gray-500">{Number(previewStock.transfer.target.current).toFixed(1)}</span>
                                                                         <span className="text-emerald-300 text-[10px]">→</span>
                                                                         <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                                                                            {Number(previewStock.transfer.s2.projected).toFixed(1)}
+                                                                            {Number(previewStock.transfer.target.projected).toFixed(1)}
                                                                         </span>
                                                                         <span className="text-[10px] text-emerald-500/50">kg</span>
                                                                     </div>
@@ -1309,7 +1312,7 @@ export default function StockOperations() {
                                         )}
 
                                         {/* Transfer Mode */}
-                                        {selectedOpType === 12 && (
+                                        {[12, 13].includes(selectedOpType) && (
                                             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 mt-2">
                                                 <label className="block text-xs font-bold uppercase text-gray-400 mb-3">Transfer Mode</label>
                                                 <Radio.Group value={transferType} onChange={e => setTransferType(e.target.value)} buttonStyle="solid" className="w-full flex">
@@ -1388,7 +1391,7 @@ export default function StockOperations() {
                                                                 {/* Conversion Stock Data */}
                                                                 {c.destId && (
                                                                     <div className="px-1 mt-1 text-[10px] text-gray-400 font-mono flex items-center gap-2">
-                                                                        <span>{selectedOpType === 12 ? 'S2 Arrival' : 'Current'}:</span>
+                                                                        <span>{[12, 13].includes(selectedOpType) ? `S${transferTargetStore} Arrival` : 'Current'}:</span>
                                                                         {(() => {
                                                                             const preview = previewConvStock.find(pc => pc.id === c.id);
                                                                             if (!preview) return <span>-</span>;
@@ -1396,7 +1399,7 @@ export default function StockOperations() {
                                                                                 <span className="flex items-center gap-1">
                                                                                     {Number(preview.current).toFixed(1)}
                                                                                     <span className="text-gray-500">→</span>
-                                                                                    <span className={`${selectedOpType === 12 ? 'text-emerald-500' : 'text-blue-500'} font-bold`}>
+                                                                                    <span className={`${[12, 13].includes(selectedOpType) ? 'text-emerald-500' : 'text-blue-500'} font-bold`}>
                                                                                         {Number(preview.projected).toFixed(1)}
                                                                                     </span>
                                                                                 </span>
@@ -1438,8 +1441,8 @@ export default function StockOperations() {
                                                         ? 'text-blue-500'
                                                         : 'text-emerald-500'
                                                     }`}>
-                                                    {selectedOpType === 12
-                                                        ? (previewStock.wastage < 0 ? 'Transfer Loss (S1 → S2)' : previewStock.wastage > 0 ? 'Transfer Surplus' : 'Exact Transfer')
+                                                    {([12, 13].includes(selectedOpType))
+                                                        ? (previewStock.wastage < 0 ? `Transfer Loss (S${selectedStore} → S${transferTargetStore})` : previewStock.wastage > 0 ? 'Transfer Surplus' : 'Exact Transfer')
                                                         : (previewStock.wastage < 0 ? 'Wastage (Leakage)' : previewStock.wastage > 0 ? 'Surplus' : 'No Loss (Perfect Clear)')}
                                                 </span>
                                                 {previewStock.wastage < 0 ? <FallOutlined className="text-orange-500" /> : previewStock.wastage > 0 ? <RiseOutlined className="text-blue-500" /> : <CheckOutlined className="text-emerald-500" />}
@@ -1461,8 +1464,8 @@ export default function StockOperations() {
                                                     }`}>Kg</span>
                                             </div>
                                             <div className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
-                                                {selectedOpType === 12
-                                                    ? 'Calculated as (Arrived at S2) - (Released from S1)'
+                                                {[12, 13].includes(selectedOpType)
+                                                    ? 'Calculated as (Arrived at Target) - (Released from Source)'
                                                     : 'Real-time calculation based on input vs current stock.'}
                                             </div>
                                         </div>
@@ -1514,7 +1517,7 @@ export default function StockOperations() {
                                     )}
 
                                     {/* Lorry Details */}
-                                    {[1, 2, 3, 4, 12].includes(selectedOpType) && (
+                                    {[1, 2, 3, 4, 12, 13].includes(selectedOpType) && (
                                         <div className="bg-gray-50 dark:bg-white/5 p-4 md:p-6 rounded-xl md:rounded-2xl border border-gray-100 dark:border-white/5">
                                             <h4 className="font-bold text-gray-500 uppercase text-xs mb-4 tracking-wider flex items-center gap-2">🚛 Transport Details</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
@@ -1592,7 +1595,7 @@ export default function StockOperations() {
                                                 icon={<CheckOutlined />}
                                                 className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 h-12 px-8 rounded-xl shadow-lg shadow-emerald-500/30 border-none"
                                             >
-                                                {selectedOpType === 12 ? 'Submit Transfer' : 'Confirm'}
+                                                {[12, 13].includes(selectedOpType) ? 'Submit Transfer' : 'Confirm'}
                                             </Button>
                                         </div>
                                     </div>
@@ -1719,7 +1722,7 @@ export default function StockOperations() {
                                                 <div className="flex items-center justify-between mb-6">
                                                     <div className="flex flex-col items-center">
                                                         <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center border-2 border-white dark:border-gray-700 shadow-sm z-10">
-                                                            <span className="text-lg font-bold text-red-600 dark:text-red-400">S1</span>
+                                                            <span className="text-lg font-bold text-red-600 dark:text-red-400">S{viewRecord.breakdown.sourceStore || viewRecord.STORE_NO || 1}</span>
                                                         </div>
                                                         <span className="text-xs font-bold text-gray-500 mt-1">Source</span>
                                                     </div>
@@ -1733,7 +1736,7 @@ export default function StockOperations() {
 
                                                     <div className="flex flex-col items-center">
                                                         <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center border-2 border-white dark:border-gray-700 shadow-sm z-10">
-                                                            <span className="text-lg font-bold text-green-600 dark:text-green-400">S2</span>
+                                                            <span className="text-lg font-bold text-green-600 dark:text-green-400">S{viewRecord.breakdown.targetStore || (viewRecord.STORE_NO === 1 ? 2 : 1)}</span>
                                                         </div>
                                                         <span className="text-xs font-bold text-gray-500 mt-1">Dest</span>
                                                     </div>
@@ -1742,7 +1745,7 @@ export default function StockOperations() {
                                                 {/* Source Detail */}
                                                 <div className="mb-4 p-3 bg-white/60 dark:bg-black/20 rounded-lg">
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-sm font-bold text-gray-700 dark:text-gray-300">From Store 1: {viewRecord.breakdown.source.itemName}</span>
+                                                        <span className="text-sm font-bold text-gray-700 dark:text-gray-300">From Store {viewRecord.breakdown.sourceStore || viewRecord.STORE_NO || 1}: {viewRecord.breakdown.source.itemName}</span>
                                                         <span className="text-xs text-red-500 font-mono">-{Number(viewRecord.breakdown.source.adjustmentQty).toFixed(1)} Kg</span>
                                                     </div>
                                                     <div className="text-xs text-gray-500 flex justify-between">
@@ -1762,7 +1765,7 @@ export default function StockOperations() {
 
                                                 {/* Destinations Detail with Before/After Stock */}
                                                 <div className="p-3 bg-white/60 dark:bg-black/20 rounded-lg">
-                                                    <div className="text-xs text-gray-500 mb-2 uppercase">To Store 2</div>
+                                                    <div className="text-xs text-gray-500 mb-2 uppercase">To Store {viewRecord.breakdown.targetStore || (viewRecord.STORE_NO === 1 ? 2 : 1)}</div>
                                                     {viewRecord.breakdown.store2Items && viewRecord.breakdown.store2Items.length > 0 ? (
                                                         viewRecord.breakdown.store2Items.map((item, idx) => (
                                                             <div key={idx} className="flex justify-between items-center mb-2 p-2 bg-green-50 dark:bg-green-900/20 rounded">

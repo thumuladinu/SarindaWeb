@@ -363,7 +363,12 @@ export default function Transactions() {
             dataIndex: 'CREATED_BY',
             key: 'CREATED_BY',
             className: 'text-gray-600 dark:text-gray-400 text-xs',
-            render: (id) => users[id] || id // Display Name or fallback to ID
+            render: (id, record) => (
+                <div className="flex flex-col">
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{users[id] || id}</span>
+                    <span className="text-[10px] text-gray-400">at {dayjs(record.EDITED_DATE).format('YYYY-MM-DD h:mmA')}</span>
+                </div>
+            )
         },
         {
             title: 'Actions',
@@ -467,7 +472,8 @@ export default function Transactions() {
                                 </div>
                                 <div className="flex flex-col mt-1">
                                     <span className="text-[10px] text-gray-400 uppercase tracking-wider">Cashier</span>
-                                    <span className="text-xs dark:text-gray-300">{users[item.CREATED_BY] || item.CREATED_BY}</span>
+                                    <span className="text-[10px] dark:text-gray-300">{users[item.CREATED_BY] || item.CREATED_BY}</span>
+                                    <span className="text-[8px] text-gray-500">at {dayjs(item.EDITED_DATE).format('YYYY-MM-DD h:mmA')}</span>
                                 </div>
                             </div>
                             <div className="flex flex-col items-end">

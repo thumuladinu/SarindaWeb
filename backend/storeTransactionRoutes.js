@@ -2112,9 +2112,18 @@ router.post('/api/getInventoryHistory', async (req, res) => {
             }
 
             // Build breakdown for display
-            // Get Store 2 items if this is a transfer operation (Op 5 or 6)
-            const store1Items = (row.items || []).filter(i => !i.STORE_NO || i.STORE_NO === 1);
-            const store2Items = (row.items || []).filter(i => i.STORE_NO === 2);
+            // Determine dynamic source and target stores
+            let sourceStoreNo = row.STORE_NO;
+            let targetStoreNo = row.STORE_NO === 1 ? 2 : 1; // Default assumption for transfers
+
+            // If we have items with different store numbers, we can be more precise
+            const otherStoreItem = (row.items || []).find(i => i.STORE_NO !== row.STORE_NO);
+            if (otherStoreItem) {
+                targetStoreNo = otherStoreItem.STORE_NO;
+            }
+
+            const sourceItems = (row.items || []).filter(i => i.STORE_NO === sourceStoreNo);
+            const targetItems = (row.items || []).filter(i => i.STORE_NO !== sourceStoreNo);
 
             // Determine main item cleared quantity
             let mainQty = 0;
@@ -2148,8 +2157,18 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                     itemName: c.DEST_ITEM_NAME,
                     quantity: parseFloat(c.DEST_QUANTITY) || 0
                 })),
-                // Store 2 items with before/after stock for transfer operations
-                store2Items: store2Items.map(i => ({
+                // Target items with before/after stock (historically called store2Items)
+                targetItems: targetItems.map(i => ({
+                    itemId: i.ITEM_ID,
+                    itemCode: i.ITEM_CODE,
+                    itemName: i.ITEM_NAME,
+                    previousStock: parseFloat(i.ORIGINAL_STOCK) || 0,
+                    addedQty: Math.abs(parseFloat(i.CLEARED_QUANTITY) || 0),
+                    currentStock: parseFloat(i.REMAINING_STOCK) || 0,
+                    storeNo: i.STORE_NO
+                })),
+                // Compatibility for older frontend versions that expect 'store2Items'
+                store2Items: targetItems.map(i => ({
                     itemId: i.ITEM_ID,
                     itemCode: i.ITEM_CODE,
                     itemName: i.ITEM_NAME,
@@ -2157,6 +2176,8 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                     addedQty: Math.abs(parseFloat(i.CLEARED_QUANTITY) || 0),
                     currentStock: parseFloat(i.REMAINING_STOCK) || 0
                 })),
+                sourceStore: sourceStoreNo,
+                targetStore: targetStoreNo,
                 isTransferOperation: [5, 6].includes(row.OP_TYPE),
                 wastage: wastage,
                 surplus: surplus,
