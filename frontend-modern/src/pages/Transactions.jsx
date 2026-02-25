@@ -321,8 +321,8 @@ export default function Transactions() {
             key: 'CREATED_DATE',
             render: (date) => (
                 <div className="flex flex-col text-xs">
-                    <span className="font-semibold text-gray-800 dark:text-gray-200">{dayjs.utc(date).utcOffset(330).format('YYYY-MM-DD')}</span>
-                    <span className="text-gray-500">{dayjs.utc(date).utcOffset(330).format('h:mm A')}</span>
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">{dayjs(date).format('YYYY-MM-DD')}</span>
+                    <span className="text-gray-500">{dayjs(date).format('h:mm A')}</span>
                 </div>
             )
         },
@@ -442,7 +442,7 @@ export default function Transactions() {
                             <div className="flex flex-col">
                                 <span className="text-xs text-gray-500 font-mono">{item.CODE}</span>
                                 <span className="text-gray-800 dark:text-white font-semibold text-lg">
-                                    {dayjs.utc(item.CREATED_DATE).utcOffset(330).format('DD MMM, h:mm A')}
+                                    {dayjs(item.CREATED_DATE).format('DD MMM, h:mm A')}
                                 </span>
                             </div>
                             <div className="flex gap-1 items-center">
