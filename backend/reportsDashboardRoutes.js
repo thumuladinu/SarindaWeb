@@ -1356,6 +1356,11 @@ router.post('/api/graphs/item-data', async (req, res) => {
         }
 
         // 5. Populate buckets with price data
+        let globalTotalBuyAmount = 0;
+        let globalTotalBuyQty = 0;
+        let globalTotalSellAmount = 0;
+        let globalTotalSellQty = 0;
+
         for (const tx of allPriceTransactions) {
             const txDate = parseDbDate(tx.tx_date);
             const total = parseFloat(tx.TOTAL) || 0;
@@ -1368,21 +1373,29 @@ router.post('/api/graphs/item-data', async (req, res) => {
                 if (tx.TYPE === 'Buying') {
                     bucket.buyTotal += total;
                     bucket.buyQty += qty;
+                    globalTotalBuyAmount += total;
+                    globalTotalBuyQty += qty;
                 } else if (tx.TYPE === 'Selling') {
                     bucket.sellTotal += total;
                     bucket.sellQty += qty;
+                    globalTotalSellAmount += total;
+                    globalTotalSellQty += qty;
                 }
             }
         }
 
-        // 6. Compute final array
+        // 6. Compute period-wide average profit margin for "smoothed" profit calculation
+        const globalAvgBuyPrice = globalTotalBuyQty > 0 ? (globalTotalBuyAmount / globalTotalBuyQty) : masterBuyPrice;
+        const globalAvgSellPrice = globalTotalSellQty > 0 ? (globalTotalSellAmount / globalTotalSellQty) : masterSellPrice;
+        const globalAvgProfitPerKg = globalAvgSellPrice - globalAvgBuyPrice;
+
+        // 7. Compute final array
         const result = buckets.map(b => {
             let stockAtEndOfBucket = runningStockByDate[b.endDate] || { s1: currentS1, s2: currentS2, total: currentS1 + currentS2 };
 
-            // Profit Calculation (Sold Amt logic)
-            const avgBuy = b.buyQty > 0 ? (b.buyTotal / b.buyQty) : masterBuyPrice;
-            const avgSell = b.sellQty > 0 ? (b.sellTotal / b.sellQty) : masterSellPrice;
-            const profitSoldAmt = (avgSell - avgBuy) * b.sellQty;
+            // Profit Calculation (Smoothed logic requested by user)
+            // Use global average profit per kg multiplied by current bucket's sold quantity
+            const profitSoldAmt = globalAvgProfitPerKg * b.sellQty;
 
             return {
                 label: b.label,
