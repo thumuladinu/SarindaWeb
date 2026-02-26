@@ -121,7 +121,7 @@ router.get('/api/reports-dashboard/clearances/:itemId', async (req, res) => {
         // Also find "natural zero" points via running stock
         const runningStockQuery = `
             SELECT 
-                DATE(st.CREATED_DATE) as tx_date,
+                DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as tx_date,
                 SUM(CASE 
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
                     WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
@@ -132,7 +132,7 @@ router.get('/api/reports-dashboard/clearances/:itemId', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-            GROUP BY DATE(st.CREATED_DATE)
+            GROUP BY DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')})
             ORDER BY tx_date ASC
         `;
 
@@ -369,7 +369,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             FROM store_stock_operations sso
             JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
             WHERE ssoi.ITEM_ID = ?
-              AND st.IS_ACTIVE = 1
+              AND sso.IS_ACTIVE = 1
               AND ssoi.IS_ACTIVE = 1
               AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} > ?
               AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
@@ -672,7 +672,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                     JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
                     WHERE sti.ITEM_ID = ? AND st.TYPE = 'Selling'
                       AND st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1
-                      AND st.CREATED_DATE >= ? AND st.CREATED_DATE <= ?
+                      AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} >= ? 
+                      AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
                       AND st.COMMENTS NOT LIKE '%[OP-%'
                       AND st.COMMENTS NOT LIKE '%[S2-%'
                       AND st.COMMENTS NOT LIKE '%[S1-%'
@@ -684,7 +685,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                     JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
                     WHERE ssoi.ITEM_ID = ? AND sso.OP_TYPE IN (3, 4)
                       AND sso.IS_ACTIVE = 1
-                      AND sso.CREATED_DATE >= ? AND sso.CREATED_DATE <= ?
+                      AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} >= ? 
+                      AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
                 `, [targetId, startBoundary, endBoundary]);
 
                 const sumTotalRaw = (parseFloat(rows[0]?.sumTotal) || 0) + (parseFloat(opRows[0]?.sumTotal) || 0);
@@ -807,7 +809,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                   AND st.STORE_NO = ?
                   AND st.IS_ACTIVE = 1
                   AND sti.IS_ACTIVE = 1
-                  AND st.CREATED_DATE <= ?
+                  AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
             `, [itemId, storeNo, endBoundary]);
             finalStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
         }
@@ -1163,7 +1165,7 @@ router.post('/api/graphs/item-data', async (req, res) => {
         // 1. Get running stock up to endDate
         const runningStockQuery = `
             SELECT 
-                DATE(st.CREATED_DATE) as tx_date,
+                DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as tx_date,
                 st.STORE_NO,
                 SUM(CASE 
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
@@ -1175,8 +1177,8 @@ router.post('/api/graphs/item-data', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-              AND DATE(st.CREATED_DATE) <= ?
-            GROUP BY DATE(st.CREATED_DATE), st.STORE_NO
+              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?
+            GROUP BY DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}), st.STORE_NO
             ORDER BY tx_date ASC
         `;
         const dailyStockChanges = await pool.query(runningStockQuery, [itemId, endDate]);
@@ -1184,7 +1186,7 @@ router.post('/api/graphs/item-data', async (req, res) => {
         // ... (Price transactions query remains same) ...
         const txQuery = `
             SELECT 
-                DATE(st.CREATED_DATE) as tx_date,
+                DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as tx_date,
                 st.TYPE,
                 sti.QUANTITY,
                 sti.TOTAL
@@ -1197,14 +1199,14 @@ router.post('/api/graphs/item-data', async (req, res) => {
               AND st.COMMENTS NOT LIKE '%[OP-%'
               AND st.COMMENTS NOT LIKE '%[S2-%'
               AND st.COMMENTS NOT LIKE '%[S1-%'
-              AND DATE(st.CREATED_DATE) >= ?
-              AND DATE(st.CREATED_DATE) <= ?
+              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= ?
+              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?
         `;
         const transactions = await pool.query(txQuery, [itemId, startDate, endDate]);
 
         const opsQuery = `
             SELECT 
-                DATE(sso.CREATED_DATE) as tx_date,
+                DATE(${OP_SL_TIME_SQL('sso.CREATED_DATE')}) as tx_date,
                 'Selling' as TYPE,
                 ssoi.SOLD_QUANTITY as QUANTITY,
                 ssoi.TOTAL
@@ -1214,8 +1216,8 @@ router.post('/api/graphs/item-data', async (req, res) => {
               AND sso.IS_ACTIVE = 1
               AND ssoi.IS_ACTIVE = 1
               AND sso.OP_TYPE IN (3, 4)
-              AND DATE(sso.CREATED_DATE) >= ?
-              AND DATE(sso.CREATED_DATE) <= ?
+              AND DATE(${OP_SL_TIME_SQL('sso.CREATED_DATE')}) >= ?
+              AND DATE(${OP_SL_TIME_SQL('sso.CREATED_DATE')}) <= ?
         `;
         const opTransactions = await pool.query(opsQuery, [itemId, startDate, endDate]);
 
