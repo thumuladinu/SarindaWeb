@@ -486,6 +486,19 @@ function AnalysisResults({ data, showSections, toggleSection }) {
     let trueNetProfitPerKg = incomePerKg - outGoingPerKg + convImpactPerSoldKg - wsFinancialImpactPerKg;
     trueNetProfitPerKg = Number(trueNetProfitPerKg.toFixed(5));
 
+    const transactionEffectList = useMemo(() => {
+        if (!data.transactionListEffect) return [];
+        const list = [
+            ...(data.transactionListEffect.transactions || []),
+            ...(data.transactionListEffect.operationSales || [])
+        ];
+        list.sort((a, b) => new Date(a.date) - new Date(b.date));
+        return list;
+    }, [data.transactionListEffect]);
+
+    const netEffectAmount = transactionEffectList.reduce((sum, tx) => sum + tx.amount, 0);
+    const netEffectQty = transactionEffectList.reduce((sum, tx) => sum + tx.qty, 0);
+
     const generatePDF = () => {
         const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
         registerSinhalaFont(doc);
@@ -545,12 +558,12 @@ function AnalysisResults({ data, showSections, toggleSection }) {
 
         autoTable(doc, {
             startY: currentY,
-            head: [['Revenue', 'Cost', 'Gross Profit', 'Return Expenses', 'Conv. Impact', 'Net Profit']],
+            head: [['Revenue', 'Cost', 'Gross Profit', 'W/S Impact', 'Conv. Impact', 'Net Profit']],
             body: [[
                 financials.totalRevenue.toFixed(2),
                 financials.totalCost.toFixed(2),
                 financials.grossProfit.toFixed(2),
-                (financials.totalReturnExpense || 0).toFixed(2),
+                (financials.totalWSImpact || 0).toFixed(2),
                 financials.conversionImpact.toFixed(2),
                 financials.netProfit.toFixed(2)
             ]],
@@ -630,6 +643,47 @@ function AnalysisResults({ data, showSections, toggleSection }) {
         });
 
         currentY = Math.max(doc.lastAutoTable.finalY, leftTable1FinalY) + 10;
+
+        // Table 5.5: Transaction List Effect
+        if (data.transactionListEffect) {
+            if (currentY > 160) { doc.addPage(); currentY = 15; }
+            doc.setFont('helvetica', 'bold');
+            doc.text("Transaction List Effect", 14, currentY);
+            currentY += 4;
+
+            const txEffectArr = [
+                ...(data.transactionListEffect.transactions || []),
+                ...(data.transactionListEffect.operationSales || [])
+            ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            const txEffectBody = txEffectArr.map(tx => [
+                tx.code || '-',
+                dayjs(tx.date).format('YYYY-MM-DD HH:mm'),
+                tx.type,
+                (tx.amount >= 0 ? '+' : '') + tx.amount.toFixed(2),
+                (tx.qty >= 0 ? '+' : '') + tx.qty.toFixed(2)
+            ]);
+
+            const netAmt = txEffectArr.reduce((s, t) => s + t.amount, 0);
+            const netQty = txEffectArr.reduce((s, t) => s + t.qty, 0);
+
+            txEffectBody.push([
+                { content: 'NET TOTALS', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+                { content: (netAmt >= 0 ? '+' : '') + netAmt.toFixed(2), styles: { fontStyle: 'bold' } },
+                { content: (netQty >= 0 ? '+' : '') + netQty.toFixed(2), styles: { fontStyle: 'bold' } }
+            ]);
+
+            autoTable(doc, {
+                startY: currentY,
+                head: [['Code', 'Date', 'Type', 'Amount (Rs)', 'Qty (kg)']],
+                body: txEffectBody,
+                theme: 'grid',
+                headStyles: { fillColor: [79, 70, 229], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
+                styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
+            });
+            currentY = doc.lastAutoTable.finalY + 10;
+        }
+
 
         // Add new page if space is running out
         if (currentY > 160) { doc.addPage(); currentY = 15; }
@@ -902,10 +956,10 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                         sub: `Avg B:${financials.avgBuyPrice?.toFixed(2)} S:${financials.avgSellPrice?.toFixed(2)}`
                     },
                     {
-                        label: 'Return Expenses',
-                        value: financials.totalReturnExpense || 0,
-                        color: 'orange',
-                        sub: `${financials.totalReturnedQty?.toFixed(1) || 0}kg returned`
+                        label: 'W/S Impact',
+                        value: financials.totalWSImpact || 0,
+                        color: (financials.totalWSImpact || 0) >= 0 ? 'emerald' : 'red',
+                        sub: `Impact of ${Math.abs(netWS).toFixed(1)}kg ${netWS > 0 ? 'wastage' : 'surplus'}`
                     },
                     {
                         label: 'Conv. Impact',
@@ -1108,6 +1162,59 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                             <div className="flex-1 text-right text-xs font-medium text-red-400">Rs {storeAggregates.store2.buying.amount.toFixed(0)}</div>
                             <div className="flex-1 text-right text-xs font-bold text-red-300">Rs {aggregates.buying.amount.toFixed(0)}</div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* NEW SECTION: Transaction List Effect */}
+            {transactionEffectList.length > 0 && (
+                <div className="glass-card p-4 rounded-2xl bg-white/5 border border-white/10">
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 text-[10px] flex items-center justify-center font-bold">X</span>
+                        Transaction List Effect
+                    </div>
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left border-separate border-spacing-y-1.5">
+                            <thead>
+                                <tr className="text-gray-500 text-[10px] uppercase tracking-wider">
+                                    <th className="px-3 py-1 font-semibold">Code</th>
+                                    <th className="px-3 py-1 font-semibold">Date</th>
+                                    <th className="px-3 py-1 font-semibold">Type</th>
+                                    <th className="px-3 py-1 font-semibold text-right">Amount (Rs)</th>
+                                    <th className="px-3 py-1 font-semibold text-right">Qty (kg)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {transactionEffectList.map((tx, i) => (
+                                    <tr key={i} className="bg-white/5 hover:bg-white/10 transition-colors text-xs">
+                                        <td className="px-3 py-2 rounded-l-xl font-mono text-[10px]">{tx.code || '-'}</td>
+                                        <td className="px-3 py-2 text-gray-400">{dayjs(tx.date).format('DD MMM, HH:mm')}</td>
+                                        <td className="px-3 py-2">
+                                            <Tag color={tx.type.includes('Selling') ? 'red' : 'green'} className="text-[10px] m-0 border-none bg-white/5">
+                                                {tx.type}
+                                            </Tag>
+                                        </td>
+                                        <td className={`px-3 py-2 text-right font-medium ${tx.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {tx.amount >= 0 ? '+' : ''}{tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                        <td className={`px-3 py-2 rounded-r-xl text-right font-medium ${tx.qty >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {tx.qty >= 0 ? '+' : ''}{tx.qty.toFixed(2)}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr className="text-gray-300 font-bold bg-indigo-500/10 transition-colors text-xs">
+                                    <td colSpan={3} className="px-3 py-2 rounded-l-xl text-right text-[10px] uppercase">Net Totals</td>
+                                    <td className={`px-3 py-2 text-right ${netEffectAmount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        {netEffectAmount >= 0 ? '+' : ''}{netEffectAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className={`px-3 py-2 rounded-r-xl text-right ${netEffectQty >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        {netEffectQty >= 0 ? '+' : ''}{netEffectQty.toFixed(2)}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
                     </div>
                 </div>
             )}

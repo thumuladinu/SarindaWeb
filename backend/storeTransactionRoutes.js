@@ -166,11 +166,11 @@ router.post('/api/getDailyBalance', async (req, res) => {
         console.log("Fetching Sales for User:", USER_ID, "Date:", DATE);
         const salesRows = await pool.query(`
             SELECT SUM(SUB_TOTAL) as total 
-            FROM store_transactions 
+            FROM store_transactions st
             WHERE IS_ACTIVE = 1 
               AND TYPE = 'Selling' 
               AND CREATED_BY = ? 
-              AND DATE(CREATED_DATE) = ?
+              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) = ?
         `, [USER_ID, DATE]);
 
         // 3. Get Total BUYING (Cash Out)
@@ -178,11 +178,11 @@ router.post('/api/getDailyBalance', async (req, res) => {
         console.log("Fetching Buying...");
         const buyingRows = await pool.query(`
             SELECT SUM(SUB_TOTAL) as total 
-            FROM store_transactions 
+            FROM store_transactions st
             WHERE IS_ACTIVE = 1 
               AND TYPE = 'Buying' 
               AND CREATED_BY = ? 
-              AND DATE(CREATED_DATE) = ?
+              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) = ?
         `, [USER_ID, DATE]);
 
         // 4. Get Total EXPENSES (Cash Out)
@@ -190,11 +190,11 @@ router.post('/api/getDailyBalance', async (req, res) => {
         console.log("Fetching Expenses...");
         const expensesRows = await pool.query(`
             SELECT SUM(SUB_TOTAL) as total 
-            FROM store_transactions 
+            FROM store_transactions st
             WHERE IS_ACTIVE = 1 
               AND TYPE = 'Expenses' 
               AND CREATED_BY = ? 
-              AND DATE(CREATED_DATE) = ?
+              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) = ?
         `, [USER_ID, DATE]);
 
         const sales = parseFloat((salesRows && salesRows[0]?.total) || 0);
@@ -327,11 +327,11 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
             queryParams.push(parseFloat(maxAmount));
         }
         if (startDate) {
-            whereConditions.push('DATE(st.CREATED_DATE) >= ?');
+            whereConditions.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= ?`);
             queryParams.push(startDate);
         }
         if (endDate) {
-            whereConditions.push('DATE(st.CREATED_DATE) <= ?');
+            whereConditions.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?`);
             queryParams.push(endDate);
         }
         if (itemIds && itemIds.length > 0) {
@@ -357,6 +357,7 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
         const mainQuery = `
             SELECT 
                 st.*,
+                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
                 sc.NAME as C_NAME
             FROM store_transactions st
             LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID
@@ -421,7 +422,7 @@ router.get('/api/getTransactionDetails/:id', async (req, res) => {
 
         // Get transaction basic info with customer
         const transaction = await pool.query(`
-            SELECT st.*, sc.NAME as C_NAME 
+            SELECT st.*, ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE, sc.NAME as C_NAME 
             FROM store_transactions st 
             LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID 
             WHERE st.TRANSACTION_ID = ?
@@ -453,7 +454,7 @@ router.post('/api/getAllTransactionsCashBookByUser', async (req, res) => {
 
         // Query to fetch active transactions today and yersterday (exclude weight measurements and inventory adjustments)
         const queryResult = await pool.query(
-            "SELECT * FROM store_transactions WHERE IS_ACTIVE = 1 AND CODE IS NOT NULL AND TYPE != 'WeightMeasure' AND TYPE NOT IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'Adjustment') AND CREATED_DATE >= CURDATE() - INTERVAL 1 DAY AND STORE_NO = ?",
+            `SELECT *, ${SL_TIME_SQL('CREATED_DATE', 'CODE')} as CREATED_DATE FROM store_transactions st WHERE IS_ACTIVE = 1 AND CODE IS NOT NULL AND TYPE != 'WeightMeasure' AND TYPE NOT IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'Adjustment') AND DATE(${SL_TIME_SQL('CREATED_DATE', 'CODE')}) >= CURDATE() - INTERVAL 1 DAY AND STORE_NO = ?`,
             [req.body.STORE_NO]
         );
 
@@ -509,12 +510,14 @@ router.post('/api/getTodayTransactionData', async (req, res) => {
         }
 
         // Query to fetch all active transactions with today's date
+        // Note: Using transactions table as per original code, but applying DATE(CONVERT_TZ...) for consistency
         const queryResult = await pool.query(`
-            SELECT t.CODE, t.PAYMENT_AMOUNT,t.TYPE,t.DATE, i.CODE AS ITEM_CODE, c.NAME AS C_NAME
+            SELECT t.CODE, t.PAYMENT_AMOUNT,t.TYPE,t.DATE, i.CODE AS ITEM_CODE, c.NAME AS C_NAME,
+                   CONVERT_TZ(t.CREATED_DATE, '+00:00', '+05:30') as CREATED_DATE
             FROM transactions t
             JOIN items i ON t.REFERENCE = i.ITEM_ID_AI
             LEFT JOIN customers c ON t.CUSTOMER = c.CUSTOMER_ID
-            WHERE t.IS_ACTIVE = 1 AND DATE(t.CREATED_DATE) = CURDATE() AND t.PAYMENT_AMOUNT > 0
+            WHERE t.IS_ACTIVE = 1 AND DATE(CONVERT_TZ(t.CREATED_DATE, '+00:00', '+05:30')) = DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30')) AND t.PAYMENT_AMOUNT > 0
         `);
 
         queryResult.sort((a, b) => new Date(b.CREATED_DATE) - new Date(a.CREATED_DATE));

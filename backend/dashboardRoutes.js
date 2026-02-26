@@ -10,6 +10,22 @@ const util = require('util');
 
 // pool.query = util.promisify(pool.query); // Removed to avoid double-wrapping since other routes already promisify it
 
+// SQL Helper for selective SL Time conversion
+// Server-created records (Actual UTC) -> Shift to SLT
+// Synced records (Already SLT string) -> Keep as-is
+const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
+    CASE 
+        WHEN ${codeField} IS NULL 
+             OR ${codeField} LIKE 'ADJ-%' 
+             OR ${codeField} LIKE 'STOCKOP-%' 
+             OR ${codeField} LIKE 'SLO-%'
+        THEN CONVERT_TZ(${field}, '+00:00', '+05:30')
+        ELSE ${field}
+    END
+`;
+
+const OP_SL_TIME_SQL = (field = 'so.CREATED_DATE') => `CONVERT_TZ(${field}, '+00:00', '+05:30')`;
+
 // Now you can use pool.query with async/await
 router.post('/api/getItemCountData', async (req, res) => {
     //console.log('Get item count data request received:');
@@ -121,12 +137,12 @@ router.post('/api/getTodayTransactions', async (req, res) => {
 
         // Sum of buying transactions for today
         const buyTransactionsQuery = await pool.query(
-            `SELECT SUM(PAYMENT_AMOUNT) AS AMOUNT FROM store_transactions WHERE IS_ACTIVE = 1 AND CREATED_DATE >= CURDATE() AND (TYPE = 'Buying' OR TYPE = 'Payment') AND STORE_NO = ? `, [req.body.STORE_NO]
+            `SELECT SUM(PAYMENT_AMOUNT) AS AMOUNT FROM store_transactions st WHERE IS_ACTIVE = 1 AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= CURDATE() AND (TYPE = 'Buying' OR TYPE = 'Payment') AND STORE_NO = ? `, [req.body.STORE_NO]
         );
 
         // Sum of selling transactions for today
         const sellTransactionsQuery = await pool.query(
-            `SELECT SUM(PAYMENT_AMOUNT) AS AMOUNT FROM store_transactions WHERE IS_ACTIVE = 1 AND CREATED_DATE >= CURDATE() AND TYPE = 'Selling' AND STORE_NO = ? `, [req.body.STORE_NO]
+            `SELECT SUM(PAYMENT_AMOUNT) AS AMOUNT FROM store_transactions st WHERE IS_ACTIVE = 1 AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= CURDATE() AND TYPE = 'Selling' AND STORE_NO = ? `, [req.body.STORE_NO]
         );
 
 
@@ -398,8 +414,8 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
                 COALESCE(SUM(CASE WHEN TYPE = 'Selling' THEN SUB_TOTAL ELSE 0 END), 0) as sales,
                 COALESCE(SUM(CASE WHEN TYPE = 'Buying' THEN SUB_TOTAL ELSE 0 END), 0) as buying,
                 COALESCE(SUM(CASE WHEN TYPE = 'Expenses' THEN SUB_TOTAL ELSE 0 END), 0) as expenses
-            FROM store_transactions
-            WHERE IS_ACTIVE=1 AND DATE(CREATED_DATE) = ?
+            FROM store_transactions st
+            WHERE IS_ACTIVE=1 AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) = ?
         `;
         const globalStats = await pool.query(globalStatsQuery, [queryDate]);
 
@@ -417,8 +433,8 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
         console.log("Step 4: Fetching User Transactions...");
         const userTransQuery = `
             SELECT CREATED_BY, TYPE, SUM(SUB_TOTAL) as total 
-            FROM store_transactions 
-            WHERE IS_ACTIVE=1 AND DATE(CREATED_DATE) = ?
+            FROM store_transactions st
+            WHERE IS_ACTIVE=1 AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) = ?
             GROUP BY CREATED_BY, TYPE
         `;
         const userTrans = await pool.query(userTransQuery, [queryDate]);
@@ -439,7 +455,7 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             WHERE t.IS_ACTIVE = 1 
             AND sti.IS_ACTIVE = 1
             AND t.TYPE IN ('Selling', 'Buying')
-            AND DATE(t.CREATED_DATE) = ?
+            AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) = ?
             GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE, t.STORE_NO
         `;
         const stockMovementRows = await pool.query(stockMovementQuery, [queryDate]);

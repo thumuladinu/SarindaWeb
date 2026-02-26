@@ -93,7 +93,7 @@ router.get('/api/reports-dashboard/clearances/:itemId', async (req, res) => {
                 sso.OP_TYPE,
                 sso.CLEARANCE_TYPE,
                 sso.DATE as OP_DATE,
-                sso.CREATED_DATE,
+                ${OP_SL_TIME_SQL('sso.CREATED_DATE')} as CREATED_DATE,
                 sso.STORE_NO,
                 sso.COMMENTS,
                 sso.BILL_CODE,
@@ -112,7 +112,7 @@ router.get('/api/reports-dashboard/clearances/:itemId', async (req, res) => {
               AND sso.IS_ACTIVE = 1
               AND ssoi.IS_ACTIVE = 1
               AND sso.OP_TYPE IN (1, 2, 3, 4, 7, 8)
-            ORDER BY sso.CREATED_DATE DESC
+            ORDER BY ${OP_SL_TIME_SQL('sso.CREATED_DATE')} DESC
             LIMIT 50
         `;
 
@@ -958,11 +958,21 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             }
         }
 
-        const netProfit = grossProfit + conversionPL - totalReturnExpense;
-
         // Total wastage from operations
         const totalOperationWastage = enrichedOps.reduce((sum, op) => sum + (op.WASTAGE_AMOUNT || 0), 0);
         const totalOperationSurplus = enrichedOps.reduce((sum, op) => sum + (op.SURPLUS_AMOUNT || 0), 0);
+
+        // Calculate W/S Impact (Opportunity cost of wastage/surplus)
+        // Formula: (Wastage or Surplus kg) * (W/S Impact / Sold kg value)
+        // W/S Impact / Sold kg value is -(incomePerKg * netWS / totalSellQty)
+        const netWS = totalOperationWastage - totalOperationSurplus;
+        const totalSellQty = totalAggregates.selling.qty;
+        const incomePerKg = totalSellQty > 0 ? totalAggregates.selling.amount / totalSellQty : (parseFloat(itemInfo.SELLING_PRICE) || 0);
+
+        const wsFinancialImpactPerKg = totalSellQty > 0 ? incomePerKg * (netWS / totalSellQty) : 0;
+        const totalWSImpact = Math.abs(netWS) * (-wsFinancialImpactPerKg);
+
+        const netProfit = grossProfit + conversionPL - totalReturnExpense + totalWSImpact;
 
         // ==========================================
         // I. MANUAL ADJUSTMENTS (AdjIn, AdjOut, Opening, StockClear, StockTake, Wastage)
@@ -1118,7 +1128,39 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                     avgBuyPrice: totalAggregates.buying.qty > 0
                         ? parseFloat((totalAggregates.buying.amount / totalAggregates.buying.qty).toFixed(2)) : 0,
                     avgSellPrice: totalAggregates.selling.qty > 0
-                        ? parseFloat((totalAggregates.selling.amount / totalAggregates.selling.qty).toFixed(2)) : 0
+                        ? parseFloat((totalAggregates.selling.amount / totalAggregates.selling.qty).toFixed(2)) : 0,
+                    totalWSImpact: parseFloat(totalWSImpact.toFixed(2)),
+                    incomePerKg: parseFloat(incomePerKg.toFixed(5))
+                },
+
+                // Transaction List Effect (Buy/Sell movements with signs)
+                transactionListEffect: {
+                    transactions: allTransactions
+                        .filter(tx => tx.TYPE === 'Buying' || tx.TYPE === 'Selling')
+                        .map(tx => {
+                            const isBuy = tx.TYPE === 'Buying';
+                            const qty = parseFloat(tx.QUANTITY) || 0;
+                            const amount = parseFloat(tx.TOTAL) || (parseFloat(tx.PRICE) || 0) * qty;
+                            return {
+                                code: tx.TX_CODE,
+                                date: tx.CREATED_DATE,
+                                type: tx.TYPE,
+                                // Amount: Buy -, Sell +
+                                amount: isBuy ? -amount : amount,
+                                // Qty: Buy +, Sell -
+                                qty: isBuy ? qty : -qty
+                            };
+                        }),
+                    // Also include sales from Stock Operations (Ops 3 & 4)
+                    operationSales: enrichedOps
+                        .filter(op => (op.OP_TYPE === 3 || op.OP_TYPE === 4) && op.SOLD_QUANTITY > 0)
+                        .map(op => ({
+                            code: op.OP_CODE,
+                            date: op.CREATED_DATE,
+                            type: 'Selling (Op)',
+                            amount: op.itemTotal || 0,
+                            qty: -(op.SOLD_QUANTITY || 0)
+                        }))
                 }
             }
         });

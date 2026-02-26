@@ -345,9 +345,18 @@ export default function Graphs() {
                                     <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
                                     <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value / 1000}k`} fontWeight={600} width={65} />
                                     <Tooltip content={<CustomTooltipPrice />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20 }} />
-                                    <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px', fontSize: '11px', cursor: 'pointer' }} />
-                                    <Line type="monotone" name="Sales Amount" dataKey="sellAmount" stroke="#10b981" strokeWidth={3} dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }} activeDot={{ r: 5, stroke: '#10b981', strokeWidth: 3, fill: '#fff' }} connectNulls />
-                                    <Line type="monotone" name="Buying Amount" dataKey="buyAmount" stroke="#f97316" strokeWidth={3} dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }} activeDot={{ r: 5, stroke: '#f97316', strokeWidth: 3, fill: '#fff' }} connectNulls />
+                                    <Legend
+                                        onClick={handleLegendClick}
+                                        iconType="circle"
+                                        wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
+                                        formatter={(value, entry) => (
+                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                                {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
+                                            </span>
+                                        )}
+                                    />
+                                    <Line hide={hiddenSeries.includes('sellAmount')} type="monotone" name="Sales Amount" dataKey="sellAmount" stroke="#10b981" strokeWidth={3} dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }} activeDot={{ r: 5, stroke: '#10b981', strokeWidth: 3, fill: '#fff' }} connectNulls />
+                                    <Line hide={hiddenSeries.includes('buyAmount')} type="monotone" name="Buying Amount" dataKey="buyAmount" stroke="#f97316" strokeWidth={3} dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }} activeDot={{ r: 5, stroke: '#f97316', strokeWidth: 3, fill: '#fff' }} connectNulls />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
@@ -380,8 +389,17 @@ export default function Graphs() {
                                     <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
                                     <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value / 1000}k`} fontWeight={600} width={65} />
                                     <Tooltip content={<CustomTooltipPrice />} />
-                                    <Legend iconType="circle" verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px', fontSize: '11px' }} />
-                                    <Area type="monotone" name="Profit (Sold Amt)" dataKey="profitSoldAmt" stroke="#8b5cf6" fill="url(#colorProfit)" strokeWidth={3} activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 3, fill: '#fff' }} />
+                                    <Legend
+                                        onClick={handleLegendClick}
+                                        iconType="circle"
+                                        wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
+                                        formatter={(value, entry) => (
+                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                                {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
+                                            </span>
+                                        )}
+                                    />
+                                    <Area hide={hiddenSeries.includes('profitSoldAmt')} type="monotone" name="Profit (Sold Amt)" dataKey="profitSoldAmt" stroke="#8b5cf6" fill="url(#colorProfit)" strokeWidth={3} activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 3, fill: '#fff' }} />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -415,7 +433,7 @@ export default function Graphs() {
                                         iconType="circle"
                                         wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
                                         formatter={(value, entry) => (
-                                            <span className={`font - semibold tracking - wide ml - 1 transition - opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'} `} style={{ color: entry.color }}>
+                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
                                                 {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
                                             </span>
                                         )}
@@ -492,7 +510,7 @@ export default function Graphs() {
                                         iconType="circle"
                                         wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
                                         formatter={(value, entry) => (
-                                            <span className={`font - semibold tracking - wide ml - 1 transition - opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'} `} style={{ color: entry.color }}>
+                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
                                                 {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
                                             </span>
                                         )}
