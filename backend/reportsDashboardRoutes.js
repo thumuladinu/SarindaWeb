@@ -65,7 +65,9 @@ router.get('/api/reports-dashboard/items', async (req, res) => {
     try {
         const items = await pool.query(
             `SELECT ITEM_ID, CODE, NAME, BUYING_PRICE, SELLING_PRICE 
-             FROM store_items WHERE IS_ACTIVE = 1 
+             FROM store_items 
+             WHERE IS_ACTIVE = 1 
+               AND CODE NOT IN ('CONTAINER', 'RETURN')
              ORDER BY NAME ASC`
         );
         return res.json({ success: true, result: items });

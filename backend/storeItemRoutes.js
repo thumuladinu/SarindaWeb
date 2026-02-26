@@ -27,7 +27,7 @@ router.post('/api/getAllItems', async (req, res) => {
         await pool.query("DELETE FROM store_items WHERE CODE IN ('RETURN', 'CONTAINER', 'TARE')");
 
         // Query to fetch all active items (items are now shared across stores)
-        const queryResult = await pool.query('SELECT * FROM store_items WHERE IS_ACTIVE=1');
+        const queryResult = await pool.query("SELECT * FROM store_items WHERE IS_ACTIVE=1 AND CODE NOT IN ('CONTAINER', 'RETURN', 'TARE')");
 
         // Check if queryResult is an array before trying to use .map
         if (Array.isArray(queryResult)) {
@@ -404,7 +404,7 @@ router.post('/api/getItemsForReference', async (req, res) => {
         }
 
         // Query to fetch all active items (items are shared, STOCK is JSON)
-        const queryResult = await pool.query('SELECT ITEM_ID,CODE,NAME,EDITED_DATE,STOCK FROM store_items WHERE IS_ACTIVE=1');
+        const queryResult = await pool.query("SELECT ITEM_ID,CODE,NAME,EDITED_DATE,STOCK FROM store_items WHERE IS_ACTIVE=1 AND CODE NOT IN ('CONTAINER', 'RETURN', 'TARE')");
 
         // Check if queryResult is an array before trying to use .map
         if (Array.isArray(queryResult)) {
