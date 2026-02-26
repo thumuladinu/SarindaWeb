@@ -18,6 +18,7 @@ const router = express.Router();
 const cors = require('cors');
 const pool = require('./index');
 const util = require('util');
+const dateTimeUtils = require('./dateTimeUtils');
 
 router.use(cors());
 
@@ -39,6 +40,23 @@ const OP_TYPE_LABELS = {
     9: 'Item Conversion',
     11: 'Stock Return'
 };
+
+// SQL Helper for selective SL Time conversion
+// Server-created records (Actual UTC) -> Shift to SLT
+// Synced records (Already SLT string) -> Keep as-is
+const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
+    CASE 
+        WHEN ${codeField} IS NULL 
+             OR ${codeField} LIKE 'ADJ-%' 
+             OR ${codeField} LIKE 'STOCKOP-%' 
+             OR ${codeField} LIKE 'SLO-%'
+        THEN CONVERT_TZ(${field}, '+00:00', '+05:30')
+        ELSE ${field}
+    END
+`;
+
+// SQL Helper for Stock Operations (Always server-created UTC)
+const OP_SL_TIME_SQL = (field = 'sso.CREATED_DATE') => `CONVERT_TZ(${field}, '+00:00', '+05:30')`;
 
 // =====================================================
 // 1. GET ITEMS LIST (for dashboard item selection)
@@ -180,6 +198,11 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         let startBoundary = `${startDate} 23:59:59`;
         let endBoundary = `${endDate} 23:59:59`;
 
+        // If it's a custom-range or specific request for "up to now" (from frontend)
+        if (req.body.isNow && endDate === dateTimeUtils.toSLMySQLDateTime(new Date()).split(' ')[0]) {
+            endBoundary = dateTimeUtils.toSLMySQLDateTime(new Date());
+        }
+
         // Helper: find latest transaction datetime linked to an operation
         const findOpBoundary = async (opId) => {
             if (!opId) return null;
@@ -190,13 +213,13 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             if (!opRow) return null;
             // Find latest linked transaction
             const [latestTx] = await pool.query(
-                `SELECT MAX(st.CREATED_DATE) as max_date 
+                `SELECT MAX(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as max_date 
                  FROM store_transactions st 
                  WHERE st.COMMENTS LIKE ? AND st.IS_ACTIVE = 1`,
                 [`%[${opRow.OP_CODE}]%`]
             );
             // Use latest transaction datetime, or operation's own datetime
-            return latestTx?.max_date || opRow.CREATED_DATE;
+            return latestTx?.max_date || dateTimeUtils.toSLMySQLDateTime(opRow.CREATED_DATE);
         };
 
         if (startOpId) {
@@ -206,6 +229,9 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         if (endOpId) {
             const resolved = await findOpBoundary(endOpId);
             if (resolved) endBoundary = resolved;
+        } else if (req.body.isNow) {
+            // Fix: If "Now" is selected, set end boundary to exact current SL Time
+            endBoundary = dateTimeUtils.toSLMySQLDateTime(new Date());
         }
 
         console.log(`[ReportsDashboard] Boundaries: start=${startBoundary}, end=${endBoundary}`);
@@ -229,7 +255,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                   AND st.STORE_NO = ?
                   AND st.IS_ACTIVE = 1
                   AND sti.IS_ACTIVE = 1
-                  AND st.CREATED_DATE <= ?
+                  AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
             `, [itemId, storeNo, startBoundary]);
             initialStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
         }
@@ -257,8 +283,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-              AND st.CREATED_DATE > ?
-              AND st.CREATED_DATE <= ?
+              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} > ?
+              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
               AND st.COMMENTS NOT LIKE '%[OP-%'  -- Exclude operation-linked transactions
               AND st.COMMENTS NOT LIKE '%[S2-%'   -- Exclude store operation codes
               AND st.COMMENTS NOT LIKE '%[S1-%'
@@ -343,10 +369,10 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             FROM store_stock_operations sso
             JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
             WHERE ssoi.ITEM_ID = ?
-              AND sso.IS_ACTIVE = 1
+              AND st.IS_ACTIVE = 1
               AND ssoi.IS_ACTIVE = 1
-              AND sso.CREATED_DATE > ?
-              AND sso.CREATED_DATE <= ?
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} > ?
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
             ORDER BY sso.CREATED_DATE ASC
         `;
         const rawStockOps = await pool.query(opsQuery, [itemId, startBoundary, endBoundary]);
@@ -588,8 +614,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             WHERE soc.SOURCE_ITEM_ID = ?
               AND sso.IS_ACTIVE = 1
               AND soc.IS_ACTIVE = 1
-              AND sso.CREATED_DATE > ?
-              AND sso.CREATED_DATE <= ?
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} > ?
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
         `;
         const conversionsOut = await pool.query(conversionsOutQuery, [itemId, startBoundary, endBoundary]);
 
@@ -618,8 +644,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             WHERE soc.DEST_ITEM_ID = ?
               AND sso.IS_ACTIVE = 1
               AND soc.IS_ACTIVE = 1
-              AND sso.CREATED_DATE > ?
-              AND sso.CREATED_DATE <= ?
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} > ?
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
         `;
         const conversionsIn = await pool.query(conversionsInQuery, [itemId, startBoundary, endBoundary]);
 
@@ -792,7 +818,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // Exclude operation-linked transactions to avoid double-counting
         const dailyQuery = `
             SELECT 
-                DATE(st.CREATED_DATE) as tx_date,
+                DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as tx_date,
                 st.TYPE,
                 st.STORE_NO,
                 SUM(sti.QUANTITY) as total_qty,
@@ -802,12 +828,12 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-              AND st.CREATED_DATE > ?
-              AND st.CREATED_DATE <= ?
+              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} > ?
+              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
               AND st.COMMENTS NOT LIKE '%[OP-%'  -- Exclude operation-linked transactions
               AND st.COMMENTS NOT LIKE '%[S2-%'   -- Exclude store operation codes
               AND st.COMMENTS NOT LIKE '%[S1-%'
-            GROUP BY DATE(st.CREATED_DATE), st.TYPE, st.STORE_NO
+            GROUP BY DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}), st.TYPE, st.STORE_NO
             ORDER BY tx_date ASC
         `;
         const dailyRows = await pool.query(dailyQuery, [itemId, startBoundary, endBoundary]);
@@ -851,7 +877,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         let currentStock = totalStartStock;
 
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            const dateKey = d.toISOString().split('T')[0];
+            // Fix: Use SL Time string for dateKey in charts to match SL records
+            const dateKey = dateTimeUtils.toSLMySQLDateTime(d).split(' ')[0];
             const dayData = dailyMap[dateKey] || { date: dateKey, buyQty: 0, sellQty: 0, adjInQty: 0, adjOutQty: 0, otherIn: 0, otherOut: 0 };
 
             const dayIn = dayData.buyQty + dayData.adjInQty + dayData.otherIn;
@@ -1113,6 +1140,12 @@ router.post('/api/graphs/item-data', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Missing required parameters' });
         }
 
+        // 0. Fetch Item Master Prices for Profit Calculations
+        const [rowsItem] = await pool.query('SELECT SELLING_PRICE, BUYING_PRICE FROM store_items WHERE ITEM_ID = ?', [itemId]);
+        const itemInfo = rowsItem[0] || { SELLING_PRICE: 0, BUYING_PRICE: 0 };
+        const masterSellPrice = parseFloat(itemInfo.SELLING_PRICE) || 0;
+        const masterBuyPrice = parseFloat(itemInfo.BUYING_PRICE) || 0;
+
         // Helper
         function toLocalYYYYMMDD(dateObj) {
             const y = dateObj.getFullYear();
@@ -1302,10 +1335,18 @@ router.post('/api/graphs/item-data', async (req, res) => {
         const result = buckets.map(b => {
             let stockAtEndOfBucket = runningStockByDate[b.endDate] || { s1: currentS1, s2: currentS2, total: currentS1 + currentS2 };
 
+            // Profit Calculation (Sold Amt logic)
+            const avgBuy = b.buyQty > 0 ? (b.buyTotal / b.buyQty) : masterBuyPrice;
+            const avgSell = b.sellQty > 0 ? (b.sellTotal / b.sellQty) : masterSellPrice;
+            const profitSoldAmt = (avgSell - avgBuy) * b.sellQty;
+
             return {
                 label: b.label,
                 avgBuyPrice: b.buyQty > 0 ? parseFloat((b.buyTotal / b.buyQty).toFixed(2)) : null,
                 avgSellPrice: b.sellQty > 0 ? parseFloat((b.sellTotal / b.sellQty).toFixed(2)) : null,
+                sellAmount: parseFloat(b.sellTotal.toFixed(2)),
+                buyAmount: parseFloat(b.buyTotal.toFixed(2)),
+                profitSoldAmt: parseFloat(profitSoldAmt.toFixed(2)),
                 stockS1: parseFloat(stockAtEndOfBucket.s1.toFixed(3)),
                 stockS2: parseFloat(stockAtEndOfBucket.s2.toFixed(3)),
                 stock: parseFloat(stockAtEndOfBucket.total.toFixed(3))

@@ -314,11 +314,13 @@ router.post('/api/items/merge-sync', async (req, res) => {
             console.log(`[MergeSync] Removed ${webDupsRemoved} duplicate CODE items from Web DB`);
         }
 
-        // 1. Get all valid items from Web DB (now deduplicated)
+        // 1. Get ALL items from Web DB (now deduplicated), including inactive
+        // IMPORTANT: We sync ALL items (IS_ACTIVE 0 and 1) so both Web and POS always have the same list.
+        // IS_ACTIVE changes are treated the same as any other field change - latest EDITED_DATE wins.
         const webItems = await pool.query("SELECT ITEM_ID, CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE FROM store_items WHERE CODE IS NOT NULL AND CODE != ''");
         const webItemMap = {};
         webItems.forEach(item => { webItemMap[item.CODE] = item; });
-        console.log('[MergeSync] Web DB has', webItems.length, 'valid items');
+        console.log('[MergeSync] Web DB has', webItems.length, 'valid items (all active states)');
 
         // 2. Normalize, Filter and DEDUPLICATE local items by CODE
         // POS might send lowercase properties (code, isActive, editedDate)
@@ -431,9 +433,11 @@ router.post('/api/items/merge-sync', async (req, res) => {
         }
 
         // 4. Check for items only on Web (Web → POS)
+        // Send ALL web-only items to POS regardless of IS_ACTIVE status.
+        // POS will store them and apply IS_ACTIVE flag — ensuring both sides mirror each other exactly.
         for (const webItem of webItems) {
             if (!localDedupMap[webItem.CODE]) {
-                // Item only exists on Web - POS should add it
+                // Item only exists on Web — send to POS so it can mirror the web
                 itemsForPOSNew.push({
                     ITEM_ID: webItem.ITEM_ID,
                     CODE: webItem.CODE,
@@ -774,6 +778,149 @@ router.post('/api/transactions/sync', async (req, res) => {
 
     try {
         const transactionCode = transaction.code || `S${transaction.storeNo}-${Date.now()}`;
+
+        // =====================================================
+        // NEW: Check for existing weight stock placeholder
+        // If weight was synced before POS payment, a placeholder tx exists.
+        // We update it with real payment data instead of creating a new row.
+        // =====================================================
+        if (transaction.s2BillCode) {
+            const [placeholder] = await pool.query(
+                `SELECT TRANSACTION_ID FROM store_transactions
+                 WHERE WEIGHT_CODE = ? AND CODE IS NULL AND IS_ACTIVE = 1 LIMIT 1`,
+                [transaction.s2BillCode]
+            );
+
+            if (placeholder && placeholder.TRANSACTION_ID) {
+                const placeholderId = placeholder.TRANSACTION_ID;
+                console.log(`[Sync] Found stock placeholder tx ${placeholderId} for weight ${transaction.s2BillCode} — promoting to full transaction`);
+
+                const createdDate = toMySQLDateTime(transaction.createdAt);
+
+                // Build comments string
+                const txCommentParts = [];
+                if (transaction.sourceType === 'QR' && transaction.s2BillCode) {
+                    txCommentParts.push(`[Store 2 QR: ${transaction.s2BillCode}]`);
+                } else {
+                    txCommentParts.push('[Direct Sale]');
+                }
+                if (transaction.items && transaction.items.length > 0) {
+                    txCommentParts.push(`${transaction.items.length} item(s)`);
+                    const txItemNames = transaction.items.map(i => `${i.productName || i.name || i.productCode || i.code} x${i.quantity || 1}`);
+                    txCommentParts.push(`Items: ${txItemNames.join(', ')}`);
+                }
+                if (transaction.notes) txCommentParts.push(`Note: ${transaction.notes}`);
+                const txCommentsStr = txCommentParts.join(' | ');
+
+                // Promote placeholder: fill in payment + code + date data
+                await pool.query(`
+                    UPDATE store_transactions SET
+                        CODE = ?, TYPE = ?, CUSTOMER = ?, METHOD = ?, DATE = ?,
+                        SUB_TOTAL = ?, PAYMENT_AMOUNT = ?, AMOUNT_SETTLED = ?,
+                        DUE_AMOUNT = ?, COMMENTS = ?, CREATED_BY = ?,
+                        BILL_DATA = ?, CREATED_DATE = ?
+                    WHERE TRANSACTION_ID = ?
+                `, [
+                    transactionCode,
+                    transaction.type || 'Selling',
+                    transaction.customerId || null,
+                    transaction.paymentMethod || 'Cash',
+                    createdDate,
+                    transaction.total || 0,
+                    transaction.amountPaid || 0,
+                    transaction.amountPaid || 0,
+                    transaction.dueAmount || ((transaction.total || 0) - (transaction.amountPaid || 0)),
+                    txCommentsStr,
+                    transaction.userId || null,
+                    transaction.billData ? JSON.stringify(transaction.billData) : null,
+                    createdDate,
+                    placeholderId
+                ]);
+
+                // Replace placeholder items with real transaction items
+                await pool.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [placeholderId]);
+
+                const SYMBOLIC_CODES = ['CONTAINER', 'RETURN', 'TARE', 'DEDUCTION'];
+                if (transaction.items && transaction.items.length > 0) {
+                    for (const item of transaction.items) {
+                        const productCode = item.productCode || item.code || '';
+                        const productName = item.productName || item.name || '';
+                        const productPrice = parseFloat(item.price) || 0;
+                        const isSymbolicItem = SYMBOLIC_CODES.includes(productCode.toUpperCase()) ||
+                            SYMBOLIC_CODES.some(c => productName.toUpperCase().includes(c));
+                        let itemId = null;
+                        if (!isSymbolicItem) {
+                            itemId = (typeof item.productId === 'number') ? item.productId : null;
+                            if (!itemId && productCode) {
+                                const [byCode] = await pool.query(
+                                    'SELECT ITEM_ID FROM store_items WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1',
+                                    [productCode]
+                                );
+                                if (byCode && byCode.ITEM_ID) itemId = byCode.ITEM_ID;
+                            }
+                            if (!itemId && productName) {
+                                const [byName] = await pool.query(
+                                    'SELECT ITEM_ID FROM store_items WHERE NAME = ? AND IS_ACTIVE = 1 LIMIT 1',
+                                    [productName]
+                                );
+                                if (byName && byName.ITEM_ID) itemId = byName.ITEM_ID;
+                            }
+                        }
+                        await pool.query(`
+                            INSERT INTO store_transactions_items
+                                (TRANSACTION_ID, ITEM_ID, PRICE, QUANTITY, TOTAL, IS_ACTIVE, CREATED_DATE)
+                            VALUES (?, ?, ?, ?, ?, 1, ?)
+                        `, [placeholderId, itemId, productPrice, item.quantity || 0,
+                            productPrice * (item.quantity || 0), createdDate]);
+                    }
+                }
+
+                // Update weight status to Money Collected
+                const weightFullCode = `S2-${transaction.s2BillCode}`;
+                try {
+                    const wRows = await pool.query(
+                        'SELECT ID, ITEM_DETAILS FROM weight_measurements WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1',
+                        [weightFullCode]
+                    );
+                    if (wRows && wRows.length > 0) {
+                        let wDetails = {};
+                        try { wDetails = typeof wRows[0].ITEM_DETAILS === 'string' ? JSON.parse(wRows[0].ITEM_DETAILS) : (wRows[0].ITEM_DETAILS || {}); } catch (e) { }
+                        wDetails.status = 'Money Collected';
+                        wDetails.collectedAt = toMySQLDateTime();
+                        wDetails.transactionCode = transactionCode;
+                        await pool.query(
+                            'UPDATE weight_measurements SET ITEM_DETAILS = ?, UPDATED_DATE = NOW() WHERE CODE = ?',
+                            [JSON.stringify(wDetails), weightFullCode]
+                        );
+                        console.log(`[Sync] Weight ${weightFullCode} status -> Money Collected (promoted tx)`);
+                    }
+                } catch (e) {
+                    console.warn('[Sync] Failed to update weight status for promoted tx:', e.message);
+                }
+
+                // Return Notification if applicable
+                if (transaction.type === 'Return') {
+                    try {
+                        const { createNotification } = require('./notificationService');
+                        const itemName = transaction.items?.[0]?.productName || 'items';
+                        const qty = transaction.items?.[0]?.quantity || '';
+                        await createNotification('RETURN', placeholderId, 'New Return Registered (Sync)',
+                            `A return of ${qty} kg ${itemName} was synced from Store ${transaction.storeNo || 1}`);
+                    } catch (notifyErr) {
+                        console.error('[Sync] Error sending Return notification:', notifyErr);
+                    }
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    message: 'Placeholder transaction promoted',
+                    transactionId: placeholderId,
+                    storeNo: transaction.storeNo,
+                    promoted: true,
+                    syncedAt: new Date().toISOString()
+                });
+            }
+        }
 
         // CHECK FOR DUPLICATE: If transaction with same CODE already exists, return success
         const [existingTx] = await pool.query(
@@ -1375,6 +1522,61 @@ router.post('/api/weights/sync', async (req, res) => {
                 createdDate
             ]);
             console.log(`[WeightSync] Inserted: ${code}, ID: ${result.insertId}`);
+        }
+
+        // =====================================================
+        // Cross-check with store_transactions
+        // =====================================================
+        const s2Code = code.replace(/^S2-/, ''); // code WITHOUT 'S2-' prefix
+        try {
+            const [existingTxForWeight] = await pool.query(
+                `SELECT TRANSACTION_ID FROM store_transactions
+                 WHERE WEIGHT_CODE = ? AND IS_ACTIVE = 1 LIMIT 1`,
+                [s2Code]
+            );
+
+            if (existingTxForWeight && existingTxForWeight.TRANSACTION_ID) {
+                // POS already paid — mark weight as collected
+                itemDetails.status = 'Money Collected';
+                await pool.query(
+                    `UPDATE weight_measurements SET ITEM_DETAILS = ?, UPDATED_DATE = NOW() WHERE CODE = ?`,
+                    [JSON.stringify(itemDetails), code]
+                );
+                console.log(`[WeightSync] POS already paid for ${code} — marked Collected (tx: ${existingTxForWeight.TRANSACTION_ID})`);
+            } else {
+                // POS hasn't paid yet — create stock placeholder transaction for inventory
+                const stockDate = toMySQLDateTime(weightData.createdAt);
+                const placeholderResult = await pool.query(`
+                    INSERT INTO store_transactions
+                        (TYPE, STORE_NO, WEIGHT_CODE, STOCK_DATE, IS_ACTIVE, CREATED_DATE)
+                    VALUES ('Buying', 2, ?, ?, 1, NOW())
+                `, [s2Code, stockDate]);
+                const placeholderId = placeholderResult.insertId;
+
+                // Insert items for stock calculation
+                const weightItems = itemDetails.items || [];
+                for (const wItem of weightItems) {
+                    const prodCode = (wItem.productCode || wItem.code || '').toUpperCase();
+                    const netWeight = parseFloat(wItem.netWeight != null ? wItem.netWeight : wItem.netWt) || 0;
+                    let itemId = null;
+                    if (prodCode) {
+                        const [byCode] = await pool.query(
+                            'SELECT ITEM_ID FROM store_items WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1',
+                            [prodCode]
+                        );
+                        if (byCode && byCode.ITEM_ID) itemId = byCode.ITEM_ID;
+                    }
+                    await pool.query(`
+                        INSERT INTO store_transactions_items
+                            (TRANSACTION_ID, ITEM_ID, PRICE, QUANTITY, TOTAL, IS_ACTIVE, CREATED_DATE)
+                        VALUES (?, ?, 0, ?, 0, 1, NOW())
+                    `, [placeholderId, itemId, netWeight]);
+                }
+                console.log(`[WeightSync] Created stock placeholder tx (ID: ${placeholderId}) for ${code} with ${weightItems.length} item(s)`);
+            }
+        } catch (crossCheckError) {
+            // Non-fatal — log and continue
+            console.warn('[WeightSync] Cross-check with transactions failed (non-fatal):', crossCheckError.message);
         }
 
         res.status(200).json({

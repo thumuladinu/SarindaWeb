@@ -27,7 +27,11 @@ export default function TransactionFilters({ filters, setFilters }) {
                 // Assuming this endpoint exists and returns all items
                 const response = await axios.post('/api/getAllItems', {});
                 if (response.data.success) {
-                    setItems(response.data.result);
+                    // Filter out special items (CONTAINER, RETURN)
+                    const filtered = (response.data.result || []).filter(item =>
+                        item.CODE !== 'CONTAINER' && item.CODE !== 'RETURN' && item.isSpecialItem !== true
+                    );
+                    setItems(filtered);
                 }
             } catch (error) {
                 console.error("Error fetching items for filter:", error);

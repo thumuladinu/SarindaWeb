@@ -27,8 +27,12 @@ export default function Items() {
         try {
             const response = await axios.post('/api/getAllItems', { STORE_NO: '1' });
             if (response.data.success) {
-                setData(response.data.result);
-                setFilteredData(response.data.result);
+                // Filter out special items (CONTAINER, RETURN)
+                const filtered = (response.data.result || []).filter(item =>
+                    item.CODE !== 'CONTAINER' && item.CODE !== 'RETURN' && item.isSpecialItem !== true
+                );
+                setData(filtered);
+                setFilteredData(filtered);
             }
         } catch (error) {
             console.error("Error fetching items:", error);

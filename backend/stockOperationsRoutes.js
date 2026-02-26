@@ -11,6 +11,10 @@ const cors = require('cors');
 const pool = require('./index');
 const util = require('util');
 const { calculateCurrentStock } = require("./stockCalculator");
+const dateTimeUtils = require("./dateTimeUtils");
+
+// SQL Helper for Stock Operations (Always server-created UTC)
+const OP_SL_TIME_SQL = (field = 'CREATED_DATE') => `CONVERT_TZ(${field}, '+00:00', '+05:30')`;
 
 router.use(cors());
 
@@ -48,7 +52,7 @@ const getClearanceType = (opType, conversionType = null) => {
 // Format: S{STORE}-{YYMMDD}-CLR-{TERMINAL}-{COUNT}
 // Example: S1-260128-CLR-CN4ZH-001
 const generateOpCode = async (storeNo = 1, terminalCode = 'POS') => {
-    const now = new Date();
+    const now = dateTimeUtils.getSLNow();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
@@ -57,10 +61,11 @@ const generateOpCode = async (storeNo = 1, terminalCode = 'POS') => {
     const storePrefix = `S${storeNo}`;
     const prefix = `${storePrefix}-${dateStr}-CLR`;
 
-    // Get count of operations today for this store
+    // Get count of operations today for this store (using SL Time)
     const result = await pool.query(
-        "SELECT COUNT(*) as cnt FROM store_stock_operations WHERE OP_CODE LIKE ? AND DATE(CREATED_DATE) = CURDATE()",
-        [`${storePrefix}-${dateStr}%`]
+        `SELECT COUNT(*) as cnt FROM store_stock_operations 
+         WHERE OP_CODE LIKE ? AND DATE(${OP_SL_TIME_SQL('CREATED_DATE')}) = DATE(?)`,
+        [`${storePrefix}-${dateStr}%`, dateTimeUtils.toSLMySQLDateTime(now)]
     );
     const count = (result[0]?.cnt || 0) + 1;
 
@@ -1017,6 +1022,7 @@ router.post('/api/stock-ops/list', async (req, res) => {
 
         let query = `
             SELECT so.*, 
+                ${OP_SL_TIME_SQL('so.CREATED_DATE')} as CREATED_DATE,
                 CASE so.OP_TYPE
                     WHEN 1 THEN 'Full Clear (Standard)'
                     WHEN 2 THEN 'Partial Clear (Standard)'
@@ -1047,11 +1053,11 @@ router.post('/api/stock-ops/list', async (req, res) => {
             params.push(clearanceType);
         }
         if (startDate) {
-            query += ' AND DATE(so.CREATED_DATE) >= ?';
+            query += ` AND DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) >= ?`;
             params.push(startDate);
         }
         if (endDate) {
-            query += ' AND DATE(so.CREATED_DATE) <= ?';
+            query += ` AND DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) <= ?`;
             params.push(endDate);
         }
         if (lorryName) {
@@ -1989,6 +1995,7 @@ router.post('/api/stock-ops/trips', async (req, res) => {
 
         let query = `
             SELECT DISTINCT so.*,
+                ${OP_SL_TIME_SQL('so.CREATED_DATE')} as CREATED_DATE,
                 CASE so.OP_TYPE
                     WHEN 1 THEN 'Full Clear (Standard)'
                     WHEN 2 THEN 'Partial Clear (Standard)'
@@ -2013,11 +2020,11 @@ router.post('/api/stock-ops/trips', async (req, res) => {
             params.push(storeNo);
         }
         if (startDate) {
-            query += ' AND DATE(so.CREATED_DATE) >= ?';
+            query += ` AND DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) >= ?`;
             params.push(startDate);
         }
         if (endDate) {
-            query += ' AND DATE(so.CREATED_DATE) <= ?';
+            query += ` AND DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) <= ?`;
             params.push(endDate);
         }
         if (tripId) {

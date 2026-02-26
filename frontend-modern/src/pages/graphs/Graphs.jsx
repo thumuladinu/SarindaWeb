@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Select, DatePicker, Button, Spin, App, Empty, Dropdown } from 'antd';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, AreaChart, Area, Legend, ComposedChart, Bar, Tooltip } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, AreaChart, Area, Legend, ComposedChart, BarChart, Bar, Tooltip } from 'recharts';
 import { SearchOutlined, LineChartOutlined, StockOutlined, BarChartOutlined, DownloadOutlined, FilePdfOutlined, FileImageOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -181,7 +181,7 @@ export default function Graphs() {
                             <div key={idx} className="flex items-center gap-3">
                                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
                                 <span className="text-gray-400 text-sm">{entry.name}:</span>
-                                <span className="font-bold text-white tracking-wide">{formatLKR(entry.value)}</span>
+                                <span className="font-bold text-white tracking-wide">{entry.name.includes('Stock') ? formatStock(entry.value) : formatLKR(entry.value)}</span>
                             </div>
                         ))}
                     </div>
@@ -324,6 +324,69 @@ export default function Graphs() {
                 </div>
             ) : (
                 <div className="flex flex-col gap-6 md:gap-8">
+                    {/* Financial Overview (Sales vs Buying) */}
+                    <div id="financial-overview-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
+                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 to-orange-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
+                            <h2 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 md:gap-3">
+                                <span className="w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                                    <BarChartOutlined className="text-emerald-500 text-sm md:text-base" />
+                                </span>
+                                Sales vs Buying Overview
+                            </h2>
+                            <div className="flex items-center gap-2 md:gap-3">
+                                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">Financials</span>
+                            </div>
+                        </div>
+                        <div className="h-[280px] md:h-[350px] w-full -ml-4 md:ml-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
+                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value / 1000}k`} fontWeight={600} width={65} />
+                                    <Tooltip content={<CustomTooltipPrice />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20 }} />
+                                    <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px', fontSize: '11px', cursor: 'pointer' }} />
+                                    <Line type="monotone" name="Sales Amount" dataKey="sellAmount" stroke="#10b981" strokeWidth={3} dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }} activeDot={{ r: 5, stroke: '#10b981', strokeWidth: 3, fill: '#fff' }} connectNulls />
+                                    <Line type="monotone" name="Buying Amount" dataKey="buyAmount" stroke="#f97316" strokeWidth={3} dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }} activeDot={{ r: 5, stroke: '#f97316', strokeWidth: 3, fill: '#fff' }} connectNulls />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Profit Analysis (Sold Amt) */}
+                    <div id="profit-analysis-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
+                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-500 to-indigo-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
+                            <h2 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 md:gap-3">
+                                <span className="w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
+                                    <StockOutlined className="text-purple-400 text-sm md:text-base" />
+                                </span>
+                                Profit Analysis (Sold Amt)
+                            </h2>
+                            <div className="flex items-center gap-2 md:gap-3">
+                                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">Profitability</span>
+                            </div>
+                        </div>
+                        <div className="h-[280px] md:h-[350px] w-full -ml-4 md:ml-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                                    <defs>
+                                        <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
+                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value / 1000}k`} fontWeight={600} width={65} />
+                                    <Tooltip content={<CustomTooltipPrice />} />
+                                    <Legend iconType="circle" verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px', fontSize: '11px' }} />
+                                    <Area type="monotone" name="Profit (Sold Amt)" dataKey="profitSoldAmt" stroke="#8b5cf6" fill="url(#colorProfit)" strokeWidth={3} activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 3, fill: '#fff' }} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
                     {/* Item Price Changes */}
                     <div id="price-action-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg md:shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/5 relative overflow-hidden group">
                         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-500 to-emerald-500 opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -513,6 +576,43 @@ export default function Graphs() {
                                     </p>
                                     <p style={{ color: '#9ca3af', margin: '5px 0 0 0', fontSize: '16px' }}>Period: {period.charAt(0).toUpperCase() + period.slice(1)}</p>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div id="export-revenue-chart" style={{ width: '100%', marginBottom: '40px', backgroundColor: 'transparent' }}>
+                            <div className="hide-for-pdf-capture" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                                <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Sales vs Buying Overview</h2>
+                            </div>
+                            <div style={{ height: '350px', width: '100%' }}>
+                                <LineChart width={1520} height={350} data={graphData} margin={{ top: 10, right: 30, left: 10, bottom: 40 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickMargin={15} ticks={exportTicks} tickFormatter={(val) => dayjs(val).format('MMM DD')} />
+                                    <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value}`} width={100} />
+                                    <Legend verticalAlign="bottom" height={40} iconSize={12} wrapperStyle={{ paddingTop: '20px', fontSize: '16px', fontWeight: 600 }} />
+                                    <Line type="monotone" name="Sales Amount" dataKey="sellAmount" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls isAnimationActive={false} />
+                                    <Line type="monotone" name="Buying Amount" dataKey="buyAmount" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls isAnimationActive={false} />
+                                </LineChart>
+                            </div>
+                        </div>
+
+                        <div id="export-profit-chart" style={{ width: '100%', marginBottom: '40px', backgroundColor: 'transparent' }}>
+                            <div className="hide-for-pdf-capture" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                                <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Profit Analysis (Sold Amt)</h2>
+                            </div>
+                            <div style={{ height: '350px', width: '100%' }}>
+                                <AreaChart width={1520} height={350} data={graphData} margin={{ top: 10, right: 30, left: 10, bottom: 40 }}>
+                                    <defs>
+                                        <linearGradient id="colorProfitExp" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickMargin={15} ticks={exportTicks} tickFormatter={(val) => dayjs(val).format('MMM DD')} />
+                                    <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value}`} width={100} />
+                                    <Legend verticalAlign="bottom" height={40} iconSize={12} wrapperStyle={{ paddingTop: '20px', fontSize: '16px', fontWeight: 600 }} />
+                                    <Area type="monotone" name="Profit (Sold Amt)" dataKey="profitSoldAmt" stroke="#8b5cf6" strokeWidth={3} fill="url(#colorProfitExp)" isAnimationActive={false} />
+                                </AreaChart>
                             </div>
                         </div>
 

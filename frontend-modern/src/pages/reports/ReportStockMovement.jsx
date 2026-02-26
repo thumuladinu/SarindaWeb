@@ -24,7 +24,13 @@ export default function ReportStockMovement() {
     useEffect(() => {
         axios.post('/api/getAllItems', { status: 'Active' })
             .then(res => {
-                if (res.data.success) setAllItems(res.data.result);
+                if (res.data.success) {
+                    // Filter out special items (CONTAINER, RETURN)
+                    const filtered = (res.data.result || []).filter(item =>
+                        item.CODE !== 'CONTAINER' && item.CODE !== 'RETURN' && item.isSpecialItem !== true
+                    );
+                    setAllItems(filtered);
+                }
             })
             .catch(err => console.error("Failed to load items", err));
     }, []);

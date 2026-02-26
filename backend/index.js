@@ -57,6 +57,7 @@ app.use(require('./stockOperationsRoutes'));
 app.use(require('./reportsDashboardRoutes'));
 app.use(require('./notificationsRoutes'));
 app.use(require('./pushRoutes').router);
+app.use(require('./storeDestinationRoutes'));
 
 app.use('/api/stock-transfers', require('./transferRequestRoutes'));
 

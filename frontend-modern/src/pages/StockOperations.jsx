@@ -58,6 +58,7 @@ export default function StockOperations() {
     const [products, setProducts] = useState([]);
     const [history, setHistory] = useState([]);
     const [customers, setCustomers] = useState([]); // New Customer State
+    const [destinations, setDestinations] = useState([]); // New Destinations State
     const [loading, setLoading] = useState(false);
     const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -131,6 +132,7 @@ export default function StockOperations() {
         fetchProducts();
         fetchHistory();
         fetchCustomers(); // Fetch customers
+        fetchDestinations(); // Fetch destinations
     }, []); // Only fetch once on mount, filtering handles the rest or manual refresh
 
     // Update Preview when inputs change
@@ -175,7 +177,11 @@ export default function StockOperations() {
         try {
             const response = await axios.post('/api/getAllItemStocksRealTime', {});
             if (response.data.success) {
-                setProducts(response.data.result);
+                // Filter out special items (CONTAINER, RETURN)
+                const filtered = (response.data.result || []).filter(item =>
+                    item.CODE !== 'CONTAINER' && item.CODE !== 'RETURN' && item.isSpecialItem !== true
+                );
+                setProducts(filtered);
             }
         } catch (error) {
             console.error('Failed to fetch products', error);
@@ -216,6 +222,17 @@ export default function StockOperations() {
             } else {
                 console.error('Failed to fetch customers', error);
             }
+        }
+    };
+
+    const fetchDestinations = async () => {
+        try {
+            const response = await axios.post('/api/getAllDestinations', {});
+            if (response.data.success) {
+                setDestinations(response.data.result || []);
+            }
+        } catch (error) {
+            console.error('Failed to fetch destinations', error);
         }
     };
 
@@ -1533,11 +1550,18 @@ export default function StockOperations() {
                                                     onChange={e => setLorryDetails({ ...lorryDetails, driver: e.target.value })}
                                                     className="h-10 rounded-lg"
                                                 />
-                                                <Input
-                                                    placeholder="Destination"
-                                                    value={lorryDetails.destination}
-                                                    onChange={e => setLorryDetails({ ...lorryDetails, destination: e.target.value })}
-                                                    className="h-10 rounded-lg"
+                                                <Select
+                                                    showSearch
+                                                    placeholder="Select Destination"
+                                                    value={lorryDetails.destination || undefined}
+                                                    onChange={value => setLorryDetails({ ...lorryDetails, destination: value })}
+                                                    className="w-full h-10"
+                                                    filterOption={(input, option) =>
+                                                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                                                    }
+                                                    options={[
+                                                        ...destinations.map(d => ({ label: `${d.NAME} (${d.CODE})`, value: d.NAME }))
+                                                    ]}
                                                 />
                                             </div>
                                         </div>

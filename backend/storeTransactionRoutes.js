@@ -14,6 +14,25 @@ const pdf = require("html-pdf");
 const Printer = require('pdf-to-printer');
 const { query } = require("express");
 const { calculateCurrentStock } = require("./stockCalculator");
+const dateTimeUtils = require("./dateTimeUtils");
+
+// SQL Helper for selective SL Time conversion
+// Server-created records (Actual UTC) -> Shift to SLT
+// Synced records (Already SLT string) -> Keep as-is
+const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
+    CASE 
+        WHEN ${codeField} IS NULL 
+             OR ${codeField} LIKE 'ADJ-%' 
+             OR ${codeField} LIKE 'STOCKOP-%' 
+             OR ${codeField} LIKE 'SLO-%'
+             OR ${codeField} LIKE 'WEB-%'
+        THEN CONVERT_TZ(${field}, '+00:00', '+05:30')
+        ELSE ${field}
+    END
+`;
+
+// SQL Helper for Stock Operations (Always server-created UTC)
+const OP_SL_TIME_SQL = (field = 'so.CREATED_DATE') => `CONVERT_TZ(${field}, '+00:00', '+05:30')`;
 
 
 // Promisify the pool.query method
@@ -282,7 +301,8 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
         // STRICT FILTER: Only show Buying, Selling, and Expenses (Financials)
         let whereConditions = [
             'st.IS_ACTIVE = 1',
-            "st.TYPE IN ('Buying', 'Selling', 'Expenses')"
+            "st.TYPE IN ('Buying', 'Selling', 'Expenses')",
+            "st.CODE IS NOT NULL"
         ];
         let queryParams = [];
 
@@ -433,7 +453,7 @@ router.post('/api/getAllTransactionsCashBookByUser', async (req, res) => {
 
         // Query to fetch active transactions today and yersterday (exclude weight measurements and inventory adjustments)
         const queryResult = await pool.query(
-            "SELECT * FROM store_transactions WHERE IS_ACTIVE = 1 AND TYPE != 'WeightMeasure' AND TYPE NOT IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'Adjustment') AND CREATED_DATE >= CURDATE() - INTERVAL 1 DAY AND STORE_NO = ?",
+            "SELECT * FROM store_transactions WHERE IS_ACTIVE = 1 AND CODE IS NOT NULL AND TYPE != 'WeightMeasure' AND TYPE NOT IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'Adjustment') AND CREATED_DATE >= CURDATE() - INTERVAL 1 DAY AND STORE_NO = ?",
             [req.body.STORE_NO]
         );
 
@@ -1885,7 +1905,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 st.TYPE,
                 st.STORE_NO,
                 st.COMMENTS,
-                st.CREATED_DATE,
+                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
                 st.CREATED_BY,
                 sti.ITEM_ID,
                 sti.QUANTITY as ITEM_QTY,
@@ -1900,8 +1920,8 @@ router.post('/api/getInventoryHistory', async (req, res) => {
             WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
               AND st.TYPE IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'StockClear')
               AND (st.COMMENTS IS NULL OR (st.COMMENTS NOT LIKE '[OP-%' AND st.COMMENTS NOT LIKE '[S%-%-CLR-%'))
-              ${req.body.startDate ? `AND st.CREATED_DATE >= '${req.body.startDate}'` : ''}
-              ${req.body.endDate ? `AND st.CREATED_DATE <= '${req.body.endDate} 23:59:59'` : ''}
+              ${req.body.startDate ? `AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= '${req.body.startDate}'` : ''}
+              ${req.body.endDate ? `AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= '${req.body.endDate}'` : ''}
         `;
 
         const transactionRows = await pool.query(transactionQuery);
@@ -1918,7 +1938,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 so.CLEARANCE_TYPE,
                 so.STORE_NO,
                 so.COMMENTS,
-                so.CREATED_DATE,
+                ${OP_SL_TIME_SQL('so.CREATED_DATE')} as CREATED_DATE,
                 so.CREATED_BY,
                 so.CREATED_BY_NAME,
                 so.WASTAGE_AMOUNT,
@@ -1949,8 +1969,8 @@ router.post('/api/getInventoryHistory', async (req, res) => {
             LEFT JOIN store_stock_operations parent_op ON so.REFERENCE_OP_ID = parent_op.OP_ID
             LEFT JOIN store_transactions st_bill ON so.BILL_CODE COLLATE utf8mb4_unicode_ci = st_bill.CODE COLLATE utf8mb4_unicode_ci AND st_bill.IS_ACTIVE = 1
             WHERE so.IS_ACTIVE = 1
-              ${req.body.startDate ? `AND so.CREATED_DATE >= '${req.body.startDate}'` : ''}
-              ${req.body.endDate ? `AND so.CREATED_DATE <= '${req.body.endDate} 23:59:59'` : ''}
+              ${req.body.startDate ? `AND DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) >= '${req.body.startDate}'` : ''}
+              ${req.body.endDate ? `AND DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) <= '${req.body.endDate}'` : ''}
         `;
 
         let stockOpsRows = [];
@@ -2327,28 +2347,102 @@ async function adjustStock(itemId, storeNo, delta) {
 // 1. Transaction Report (Profit/Loss & Details)
 router.post('/api/reports/transactions', async (req, res) => {
     try {
-        const { startDate, endDate, storeNo } = req.body;
+        const { startDate, endDate, storeNo, itemIds } = req.body; // itemIds is an array of IDs
 
-        let whereClause = "st.IS_ACTIVE = 1 AND st.TYPE IN ('Selling', 'Buying', 'Expenses')";
+        let baseWhere = "st.IS_ACTIVE = 1";
         let params = [];
 
         if (startDate && endDate) {
-            whereClause += " AND DATE(st.CREATED_DATE) BETWEEN ? AND ?";
+            baseWhere += " AND DATE(st.CREATED_DATE) BETWEEN ? AND ?";
             params.push(startDate, endDate);
         }
 
         if (storeNo) {
-            whereClause += " AND st.STORE_NO = ?";
+            baseWhere += " AND st.STORE_NO = ?";
             params.push(storeNo);
         }
 
-        // 1. Summary (Group by Type)
-        const summaryRows = await pool.query(`
-            SELECT TYPE, SUM(SUB_TOTAL) as total 
-            FROM store_transactions st
-            WHERE ${whereClause} 
-            GROUP BY TYPE
-        `, params);
+        let summaryRows;
+        let detailsRows;
+
+        if (itemIds && Array.isArray(itemIds) && itemIds.length > 0) {
+            // FILTER BY ITEMS - NESTED BREAKDOWN
+            // 1. Summary (Filtered by items)
+            summaryRows = await pool.query(`
+                SELECT st.TYPE, SUM(sti.TOTAL) as total 
+                FROM store_transactions st
+                JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                WHERE ${baseWhere} AND sti.ITEM_ID IN (?) AND sti.IS_ACTIVE = 1
+                GROUP BY st.TYPE
+            `, [...params, itemIds]);
+
+            // 2. Details (Joined with items to get breakdown)
+            const rawDetails = await pool.query(`
+                SELECT 
+                    st.TRANSACTION_ID, st.CODE, st.TYPE, st.CREATED_DATE, st.SUB_TOTAL as ORIGINAL_TOTAL,
+                    sc.NAME as C_NAME, 
+                    sti.ITEM_ID, sti.QUANTITY, sti.PRICE, sti.TOTAL as ITEM_TOTAL,
+                    si.NAME as ITEM_NAME, si.CODE as ITEM_CODE
+                FROM store_transactions st
+                JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
+                LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID 
+                WHERE ${baseWhere} AND sti.ITEM_ID IN (?) AND sti.IS_ACTIVE = 1
+                ORDER BY st.CREATED_DATE DESC
+            `, [...params, itemIds]);
+
+            // Group by TRANSACTION_ID in JS
+            const detailsMap = new Map();
+            rawDetails.forEach(row => {
+                if (!detailsMap.has(row.TRANSACTION_ID)) {
+                    detailsMap.set(row.TRANSACTION_ID, {
+                        TRANSACTION_ID: row.TRANSACTION_ID,
+                        CODE: row.CODE,
+                        TYPE: row.TYPE,
+                        CREATED_DATE: row.CREATED_DATE,
+                        C_NAME: row.C_NAME,
+                        ORIGINAL_TOTAL: row.ORIGINAL_TOTAL,
+                        FILTERED_TOTAL: 0,
+                        ITEMS: []
+                    });
+                }
+                const tx = detailsMap.get(row.TRANSACTION_ID);
+                tx.ITEMS.push({
+                    ITEM_ID: row.ITEM_ID,
+                    ITEM_NAME: row.ITEM_NAME,
+                    ITEM_CODE: row.ITEM_CODE,
+                    QUANTITY: row.QUANTITY,
+                    PRICE: row.PRICE,
+                    TOTAL: row.ITEM_TOTAL
+                });
+                tx.FILTERED_TOTAL += parseFloat(row.ITEM_TOTAL || 0);
+            });
+
+            // Convert map back to list and set SUB_TOTAL to FILTERED_TOTAL for consistency with existing UI
+            detailsRows = Array.from(detailsMap.values()).map(tx => ({
+                ...tx,
+                SUB_TOTAL: tx.FILTERED_TOTAL
+            }));
+
+        } else {
+            // NO ITEM FILTER - ORIGINAL LOGIC
+            let whereClause = baseWhere + " AND st.TYPE IN ('Selling', 'Buying', 'Expenses')";
+
+            summaryRows = await pool.query(`
+                SELECT TYPE, SUM(SUB_TOTAL) as total 
+                FROM store_transactions st
+                WHERE ${whereClause} 
+                GROUP BY TYPE
+            `, params);
+
+            detailsRows = await pool.query(`
+                SELECT st.*, sc.NAME as C_NAME 
+                FROM store_transactions st
+                LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID 
+                WHERE ${whereClause}
+                ORDER BY st.CREATED_DATE DESC
+            `, params);
+        }
 
         let income = 0;
         let buying = 0;
@@ -2359,15 +2453,6 @@ router.post('/api/reports/transactions', async (req, res) => {
             if (row.TYPE === 'Buying') buying = parseFloat(row.total || 0);
             if (row.TYPE === 'Expenses') expenses = parseFloat(row.total || 0);
         });
-
-        // 2. Detailed List
-        const detailsRows = await pool.query(`
-            SELECT st.*, sc.NAME as C_NAME 
-            FROM store_transactions st
-            LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID 
-            WHERE ${whereClause}
-            ORDER BY st.CREATED_DATE DESC
-        `, params);
 
         return res.json({
             success: true,

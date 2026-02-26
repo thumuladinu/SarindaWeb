@@ -116,8 +116,12 @@ export default function Inventory() {
         try {
             const response = await axios.post('/api/getAllItemStocksRealTime', {});
             if (response.data.success) {
-                setStockData(response.data.result);
-                setFilteredStock(response.data.result);
+                // Filter out special items (CONTAINER, RETURN)
+                const filtered = (response.data.result || []).filter(item =>
+                    item.CODE !== 'CONTAINER' && item.CODE !== 'RETURN' && item.isSpecialItem !== true
+                );
+                setStockData(filtered);
+                setFilteredStock(filtered);
             }
         } catch (error) {
             console.error("Error fetching real-time stock:", error);
@@ -454,7 +458,9 @@ export default function Inventory() {
                     setFilters={setHistoryFilters}
                     collapsed={filtersCollapsed}
                     setCollapsed={setFiltersCollapsed}
-                    itemOptions={[...new Map(historyData.map(h => [h.ITEM_ID, { id: h.ITEM_ID, name: h.ITEM_NAME }])).values()]}
+                    itemOptions={[...new Map(historyData.map(h => [h.ITEM_ID, { id: h.ITEM_ID, name: h.ITEM_NAME, code: h.ITEM_CODE }])).values()].filter(item =>
+                        item.code !== 'CONTAINER' && item.code !== 'RETURN'
+                    )}
                     typeOptions={[...new Set(historyData.map(h => h.DISPLAY_TYPE).filter(Boolean))]}
                 />
             )}

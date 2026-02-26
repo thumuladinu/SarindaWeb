@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Tag, Button, Tooltip, Pagination, Spin, App, Modal, Form, DatePicker, InputNumber, Input } from 'antd';
-import { EditOutlined, DeleteOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, EyeOutlined, PlusOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import TransactionFilters from './transactions/TransactionFilters';
 import TransactionForm from './transactions/TransactionForm';
 import TransactionView from './transactions/TransactionView';
+import AddTransactionModal from './transactions/AddTransactionModal';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import axios from 'axios';
@@ -48,6 +49,9 @@ export default function Transactions() {
     const [expenseModalOpen, setExpenseModalOpen] = useState(false);
     const [expenseLoading, setExpenseLoading] = useState(false);
     const [expenseForm] = Form.useForm();
+
+    // Add Transaction Modal State
+    const [addTransactionOpen, setAddTransactionOpen] = useState(false);
 
     const [filters, setFilters] = useState({
         code: '',
@@ -213,6 +217,11 @@ export default function Transactions() {
             COMMENTS: ''
         });
         setExpenseModalOpen(true);
+    };
+
+    // Open Add Transaction Modal
+    const openAddTransactionModal = () => {
+        setAddTransactionOpen(true);
     };
 
     // View Bill Handler - Opens receipt in modal popup (exactly like 'View Original Bill' button in edit form)
@@ -403,14 +412,24 @@ export default function Transactions() {
 
             <TransactionFilters filters={filters} setFilters={setFilters} />
 
-            {/* Add Expense Button */}
+            {/* Action Buttons Row */}
             {currentUser?.ROLE !== 'MONITOR' && (
-                <div className="flex justify-end mb-4">
+                <div className="grid grid-cols-2 md:flex md:justify-end gap-2 mb-4">
+                    <Button
+                        type="primary"
+                        icon={<ShoppingCartOutlined />}
+                        onClick={openAddTransactionModal}
+                        className="bg-green-500 hover:bg-green-600 border-green-500 md:w-auto"
+                        block
+                    >
+                        Add Transaction
+                    </Button>
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
                         onClick={openExpenseModal}
-                        className="bg-orange-500 hover:bg-orange-600 border-orange-500"
+                        className="bg-orange-500 hover:bg-orange-600 border-orange-500 md:w-auto"
+                        block
                     >
                         Add Expense
                     </Button>
@@ -535,6 +554,13 @@ export default function Transactions() {
                     <div className="text-center py-10 text-gray-400">No receipt data</div>
                 )}
             </Modal>
+
+            {/* Add Transaction Modal */}
+            <AddTransactionModal
+                open={addTransactionOpen}
+                onClose={() => setAddTransactionOpen(false)}
+                onSuccess={() => { fetchData(); }}
+            />
 
             {/* Edit Drawer */}
             <TransactionForm
