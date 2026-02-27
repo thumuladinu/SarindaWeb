@@ -1021,15 +1021,22 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // (COMMENTS filter) so it's not captured anywhere else.
         // Append them as out entries so they appear in the section and count in the balance formula.
         const partialClearAdjs = enrichedOps
-            .filter(op => op.OP_TYPE === 2 && (parseFloat(op.CLEARED_QUANTITY) || 0) > 0)
+            .filter(op => op.OP_TYPE === 2 && (
+                (parseFloat(op.CLEARED_QUANTITY) || 0) > 0 ||
+                (parseFloat(op.ORIGINAL_STOCK) - parseFloat(op.REMAINING_STOCK)) > 0
+            ))
             .map(op => {
+                // Prefer CLEARED_QUANTITY; fall back to ORIGINAL_STOCK - REMAINING_STOCK for older ops
                 const clearedQty = parseFloat(op.CLEARED_QUANTITY) || 0;
+                const impliedCleared = Math.max(0, (parseFloat(op.ORIGINAL_STOCK) || 0) - (parseFloat(op.REMAINING_STOCK) || 0));
+                const effectiveClearedQty = clearedQty > 0 ? clearedQty : impliedCleared;
+
                 // Subtract conversion-out qty — those are already tracked in Conv. Out.
                 // Only count the portion that was physically removed without being converted.
                 const convOutQty = (op.conversions || [])
                     .filter(c => c.sourceItemId === itemId || c.sourceItemId === String(itemId))
                     .reduce((s, c) => s + (parseFloat(c.sourceQuantity) || parseFloat(c.destQuantity) || 0), 0);
-                const netCleared = Math.max(0, clearedQty - convOutQty);
+                const netCleared = Math.max(0, effectiveClearedQty - convOutQty);
                 return {
                     txId: null,
                     txCode: op.OP_CODE,
@@ -1044,6 +1051,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 };
             })
             .filter(a => a.qty > 0); // Skip if nothing remains after subtracting conversions
+
 
         const allManualAdjustments = [...manualAdjustments, ...partialClearAdjs];
 
