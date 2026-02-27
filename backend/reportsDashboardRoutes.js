@@ -1421,4 +1421,282 @@ router.post('/api/graphs/item-data', async (req, res) => {
     }
 });
 
+// =====================================================
+// STOCK EVENTS - Event-by-Event Inventory for Graphs Page
+// =====================================================
+// Returns every individual transaction and stock operation event
+// as a separate data point with cumulative Store 1 / Store 2 / Total stock.
+// Uses IDENTICAL SLT conversion logic as analyze-period.
+router.post('/api/graphs/stock-events', async (req, res) => {
+    try {
+        const { itemId, startDate, endDate } = req.body;
+
+        if (!itemId || !startDate || !endDate) {
+            return res.status(400).json({ success: false, message: 'itemId, startDate, endDate are required' });
+        }
+
+        // -------------------------------------------------------
+        // STEP 0: Compute OPENING stock (same method as Inventory Volume Evolution)
+        // Use <= startDate 23:59:59 so the opening snapshot value MATCHES the first
+        // data point of the "Inventory Volume Evolution" chart (which also accumulates
+        // all transactions through the end of startDate).
+        // -------------------------------------------------------
+        const initialStockByStore = { 1: 0, 2: 0 };
+        for (const storeNo of [1, 2]) {
+            const [result] = await pool.query(`
+                SELECT COALESCE(SUM(CASE 
+                    WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
+                    WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
+                    ELSE 0
+                END), 0) as stock_level
+                FROM store_transactions st
+                JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                WHERE sti.ITEM_ID = ?
+                  AND st.STORE_NO = ?
+                  AND st.IS_ACTIVE = 1
+                  AND sti.IS_ACTIVE = 1
+                  AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+            `, [itemId, storeNo, `${startDate} 23:59:59`]);
+            initialStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
+        }
+
+        // Also compute FINAL stock (same method — <= endDate 23:59:59) to make a
+        // closing cap point whose value matches IV Evolution's last data point.
+        const finalStockByStore = { 1: 0, 2: 0 };
+        for (const storeNo of [1, 2]) {
+            const [result] = await pool.query(`
+                SELECT COALESCE(SUM(CASE 
+                    WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
+                    WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
+                    ELSE 0
+                END), 0) as stock_level
+                FROM store_transactions st
+                JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                WHERE sti.ITEM_ID = ?
+                  AND st.STORE_NO = ?
+                  AND st.IS_ACTIVE = 1
+                  AND sti.IS_ACTIVE = 1
+                  AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+            `, [itemId, storeNo, `${endDate} 23:59:59`]);
+            finalStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
+        }
+
+        // -------------------------------------------------------
+        // STEP 1: Fetch individual transaction events — from startDate+1 onwards
+        // (startDate events are already baked into the opening snapshot)
+        // -------------------------------------------------------
+        const nextDay = new Date(startDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const nextDayStr = nextDay.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        const txEventsQuery = `
+            SELECT
+                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as event_time,
+                st.TYPE as event_type,
+                'transaction' as event_source,
+                st.STORE_NO,
+                st.CODE as tx_code,
+                st.COMMENTS,
+                sti.QUANTITY,
+                sti.TOTAL
+            FROM store_transactions st
+            JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+            WHERE sti.ITEM_ID = ?
+              AND st.IS_ACTIVE = 1
+              AND sti.IS_ACTIVE = 1
+              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} >= ?
+              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+            ORDER BY event_time ASC
+        `;
+        const txEvents = await pool.query(txEventsQuery, [
+            itemId,
+            `${nextDayStr} 00:00:00`,
+            `${endDate} 23:59:59`
+        ]);
+
+        // -------------------------------------------------------
+        // STEP 2: Fetch stock operation events — from startDate+1 onwards
+        // -------------------------------------------------------
+        const opEventsQuery = `
+            SELECT
+                ${OP_SL_TIME_SQL('sso.CREATED_DATE')} as event_time,
+                sso.OP_TYPE as event_type,
+                'stock_operation' as event_source,
+                sso.STORE_NO,
+                sso.OP_CODE as tx_code,
+                sso.COMMENTS,
+                ssoi.CLEARED_QUANTITY as QUANTITY,
+                ssoi.TOTAL,
+                ssoi.ORIGINAL_STOCK
+            FROM store_stock_operations sso
+            JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
+            WHERE ssoi.ITEM_ID = ?
+              AND sso.IS_ACTIVE = 1
+              AND ssoi.IS_ACTIVE = 1
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} >= ?
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
+            ORDER BY event_time ASC
+        `;
+        const opEvents = await pool.query(opEventsQuery, [
+            itemId,
+            `${nextDayStr} 00:00:00`,
+            `${endDate} 23:59:59`
+        ]);
+
+        // -------------------------------------------------------
+        // STEP 3: Merge + sort all events chronologically
+        // -------------------------------------------------------
+        const OP_TYPE_LABEL_MAP = {
+            1: 'Full Clear', 2: 'Partial Clear', 3: 'Full Clear + Sale',
+            4: 'Partial Clear + Sale', 5: 'Transfer', 6: 'Transfer + Clear',
+            7: 'Partial + Lorry', 8: 'Full + Lorry', 9: 'Conversion',
+            11: 'Stock Return', 12: 'Transfer S1→S2', 13: 'Transfer S2→S1'
+        };
+        const TX_SIGN = {
+            'Buying': 1, 'AdjIn': 1, 'Opening': 1, 'TransferIn': 1, 'StockTake': 1,
+            'Selling': -1, 'AdjOut': -1, 'StockClear': -1, 'TransferOut': -1, 'Wastage': -1
+        };
+
+        const normalizeTime = (t) => {
+            if (!t) return null;
+            if (typeof t === 'string') return t.replace('T', ' ').replace('.000Z', '');
+            if (t instanceof Date) {
+                // Return raw SLT string by reading UTC then shifting — avoid double TZ shift
+                const y = t.getUTCFullYear(), mo = String(t.getUTCMonth() + 1).padStart(2, '0');
+                const d = String(t.getUTCDate()).padStart(2, '0');
+                const hh = String(t.getUTCHours()).padStart(2, '0');
+                const mm = String(t.getUTCMinutes()).padStart(2, '0');
+                const ss = String(t.getUTCSeconds()).padStart(2, '0');
+                return `${y}-${mo}-${d} ${hh}:${mm}:${ss}`;
+            }
+            return String(t);
+        };
+
+        // Helper: format "2026-01-28 14:32:00" → "28 Jan 14:32" for X-axis label
+        const formatLabel = (timeStr) => {
+            if (!timeStr) return timeStr;
+            try {
+                const parts = timeStr.split(' ');
+                const dateParts = (parts[0] || '').split('-');
+                const timeParts = (parts[1] || '00:00:00').split(':');
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return `${dateParts[2]} ${months[parseInt(dateParts[1], 10) - 1]} ${timeParts[0]}:${timeParts[1]}`;
+            } catch (e) { return timeStr; }
+        };
+
+        const allEvents = [];
+
+        for (const tx of txEvents) {
+            const sign = TX_SIGN[tx.event_type] ?? 0;
+            const qty = parseFloat(tx.QUANTITY) || 0;
+            const timeStr = normalizeTime(tx.event_time);
+            allEvents.push({
+                event_time: timeStr,
+                label: formatLabel(timeStr),
+                event_type: tx.event_type,
+                event_source: tx.event_source,
+                storeNo: tx.STORE_NO || 1,
+                tx_code: tx.tx_code,
+                delta_s1: tx.STORE_NO === 1 ? sign * qty : 0,
+                delta_s2: tx.STORE_NO === 2 ? sign * qty : 0
+            });
+        }
+
+        for (const op of opEvents) {
+            const qty = parseFloat(op.QUANTITY) || 0;
+            const opTypeNum = parseInt(op.event_type);
+            const timeStr = normalizeTime(op.event_time);
+            allEvents.push({
+                event_time: timeStr,
+                label: formatLabel(timeStr),
+                event_type: OP_TYPE_LABEL_MAP[opTypeNum] || `Op ${opTypeNum}`,
+                event_source: op.event_source,
+                storeNo: op.STORE_NO || 1,
+                tx_code: op.tx_code,
+                delta_s1: op.STORE_NO === 1 ? -qty : 0,
+                delta_s2: op.STORE_NO === 2 ? -qty : 0
+            });
+        }
+
+        // Sort all events by time
+        allEvents.sort((a, b) => (a.event_time > b.event_time ? 1 : -1));
+
+        // -------------------------------------------------------
+        // STEP 4: Emit result points
+        // Opening point = initialStockByStore (matches IV Evolution startDate point)
+        // Each event = running stock after that event
+        // Closing cap = finalStockByStore (matches IV Evolution endDate point)
+        // -------------------------------------------------------
+        let runS1 = initialStockByStore[1];
+        let runS2 = initialStockByStore[2];
+
+        const resultPoints = [];
+
+        // Opening point: stock at end of startDate (matches IV Evolution first point)
+        resultPoints.push({
+            time: `${startDate} 23:59:59`,
+            label: formatLabel(`${startDate} 23:59:59`),
+            event_type: 'Period Start',
+            event_source: 'snapshot',
+            tx_code: null,
+            storeNo: null,
+            delta: 0,
+            s1: parseFloat(runS1.toFixed(3)),
+            s2: parseFloat(runS2.toFixed(3)),
+            total: parseFloat((runS1 + runS2).toFixed(3))
+        });
+
+        for (const ev of allEvents) {
+            if (!ev.event_time) continue;
+            runS1 += ev.delta_s1;
+            runS2 += ev.delta_s2;
+
+            resultPoints.push({
+                time: ev.event_time,
+                label: ev.label,
+                event_type: ev.event_type,
+                event_source: ev.event_source,
+                tx_code: ev.tx_code,
+                storeNo: ev.storeNo,
+                delta: parseFloat((ev.delta_s1 + ev.delta_s2).toFixed(3)),
+                s1: parseFloat(runS1.toFixed(3)),
+                s2: parseFloat(runS2.toFixed(3)),
+                total: parseFloat((runS1 + runS2).toFixed(3))
+            });
+        }
+
+        // Closing cap point: stock at end of endDate (matches IV Evolution last point)
+        // Only add if different from last event point (handles single-day ranges)
+        const lastPoint = resultPoints[resultPoints.length - 1];
+        const finalLabel = formatLabel(`${endDate} 23:59:59`);
+        const finalS1 = parseFloat(finalStockByStore[1].toFixed(3));
+        const finalS2 = parseFloat(finalStockByStore[2].toFixed(3));
+        const finalTotal = parseFloat((finalStockByStore[1] + finalStockByStore[2]).toFixed(3));
+
+        if (!lastPoint || lastPoint.event_source === 'snapshot' ||
+            lastPoint.s1 !== finalS1 || lastPoint.s2 !== finalS2) {
+            resultPoints.push({
+                time: `${endDate} 23:59:59`,
+                label: finalLabel,
+                event_type: 'Period End',
+                event_source: 'snapshot',
+                tx_code: null,
+                storeNo: null,
+                delta: 0,
+                s1: finalS1,
+                s2: finalS2,
+                total: finalTotal
+            });
+        }
+
+        return res.json({ success: true, result: resultPoints });
+
+    } catch (error) {
+        console.error('[GraphsAPI] Error fetching stock events:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+
 module.exports = router;
+

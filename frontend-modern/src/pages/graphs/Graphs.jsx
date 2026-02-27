@@ -29,6 +29,9 @@ export default function Graphs() {
     const [loadingData, setLoadingData] = useState(false);
     const [graphData, setGraphData] = useState([]);
 
+    const [eventData, setEventData] = useState([]);
+    const [loadingEvents, setLoadingEvents] = useState(false);
+
     useEffect(() => {
         const fetchItems = async () => {
             setLoadingParams(true);
@@ -81,9 +84,31 @@ export default function Graphs() {
         }
     };
 
+    const fetchEventData = async () => {
+        if (!selectedItem || !dates || !dates[0] || !dates[1]) return;
+        setLoadingEvents(true);
+        try {
+            const res = await axios.post('/api/graphs/stock-events', {
+                itemId: selectedItem,
+                startDate: dates[0].format('YYYY-MM-DD'),
+                endDate: dates[1].format('YYYY-MM-DD')
+            });
+            if (res.data.success) {
+                setEventData(res.data.result || []);
+            } else {
+                message.error(res.data.message || 'Failed to load event data');
+            }
+        } catch (err) {
+            message.error(err.response?.data?.message || 'Error loading event data');
+        } finally {
+            setLoadingEvents(false);
+        }
+    };
+
     useEffect(() => {
         if (selectedItem) {
             fetchData();
+            fetchEventData();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedItem, period]);
@@ -202,6 +227,48 @@ export default function Graphs() {
         );
     };
 
+    const EVENT_TYPE_COLORS = {
+        'Buying': '#10b981', 'AdjIn': '#22d3ee', 'Opening': '#a3e635',
+        'TransferIn': '#34d399', 'StockTake': '#6ee7b7',
+        'Selling': '#f97316', 'AdjOut': '#fb923c', 'StockClear': '#ef4444',
+        'TransferOut': '#e879f9', 'Wastage': '#fbbf24',
+        'Full Clear': '#dc2626', 'Partial Clear': '#f59e0b',
+        'Full Clear + Sale': '#16a34a', 'Partial Clear + Sale': '#0ea5e9',
+        'Conversion': '#818cf8', 'Stock Return': '#34d399',
+        'Transfer S1→S2': '#a78bfa', 'Transfer S2→S1': '#c084fc',
+        'Opening Snapshot': '#6b7280'
+    };
+
+    const CustomTooltipEvents = ({ active, payload }) => {
+        if (active && payload && payload.length) {
+            const d = payload[0]?.payload;
+            if (!d) return null;
+            const color = EVENT_TYPE_COLORS[d.event_type] || '#9ca3af';
+            const deltaSign = d.delta >= 0 ? '+' : '';
+            return (
+                <div className="bg-[#18181b]/98 backdrop-blur-3xl p-4 rounded-xl border border-white/10 shadow-2xl z-50 min-w-[220px]">
+                    <p className="text-gray-300 font-bold mb-2 border-b border-white/10 pb-2 text-xs">{d.time}</p>
+                    <div className="flex items-center gap-2 mb-3">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                        <span className="text-white font-semibold text-sm">{d.event_type}</span>
+                        {d.tx_code && <span className="text-gray-500 text-xs font-mono ml-auto">{d.tx_code}</span>}
+                    </div>
+                    {d.delta !== 0 && (
+                        <p className={`text-xs font-bold mb-2 ${d.delta >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            Change: {deltaSign}{d.delta.toFixed(3)} kg
+                        </p>
+                    )}
+                    <div className="space-y-1">
+                        <div className="flex justify-between text-xs"><span className="text-teal-400">Store 1:</span><span className="font-bold text-white">{d.s1?.toFixed(3)} kg</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-violet-400">Store 2:</span><span className="font-bold text-white">{d.s2?.toFixed(3)} kg</span></div>
+                        <div className="flex justify-between text-xs border-t border-white/5 pt-1"><span className="text-blue-400">Total:</span><span className="font-bold text-white">{d.total?.toFixed(3)} kg</span></div>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
     const CustomTooltipStock = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
             return (
@@ -297,8 +364,8 @@ export default function Graphs() {
                                 type="primary"
                                 size="large"
                                 icon={<BarChartOutlined />}
-                                onClick={fetchData}
-                                loading={loadingData}
+                                onClick={() => { fetchData(); fetchEventData(); }}
+                                loading={loadingData || loadingEvents}
                                 disabled={!selectedItem || !dates[0] || !dates[1]}
                                 className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 border-none h-10 px-6 rounded-xl shadow-lg shadow-emerald-500/20 font-semibold"
                             >
@@ -554,6 +621,115 @@ export default function Graphs() {
                             </ResponsiveContainer>
                         </div>
                     </div>
+
+                    {/* Event-by-Event Inventory Volume Evolution */}
+                    <div id="inventory-events-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
+                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-violet-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+
+                        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
+                            <h2 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 md:gap-3">
+                                <span className="w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                                    <StockOutlined className="text-blue-400 text-sm md:text-base" />
+                                </span>
+                                Inventory Volume Evolution — Event by Event
+                            </h2>
+                            <div className="flex items-center gap-2 md:gap-3">
+                                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">
+                                    {eventData.length > 1 ? `${eventData.length - 1} events` : 'No events'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {loadingEvents ? (
+                            <div className="flex justify-center items-center h-48">
+                                <Spin size="large" />
+                            </div>
+                        ) : eventData.length <= 1 ? (
+                            <div className="flex justify-center items-center h-48">
+                                <Empty description={<span className="text-gray-400">No events found in this period</span>} />
+                            </div>
+                        ) : (
+                            <div className="h-[340px] md:h-[520px] w-full -ml-4 md:ml-0">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={eventData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                                        <defs>
+                                            <linearGradient id="evS1Grad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                                        <XAxis
+                                            dataKey="label"
+                                            stroke="#6b7280"
+                                            fontSize={9}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tickMargin={10}
+                                            fontWeight={600}
+                                            interval={Math.max(0, Math.floor((eventData.length - 1) / 12))}
+                                        />
+                                        <YAxis
+                                            stroke="#6b7280"
+                                            fontSize={10}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tickFormatter={(v) => `${v} kg`}
+                                            fontWeight={600}
+                                            width={60}
+                                        />
+                                        <Tooltip content={<CustomTooltipEvents />} cursor={{ stroke: 'rgba(255,255,255,0.08)', strokeWidth: 16 }} />
+                                        <Legend
+                                            onClick={handleLegendClick}
+                                            iconType="circle"
+                                            wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
+                                            formatter={(value, entry) => (
+                                                <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                                    {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
+                                                </span>
+                                            )}
+                                        />
+                                        <Line
+                                            hide={hiddenSeries.includes('s1')}
+                                            type="stepAfter"
+                                            dataKey="s1"
+                                            name="Store 1 Stock"
+                                            stroke="#14b8a6"
+                                            strokeWidth={2}
+                                            dot={{ r: 3.5, fill: '#14b8a6', stroke: '#0d1f1f', strokeWidth: 1.5 }}
+                                            activeDot={{ r: 6, stroke: '#14b8a6', strokeWidth: 2, fill: '#fff' }}
+                                            connectNulls
+                                            legendType="circle"
+                                        />
+                                        <Line
+                                            hide={hiddenSeries.includes('s2')}
+                                            type="stepAfter"
+                                            dataKey="s2"
+                                            name="Store 2 Stock"
+                                            stroke="#8b5cf6"
+                                            strokeWidth={2}
+                                            dot={{ r: 3.5, fill: '#8b5cf6', stroke: '#1a0a2e', strokeWidth: 1.5 }}
+                                            activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 2, fill: '#fff' }}
+                                            connectNulls
+                                            legendType="circle"
+                                        />
+                                        <Line
+                                            hide={hiddenSeries.includes('total')}
+                                            type="stepAfter"
+                                            dataKey="total"
+                                            name="Total Stock"
+                                            stroke="#3b82f6"
+                                            strokeWidth={3}
+                                            dot={{ r: 4.5, fill: '#3b82f6', stroke: '#0a1628', strokeWidth: 1.5 }}
+                                            activeDot={{ r: 7, stroke: '#3b82f6', strokeWidth: 3, fill: '#fff' }}
+                                            connectNulls
+                                            legendType="circle"
+                                        />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -680,6 +856,26 @@ export default function Graphs() {
                                 </AreaChart>
                             </div>
                         </div>
+
+                        {eventData.length > 1 && (
+                            <div id="export-events-chart" style={{ width: '100%', marginTop: '40px', backgroundColor: 'transparent' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                                    <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Inventory Volume Evolution — Event by Event</h2>
+                                </div>
+                                <div style={{ height: '420px', width: '100%' }}>
+                                    <LineChart width={1520} height={420} data={eventData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={false} />
+                                        <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickMargin={15}
+                                            interval={Math.max(0, Math.floor((eventData.length - 1) / 14))} />
+                                        <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(v) => `${v} kg`} width={80} />
+                                        <Legend verticalAlign="bottom" height={40} iconSize={12} wrapperStyle={{ paddingTop: '40px', fontSize: '16px', fontWeight: 600 }} />
+                                        <Line type="stepAfter" dataKey="s1" name="Store 1 Stock" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3.5, fill: '#14b8a6' }} isAnimationActive={false} />
+                                        <Line type="stepAfter" dataKey="s2" name="Store 2 Stock" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3.5, fill: '#8b5cf6' }} isAnimationActive={false} />
+                                        <Line type="stepAfter" dataKey="total" name="Total Stock" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, fill: '#3b82f6' }} isAnimationActive={false} />
+                                    </LineChart>
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>
