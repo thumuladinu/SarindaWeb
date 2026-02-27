@@ -16,6 +16,7 @@ import {
     CloseOutlined,
     DashboardOutlined,
     LineChartOutlined,
+    AreaChartOutlined,
     DatabaseOutlined
 } from '@ant-design/icons';
 import { Drawer } from 'antd';
@@ -128,6 +129,7 @@ const BottomNav = () => {
                         <DrawerItem path="/reports" icon={<FileTextOutlined />} label="Reports" />
                         <DrawerItem path="/reports-dashboard" icon={<DashboardOutlined />} label="Dashboards" />
                         <DrawerItem path="/graphs" icon={<LineChartOutlined />} label="Graphs" />
+                        <DrawerItem path="/stock-events" icon={<AreaChartOutlined />} label="Stock Events" />
                         {Cookies.get('rememberedUser') && JSON.parse(Cookies.get('rememberedUser')).ROLE?.toLowerCase() === 'dev' && (
                             <DrawerItem path="/dev-cache" icon={<DatabaseOutlined />} label="Local Cache" />
                         )}

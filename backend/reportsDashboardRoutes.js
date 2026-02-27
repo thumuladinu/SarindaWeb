@@ -1429,22 +1429,59 @@ router.post('/api/graphs/item-data', async (req, res) => {
 // Uses IDENTICAL SLT conversion logic as analyze-period.
 router.post('/api/graphs/stock-events', async (req, res) => {
     try {
-        const { itemId, startDate, endDate } = req.body;
+        const { itemId, startDatetime, endDatetime } = req.body;
 
-        if (!itemId || !startDate || !endDate) {
-            return res.status(400).json({ success: false, message: 'itemId, startDate, endDate are required' });
+        if (!itemId || !startDatetime || !endDatetime) {
+            return res.status(400).json({ success: false, message: 'itemId, startDatetime, endDatetime are required' });
         }
 
         // -------------------------------------------------------
-        // STEP 0: Compute OPENING stock (same method as Inventory Volume Evolution)
-        // Use <= startDate 23:59:59 so the opening snapshot value MATCHES the first
-        // data point of the "Inventory Volume Evolution" chart (which also accumulates
-        // all transactions through the end of startDate).
+        // Helpers
+        // -------------------------------------------------------
+        const normalizeTime = (t) => {
+            if (!t) return null;
+            if (typeof t === 'string') return t.replace('T', ' ').replace('.000Z', '');
+            if (t instanceof Date) {
+                const y = t.getUTCFullYear(), mo = String(t.getUTCMonth() + 1).padStart(2, '0');
+                const d = String(t.getUTCDate()).padStart(2, '0');
+                const hh = String(t.getUTCHours()).padStart(2, '0');
+                const mm = String(t.getUTCMinutes()).padStart(2, '0');
+                const ss = String(t.getUTCSeconds()).padStart(2, '0');
+                return `${y}-${mo}-${d} ${hh}:${mm}:${ss}`;
+            }
+            return String(t);
+        };
+
+        // Format "2026-01-28 14:32:00" → "28 Jan 14:32"
+        const formatLabel = (timeStr) => {
+            if (!timeStr) return timeStr;
+            try {
+                const parts = timeStr.split(' ');
+                const dateParts = (parts[0] || '').split('-');
+                const timeParts = (parts[1] || '00:00:00').split(':');
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return `${dateParts[2]} ${months[parseInt(dateParts[1], 10) - 1]} ${timeParts[0]}:${timeParts[1]}`;
+            } catch (e) { return timeStr; }
+        };
+
+        const OP_TYPE_LABEL_MAP = {
+            1: 'Full Clear', 2: 'Partial Clear', 3: 'Full Clear + Sale',
+            4: 'Partial Clear + Sale', 5: 'Transfer', 6: 'Transfer + Clear',
+            7: 'Partial + Lorry', 8: 'Full + Lorry', 9: 'Conversion',
+            11: 'Stock Return', 12: 'Transfer S1→S2', 13: 'Transfer S2→S1'
+        };
+        const TX_SIGN = {
+            'Buying': 1, 'AdjIn': 1, 'Opening': 1, 'TransferIn': 1, 'StockTake': 1,
+            'Selling': -1, 'AdjOut': -1, 'StockClear': -1, 'TransferOut': -1, 'Wastage': -1
+        };
+
+        // -------------------------------------------------------
+        // STEP 0: Opening stock — all transactions up to and including startDatetime
         // -------------------------------------------------------
         const initialStockByStore = { 1: 0, 2: 0 };
         for (const storeNo of [1, 2]) {
             const [result] = await pool.query(`
-                SELECT COALESCE(SUM(CASE 
+                SELECT COALESCE(SUM(CASE
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
                     WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
                     ELSE 0
@@ -1456,16 +1493,15 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                   AND st.IS_ACTIVE = 1
                   AND sti.IS_ACTIVE = 1
                   AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
-            `, [itemId, storeNo, `${startDate} 23:59:59`]);
+            `, [itemId, storeNo, startDatetime]);
             initialStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
         }
 
-        // Also compute FINAL stock (same method — <= endDate 23:59:59) to make a
-        // closing cap point whose value matches IV Evolution's last data point.
+        // Closing stock — all transactions up to and including endDatetime
         const finalStockByStore = { 1: 0, 2: 0 };
         for (const storeNo of [1, 2]) {
             const [result] = await pool.query(`
-                SELECT COALESCE(SUM(CASE 
+                SELECT COALESCE(SUM(CASE
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
                     WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
                     ELSE 0
@@ -1477,18 +1513,14 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                   AND st.IS_ACTIVE = 1
                   AND sti.IS_ACTIVE = 1
                   AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
-            `, [itemId, storeNo, `${endDate} 23:59:59`]);
+            `, [itemId, storeNo, endDatetime]);
             finalStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
         }
 
         // -------------------------------------------------------
-        // STEP 1: Fetch individual transaction events — from startDate+1 onwards
-        // (startDate events are already baked into the opening snapshot)
+        // STEP 1: Fetch individual transaction events strictly BETWEEN
+        // startDatetime (exclusive) and endDatetime (inclusive)
         // -------------------------------------------------------
-        const nextDay = new Date(startDate);
-        nextDay.setDate(nextDay.getDate() + 1);
-        const nextDayStr = nextDay.toISOString().split('T')[0]; // YYYY-MM-DD
-
         const txEventsQuery = `
             SELECT
                 ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as event_time,
@@ -1504,18 +1536,14 @@ router.post('/api/graphs/stock-events', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} >= ?
+              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} > ?
               AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
             ORDER BY event_time ASC
         `;
-        const txEvents = await pool.query(txEventsQuery, [
-            itemId,
-            `${nextDayStr} 00:00:00`,
-            `${endDate} 23:59:59`
-        ]);
+        const txEvents = await pool.query(txEventsQuery, [itemId, startDatetime, endDatetime]);
 
         // -------------------------------------------------------
-        // STEP 2: Fetch stock operation events — from startDate+1 onwards
+        // STEP 2: Fetch stock operation events in the same window
         // -------------------------------------------------------
         const opEventsQuery = `
             SELECT
@@ -1533,57 +1561,15 @@ router.post('/api/graphs/stock-events', async (req, res) => {
             WHERE ssoi.ITEM_ID = ?
               AND sso.IS_ACTIVE = 1
               AND ssoi.IS_ACTIVE = 1
-              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} >= ?
+              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} > ?
               AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
             ORDER BY event_time ASC
         `;
-        const opEvents = await pool.query(opEventsQuery, [
-            itemId,
-            `${nextDayStr} 00:00:00`,
-            `${endDate} 23:59:59`
-        ]);
+        const opEvents = await pool.query(opEventsQuery, [itemId, startDatetime, endDatetime]);
 
         // -------------------------------------------------------
         // STEP 3: Merge + sort all events chronologically
         // -------------------------------------------------------
-        const OP_TYPE_LABEL_MAP = {
-            1: 'Full Clear', 2: 'Partial Clear', 3: 'Full Clear + Sale',
-            4: 'Partial Clear + Sale', 5: 'Transfer', 6: 'Transfer + Clear',
-            7: 'Partial + Lorry', 8: 'Full + Lorry', 9: 'Conversion',
-            11: 'Stock Return', 12: 'Transfer S1→S2', 13: 'Transfer S2→S1'
-        };
-        const TX_SIGN = {
-            'Buying': 1, 'AdjIn': 1, 'Opening': 1, 'TransferIn': 1, 'StockTake': 1,
-            'Selling': -1, 'AdjOut': -1, 'StockClear': -1, 'TransferOut': -1, 'Wastage': -1
-        };
-
-        const normalizeTime = (t) => {
-            if (!t) return null;
-            if (typeof t === 'string') return t.replace('T', ' ').replace('.000Z', '');
-            if (t instanceof Date) {
-                // Return raw SLT string by reading UTC then shifting — avoid double TZ shift
-                const y = t.getUTCFullYear(), mo = String(t.getUTCMonth() + 1).padStart(2, '0');
-                const d = String(t.getUTCDate()).padStart(2, '0');
-                const hh = String(t.getUTCHours()).padStart(2, '0');
-                const mm = String(t.getUTCMinutes()).padStart(2, '0');
-                const ss = String(t.getUTCSeconds()).padStart(2, '0');
-                return `${y}-${mo}-${d} ${hh}:${mm}:${ss}`;
-            }
-            return String(t);
-        };
-
-        // Helper: format "2026-01-28 14:32:00" → "28 Jan 14:32" for X-axis label
-        const formatLabel = (timeStr) => {
-            if (!timeStr) return timeStr;
-            try {
-                const parts = timeStr.split(' ');
-                const dateParts = (parts[0] || '').split('-');
-                const timeParts = (parts[1] || '00:00:00').split(':');
-                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                return `${dateParts[2]} ${months[parseInt(dateParts[1], 10) - 1]} ${timeParts[0]}:${timeParts[1]}`;
-            } catch (e) { return timeStr; }
-        };
-
         const allEvents = [];
 
         for (const tx of txEvents) {
@@ -1618,29 +1604,27 @@ router.post('/api/graphs/stock-events', async (req, res) => {
             });
         }
 
-        // Sort all events by time
         allEvents.sort((a, b) => (a.event_time > b.event_time ? 1 : -1));
 
         // -------------------------------------------------------
-        // STEP 4: Emit result points
-        // Opening point = initialStockByStore (matches IV Evolution startDate point)
-        // Each event = running stock after that event
-        // Closing cap = finalStockByStore (matches IV Evolution endDate point)
+        // STEP 4: Build result points + accumulate summary by type
         // -------------------------------------------------------
         let runS1 = initialStockByStore[1];
         let runS2 = initialStockByStore[2];
 
         const resultPoints = [];
+        const summaryByType = {}; // { typeName: { s1: number, s2: number } }
 
-        // Opening point: stock at end of startDate (matches IV Evolution first point)
+        // Opening anchor point
         resultPoints.push({
-            time: `${startDate} 23:59:59`,
-            label: formatLabel(`${startDate} 23:59:59`),
+            time: startDatetime,
+            label: formatLabel(startDatetime),
             event_type: 'Period Start',
             event_source: 'snapshot',
             tx_code: null,
             storeNo: null,
-            delta: 0,
+            delta: 0, delta_s1: 0, delta_s2: 0,
+            prev_s1: null, prev_s2: null, prev_total: null,
             s1: parseFloat(runS1.toFixed(3)),
             s2: parseFloat(runS2.toFixed(3)),
             total: parseFloat((runS1 + runS2).toFixed(3))
@@ -1648,13 +1632,19 @@ router.post('/api/graphs/stock-events', async (req, res) => {
 
         for (const ev of allEvents) {
             if (!ev.event_time) continue;
-            // Capture BEFORE values for the tooltip
             const prevS1 = parseFloat(runS1.toFixed(3));
             const prevS2 = parseFloat(runS2.toFixed(3));
             const prevTotal = parseFloat((runS1 + runS2).toFixed(3));
 
             runS1 += ev.delta_s1;
             runS2 += ev.delta_s2;
+
+            // Accumulate summary
+            if (!summaryByType[ev.event_type]) {
+                summaryByType[ev.event_type] = { s1: 0, s2: 0 };
+            }
+            summaryByType[ev.event_type].s1 += ev.delta_s1;
+            summaryByType[ev.event_type].s2 += ev.delta_s2;
 
             resultPoints.push({
                 time: ev.event_time,
@@ -1675,10 +1665,8 @@ router.post('/api/graphs/stock-events', async (req, res) => {
             });
         }
 
-        // Closing cap point: stock at end of endDate (matches IV Evolution last point)
-        // Only add if different from last event point (handles single-day ranges)
+        // Closing cap point
         const lastPoint = resultPoints[resultPoints.length - 1];
-        const finalLabel = formatLabel(`${endDate} 23:59:59`);
         const finalS1 = parseFloat(finalStockByStore[1].toFixed(3));
         const finalS2 = parseFloat(finalStockByStore[2].toFixed(3));
         const finalTotal = parseFloat((finalStockByStore[1] + finalStockByStore[2]).toFixed(3));
@@ -1686,20 +1674,94 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         if (!lastPoint || lastPoint.event_source === 'snapshot' ||
             lastPoint.s1 !== finalS1 || lastPoint.s2 !== finalS2) {
             resultPoints.push({
-                time: `${endDate} 23:59:59`,
-                label: finalLabel,
+                time: endDatetime,
+                label: formatLabel(endDatetime),
                 event_type: 'Period End',
                 event_source: 'snapshot',
                 tx_code: null,
                 storeNo: null,
-                delta: 0,
+                delta: 0, delta_s1: 0, delta_s2: 0,
+                prev_s1: null, prev_s2: null, prev_total: null,
                 s1: finalS1,
                 s2: finalS2,
                 total: finalTotal
             });
         }
 
-        return res.json({ success: true, result: resultPoints });
+        // -------------------------------------------------------
+        // STEP 5: Build summary table rows
+        // -------------------------------------------------------
+        const byType = Object.entries(summaryByType).map(([type, vals]) => ({
+            type,
+            s1: parseFloat(vals.s1.toFixed(3)),
+            s2: parseFloat(vals.s2.toFixed(3)),
+            net: parseFloat((vals.s1 + vals.s2).toFixed(3))
+        }));
+
+        // -------------------------------------------------------
+        // STEP 6: Mathematical Validation
+        // opening + sum(all deltas) should equal closing
+        // -------------------------------------------------------
+        const openingS1 = parseFloat(initialStockByStore[1].toFixed(3));
+        const openingS2 = parseFloat(initialStockByStore[2].toFixed(3));
+        const openingTotal = parseFloat((openingS1 + openingS2).toFixed(3));
+
+        const deltaS1Sum = parseFloat(allEvents.reduce((acc, e) => acc + e.delta_s1, 0).toFixed(3));
+        const deltaS2Sum = parseFloat(allEvents.reduce((acc, e) => acc + e.delta_s2, 0).toFixed(3));
+
+        const expectedS1 = parseFloat((openingS1 + deltaS1Sum).toFixed(3));
+        const expectedS2 = parseFloat((openingS2 + deltaS2Sum).toFixed(3));
+        const expectedTotal = parseFloat((expectedS1 + expectedS2).toFixed(3));
+
+        const discrepancyS1 = parseFloat((finalS1 - expectedS1).toFixed(3));
+        const discrepancyS2 = parseFloat((finalS2 - expectedS2).toFixed(3));
+        const discrepancyTotal = parseFloat((finalTotal - expectedTotal).toFixed(3));
+        const valid = discrepancyS1 === 0 && discrepancyS2 === 0;
+
+        // If invalid, identify the event(s) most likely at fault
+        // (any event where running total differs from expected by > 0.001)
+        const issues = [];
+        if (!valid) {
+            let chkS1 = openingS1, chkS2 = openingS2;
+            for (const ev of allEvents) {
+                chkS1 += ev.delta_s1;
+                chkS2 += ev.delta_s2;
+                // Flag if delta is suspiciously zero for a non-snapshot event
+                if (ev.delta_s1 === 0 && ev.delta_s2 === 0) {
+                    issues.push({
+                        time: ev.event_time,
+                        type: ev.event_type,
+                        tx_code: ev.tx_code,
+                        reason: 'Event recorded zero quantity change'
+                    });
+                }
+            }
+            // If no zero-delta events found, flag the discrepancy itself
+            if (issues.length === 0) {
+                issues.push({
+                    time: null,
+                    type: null,
+                    tx_code: null,
+                    reason: `Cannot pin to a specific event. Total discrepancy: S1=${discrepancyS1}kg, S2=${discrepancyS2}kg. Possible external modification to stock not captured in transaction log.`
+                });
+            }
+        }
+
+        const summary = {
+            opening: { s1: openingS1, s2: openingS2, total: openingTotal },
+            closing: { s1: finalS1, s2: finalS2, total: finalTotal },
+            deltaSum: { s1: deltaS1Sum, s2: deltaS2Sum, total: parseFloat((deltaS1Sum + deltaS2Sum).toFixed(3)) },
+            byType,
+            validation: {
+                valid,
+                expected: { s1: expectedS1, s2: expectedS2, total: expectedTotal },
+                actual: { s1: finalS1, s2: finalS2, total: finalTotal },
+                discrepancy: { s1: discrepancyS1, s2: discrepancyS2, total: discrepancyTotal },
+                issues
+            }
+        };
+
+        return res.json({ success: true, result: resultPoints, summary });
 
     } catch (error) {
         console.error('[GraphsAPI] Error fetching stock events:', error);
@@ -1709,4 +1771,3 @@ router.post('/api/graphs/stock-events', async (req, res) => {
 
 
 module.exports = router;
-

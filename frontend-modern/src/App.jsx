@@ -17,6 +17,7 @@ import StockOperations from './pages/StockOperations'; // New Import
 import Reports from './pages/reports/Reports';
 import ReportsDashboard from './pages/reports-dashboard/ReportsDashboard';
 import Graphs from './pages/graphs/Graphs'; // New Import
+import StockEvents from './pages/stock-events/StockEvents';
 import Notifications from './pages/notifications/Notifications';
 import DevCache from './pages/DevCache';
 
@@ -58,6 +59,7 @@ function App() {
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/reports-dashboard" element={<ReportsDashboard />} />
                 <Route path="/graphs" element={<Graphs />} />
+                <Route path="/stock-events" element={<StockEvents />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/dev-cache" element={<DevCache />} />
             </Route>

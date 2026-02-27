@@ -14,6 +14,7 @@ import {
     StockOutlined, // New
     DashboardOutlined,
     LineChartOutlined,
+    AreaChartOutlined,
     DatabaseOutlined
 } from '@ant-design/icons';
 import { Tooltip } from 'antd';
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
     { label: 'Reports', path: '/reports', icon: <FileTextOutlined /> },
     { label: 'Dashboards', path: '/reports-dashboard', icon: <DashboardOutlined /> },
     { label: 'Graphs', path: '/graphs', icon: <LineChartOutlined /> }, // New
+    { label: 'Stock Events', path: '/stock-events', icon: <AreaChartOutlined /> },
 ];
 
 export default function Sidebar() {
