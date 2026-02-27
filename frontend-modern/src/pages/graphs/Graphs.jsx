@@ -244,24 +244,47 @@ export default function Graphs() {
             const d = payload[0]?.payload;
             if (!d) return null;
             const color = EVENT_TYPE_COLORS[d.event_type] || '#9ca3af';
-            const deltaSign = d.delta >= 0 ? '+' : '';
+            const isSnapshot = d.event_source === 'snapshot';
+            const deltaSign = (d.delta ?? 0) >= 0 ? '+' : '';
             return (
-                <div className="bg-[#18181b]/98 backdrop-blur-3xl p-4 rounded-xl border border-white/10 shadow-2xl z-50 min-w-[220px]">
-                    <p className="text-gray-300 font-bold mb-2 border-b border-white/10 pb-2 text-xs">{d.time}</p>
+                <div className="bg-[#18181b]/98 backdrop-blur-3xl p-4 rounded-xl border border-white/10 shadow-2xl z-50 min-w-[240px]">
+                    {/* Timestamp */}
+                    <p className="text-gray-400 font-bold mb-2 border-b border-white/10 pb-2 text-[11px] font-mono">{d.time}</p>
+
+                    {/* Event type badge */}
                     <div className="flex items-center gap-2 mb-3">
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
                         <span className="text-white font-semibold text-sm">{d.event_type}</span>
-                        {d.tx_code && <span className="text-gray-500 text-xs font-mono ml-auto">{d.tx_code}</span>}
+                        {d.tx_code && <span className="text-gray-500 text-[10px] font-mono ml-auto">{d.tx_code}</span>}
                     </div>
-                    {d.delta !== 0 && (
-                        <p className={`text-xs font-bold mb-2 ${d.delta >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            Change: {deltaSign}{d.delta.toFixed(3)} kg
+
+                    {/* Change delta — skip for snapshots */}
+                    {!isSnapshot && d.delta !== undefined && (
+                        <p className={`text-xs font-bold mb-3 px-2 py-1 rounded-lg ${(d.delta ?? 0) >= 0 ? 'text-emerald-400 bg-emerald-400/10' : 'text-red-400 bg-red-400/10'}`}>
+                            {(d.delta ?? 0) >= 0 ? '▲' : '▼'} Change: {deltaSign}{(d.delta ?? 0).toFixed(3)} kg
                         </p>
                     )}
-                    <div className="space-y-1">
-                        <div className="flex justify-between text-xs"><span className="text-teal-400">Store 1:</span><span className="font-bold text-white">{d.s1?.toFixed(3)} kg</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-violet-400">Store 2:</span><span className="font-bold text-white">{d.s2?.toFixed(3)} kg</span></div>
-                        <div className="flex justify-between text-xs border-t border-white/5 pt-1"><span className="text-blue-400">Total:</span><span className="font-bold text-white">{d.total?.toFixed(3)} kg</span></div>
+
+                    {/* Before → After table */}
+                    <div className="text-[11px] space-y-1">
+                        <div className="grid grid-cols-3 gap-1 text-gray-500 font-semibold pb-1 border-b border-white/5">
+                            <span></span><span className="text-center">Before</span><span className="text-center">After</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 items-center">
+                            <span className="text-teal-400 font-semibold">Store 1</span>
+                            <span className="text-center text-gray-300">{d.prev_s1 !== undefined ? Number(d.prev_s1).toFixed(3) : '—'}</span>
+                            <span className="text-center text-white font-bold">{d.s1?.toFixed(3)}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 items-center">
+                            <span className="text-violet-400 font-semibold">Store 2</span>
+                            <span className="text-center text-gray-300">{d.prev_s2 !== undefined ? Number(d.prev_s2).toFixed(3) : '—'}</span>
+                            <span className="text-center text-white font-bold">{d.s2?.toFixed(3)}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 items-center border-t border-white/5 pt-1">
+                            <span className="text-blue-400 font-semibold">Total</span>
+                            <span className="text-center text-gray-300">{d.prev_total !== undefined ? Number(d.prev_total).toFixed(3) : '—'}</span>
+                            <span className="text-center text-white font-bold">{d.total?.toFixed(3)}</span>
+                        </div>
                     </div>
                 </div>
             );
@@ -327,7 +350,12 @@ export default function Graphs() {
                         onChange={setSelectedItem}
                         loading={loadingParams}
                         optionFilterProp="children"
-                        filterOption={(input, option) => (option?.children ?? '').toLowerCase().includes(input.toLowerCase())}
+                        filterOption={(input, option) => {
+                            const label = typeof option?.label === 'string'
+                                ? option.label
+                                : String(option?.children ?? '');
+                            return label.toLowerCase().includes(input.toLowerCase());
+                        }}
                     >
                         {items.map(item => (
                             <Option key={item.ITEM_ID} value={item.ITEM_ID}>{item.CODE} - {item.NAME}</Option>
@@ -651,7 +679,10 @@ export default function Graphs() {
                         ) : (
                             <div className="h-[340px] md:h-[520px] w-full -ml-4 md:ml-0">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={eventData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                                    <LineChart
+                                        data={eventData.map((d, i) => ({ ...d, _idx: i }))}
+                                        margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                                    >
                                         <defs>
                                             <linearGradient id="evS1Grad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
@@ -660,14 +691,17 @@ export default function Graphs() {
                                         </defs>
                                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                                         <XAxis
-                                            dataKey="label"
+                                            dataKey="_idx"
+                                            type="number"
+                                            domain={[0, eventData.length - 1]}
                                             stroke="#6b7280"
                                             fontSize={9}
                                             tickLine={false}
                                             axisLine={false}
                                             tickMargin={10}
                                             fontWeight={600}
-                                            interval={Math.max(0, Math.floor((eventData.length - 1) / 12))}
+                                            tickCount={Math.min(12, eventData.length)}
+                                            tickFormatter={(idx) => eventData[idx]?.label || ''}
                                         />
                                         <YAxis
                                             stroke="#6b7280"
@@ -696,7 +730,11 @@ export default function Graphs() {
                                             name="Store 1 Stock"
                                             stroke="#14b8a6"
                                             strokeWidth={2}
-                                            dot={{ r: 3.5, fill: '#14b8a6', stroke: '#0d1f1f', strokeWidth: 1.5 }}
+                                            dot={(props) => {
+                                                const d = props.payload;
+                                                if (!d || d.event_source === 'snapshot' || (d.delta_s1 === 0 && d.storeNo !== 1)) return null;
+                                                return <circle key={props.key} cx={props.cx} cy={props.cy} r={3.5} fill="#14b8a6" stroke="#0d1f1f" strokeWidth={1.5} />;
+                                            }}
                                             activeDot={{ r: 6, stroke: '#14b8a6', strokeWidth: 2, fill: '#fff' }}
                                             connectNulls
                                             legendType="circle"
@@ -708,7 +746,11 @@ export default function Graphs() {
                                             name="Store 2 Stock"
                                             stroke="#8b5cf6"
                                             strokeWidth={2}
-                                            dot={{ r: 3.5, fill: '#8b5cf6', stroke: '#1a0a2e', strokeWidth: 1.5 }}
+                                            dot={(props) => {
+                                                const d = props.payload;
+                                                if (!d || d.event_source === 'snapshot' || (d.delta_s2 === 0 && d.storeNo !== 2)) return null;
+                                                return <circle key={props.key} cx={props.cx} cy={props.cy} r={3.5} fill="#8b5cf6" stroke="#1a0a2e" strokeWidth={1.5} />;
+                                            }}
                                             activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 2, fill: '#fff' }}
                                             connectNulls
                                             legendType="circle"
@@ -720,12 +762,17 @@ export default function Graphs() {
                                             name="Total Stock"
                                             stroke="#3b82f6"
                                             strokeWidth={3}
-                                            dot={{ r: 4.5, fill: '#3b82f6', stroke: '#0a1628', strokeWidth: 1.5 }}
+                                            dot={(props) => {
+                                                const d = props.payload;
+                                                if (!d || d.event_source === 'snapshot') return <circle key={props.key} cx={props.cx} cy={props.cy} r={4} fill="#3b82f6" stroke="#0a1628" strokeWidth={1} opacity={0.4} />;
+                                                return <circle key={props.key} cx={props.cx} cy={props.cy} r={4.5} fill="#3b82f6" stroke="#0a1628" strokeWidth={1.5} />;
+                                            }}
                                             activeDot={{ r: 7, stroke: '#3b82f6', strokeWidth: 3, fill: '#fff' }}
                                             connectNulls
                                             legendType="circle"
                                         />
                                     </LineChart>
+
                                 </ResponsiveContainer>
                             </div>
                         )}

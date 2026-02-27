@@ -1648,6 +1648,11 @@ router.post('/api/graphs/stock-events', async (req, res) => {
 
         for (const ev of allEvents) {
             if (!ev.event_time) continue;
+            // Capture BEFORE values for the tooltip
+            const prevS1 = parseFloat(runS1.toFixed(3));
+            const prevS2 = parseFloat(runS2.toFixed(3));
+            const prevTotal = parseFloat((runS1 + runS2).toFixed(3));
+
             runS1 += ev.delta_s1;
             runS2 += ev.delta_s2;
 
@@ -1659,6 +1664,11 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                 tx_code: ev.tx_code,
                 storeNo: ev.storeNo,
                 delta: parseFloat((ev.delta_s1 + ev.delta_s2).toFixed(3)),
+                delta_s1: parseFloat(ev.delta_s1.toFixed(3)),
+                delta_s2: parseFloat(ev.delta_s2.toFixed(3)),
+                prev_s1: prevS1,
+                prev_s2: prevS2,
+                prev_total: prevTotal,
                 s1: parseFloat(runS1.toFixed(3)),
                 s2: parseFloat(runS2.toFixed(3)),
                 total: parseFloat((runS1 + runS2).toFixed(3))
