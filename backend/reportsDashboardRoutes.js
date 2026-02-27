@@ -1015,42 +1015,59 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 };
             });
 
-        // Partial Clear (Standard) ops on the selected item. We check CLEARED_QUANTITY > 0
-        // (instead of ORIGINAL_STOCK > 0) so we capture older ops where original stock was 0.
-        // The CLEARED_QUANTITY from these ops is filtered out of allTransactions 
-        // (COMMENTS filter) so it's not captured anywhere else.
-        // Append them as out entries so they appear in the section and count in the balance formula.
-        const partialClearAdjs = enrichedOps
-            .filter(op => op.OP_TYPE === 2 && (
-                (parseFloat(op.CLEARED_QUANTITY) || 0) > 0 ||
-                (parseFloat(op.ORIGINAL_STOCK) - parseFloat(op.REMAINING_STOCK)) > 0
-            ))
-            .map(op => {
-                // Prefer CLEARED_QUANTITY; fall back to ORIGINAL_STOCK - REMAINING_STOCK for older ops
-                const clearedQty = parseFloat(op.CLEARED_QUANTITY) || 0;
-                const impliedCleared = Math.max(0, (parseFloat(op.ORIGINAL_STOCK) || 0) - (parseFloat(op.REMAINING_STOCK) || 0));
-                const effectiveClearedQty = clearedQty > 0 ? clearedQty : impliedCleared;
+        // Partial Clear (Standard) ops on the selected item.
+        // The AdjOut/StockClear transaction these ops generate is excluded from allTransactions
+        // (COMMENTS filter), so we must capture the cleared qty here directly.
+        // When CLEARED_QUANTITY is 0 (older ops), look it up from the linked AdjOut transaction.
+        const partialClearAdjs = (await Promise.all(
+            enrichedOps
+                .filter(op => op.OP_TYPE === 2)
+                .map(async op => {
+                    let clearedQty = parseFloat(op.CLEARED_QUANTITY) || 0;
 
-                // Subtract conversion-out qty — those are already tracked in Conv. Out.
-                // Only count the portion that was physically removed without being converted.
-                const convOutQty = (op.conversions || [])
-                    .filter(c => c.sourceItemId === itemId || c.sourceItemId === String(itemId))
-                    .reduce((s, c) => s + (parseFloat(c.sourceQuantity) || parseFloat(c.destQuantity) || 0), 0);
-                const netCleared = Math.max(0, effectiveClearedQty - convOutQty);
-                return {
-                    txId: null,
-                    txCode: op.OP_CODE,
-                    type: 'StockOp',
-                    typeLabel: 'Partial Clear',
-                    isIn: false,
-                    qty: parseFloat(netCleared.toFixed(3)),
-                    delta: parseFloat((-netCleared).toFixed(3)),
-                    storeNo: op.STORE_NO || 1,
-                    date: op.CREATED_DATE,
-                    comments: op.COMMENTS || null
-                };
-            })
-            .filter(a => a.qty > 0); // Skip if nothing remains after subtracting conversions
+                    // Fallback: when CLEARED_QUANTITY is 0, look up the AdjOut/StockClear
+                    // transaction created by this op via COMMENTS matching the OP_CODE.
+                    if (clearedQty === 0) {
+                        const txRows = await pool.query(
+                            `SELECT sti.QUANTITY
+                             FROM store_transactions st
+                             JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                             WHERE st.COMMENTS LIKE ?
+                               AND sti.ITEM_ID = ?
+                               AND st.TYPE IN ('AdjOut', 'StockClear')
+                               AND st.IS_ACTIVE = 1
+                               AND sti.IS_ACTIVE = 1
+                             LIMIT 1`,
+                            [`[${op.OP_CODE}]%`, itemId]
+                        );
+                        if (txRows && txRows.length > 0) {
+                            clearedQty = parseFloat(txRows[0].QUANTITY) || 0;
+                        }
+                    }
+
+                    if (clearedQty <= 0) return null;
+
+                    // Subtract conversion-out qty — those are already tracked in Conv. Out.
+                    const convOutQty = (op.conversions || [])
+                        .filter(c => c.sourceItemId === itemId || c.sourceItemId === String(itemId))
+                        .reduce((s, c) => s + (parseFloat(c.sourceQuantity) || parseFloat(c.destQuantity) || 0), 0);
+                    const netCleared = Math.max(0, clearedQty - convOutQty);
+
+                    return {
+                        txId: null,
+                        txCode: op.OP_CODE,
+                        type: 'StockOp',
+                        typeLabel: 'Partial Clear',
+                        isIn: false,
+                        qty: parseFloat(netCleared.toFixed(3)),
+                        delta: parseFloat((-netCleared).toFixed(3)),
+                        storeNo: op.STORE_NO || 1,
+                        date: op.CREATED_DATE,
+                        comments: op.COMMENTS || null
+                    };
+                })
+        )).filter(a => a !== null && a.qty > 0);
+
 
 
         const allManualAdjustments = [...manualAdjustments, ...partialClearAdjs];
