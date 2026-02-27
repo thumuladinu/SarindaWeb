@@ -1047,6 +1047,17 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
 
         const allManualAdjustments = [...manualAdjustments, ...partialClearAdjs];
 
+        // Also fold partial clear cleared quantities into the aggregates so that
+        // the Adj Out card in Stock Summary reflects them (they are not in allTransactions).
+        for (const a of partialClearAdjs) {
+            const sn = a.storeNo || 1;
+            if (storeAggregates[sn]) {
+                storeAggregates[sn].adjOut.qty = parseFloat((storeAggregates[sn].adjOut.qty + a.qty).toFixed(3));
+            }
+            totalAggregates.adjOut.qty = parseFloat((totalAggregates.adjOut.qty + a.qty).toFixed(3));
+        }
+
+
         // Net stock impact of all manual adjustments (positive = stock added)
         const netManualAdjustment = allManualAdjustments.reduce((s, a) => s + a.delta, 0);
 
