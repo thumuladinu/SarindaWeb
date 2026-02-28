@@ -101,20 +101,30 @@ export default function ReportTransactions() {
 
         doc.text("Detailed Transactions", 14, doc.lastAutoTable.finalY + 15);
 
-        const tableBody = data.details.map(item => [
-            dayjs(item.CREATED_DATE).format('YYYY-MM-DD HH:mm'),
-            item.CODE,
-            item.TYPE,
-            item.C_NAME || '-',
-            Number(item.SUB_TOTAL).toFixed(2)
-        ]);
+        const tableBody = data.details.map(item => {
+            const breakdown = (item.ITEMS || []).map(line =>
+                `${line.ITEM_NAME} (${Number(line.QUANTITY).toFixed(2)}Kg) x ${Number(line.PRICE).toFixed(0)}`
+            ).join('\n');
+
+            return [
+                dayjs(item.CREATED_DATE).format('YYYY-MM-DD HH:mm'),
+                item.CODE,
+                item.TYPE,
+                breakdown || '-',
+                Number(item.SUB_TOTAL).toFixed(2)
+            ];
+        });
 
         autoTable(doc, {
             startY: doc.lastAutoTable.finalY + 20,
-            head: [['Date', 'Code', 'Type', 'Customer', 'Amount']],
+            head: [['Date', 'Code', 'Type', 'Item Breakdown', 'Amount']],
             body: tableBody,
             theme: 'striped',
-            styles: { fontSize: 8 },
+            styles: { fontSize: 8, cellPadding: 2 },
+            columnStyles: {
+                3: { cellWidth: 70 }, // Item Breakdown column
+                4: { halign: 'right' } // Amount column
+            },
             headStyles: { fillColor: [41, 128, 185] }
         });
 
