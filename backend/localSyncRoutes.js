@@ -3,6 +3,7 @@ const router = express.Router();
 const cors = require('cors');
 
 const pool = require('./index'); // Assuming you have a proper MySQL connection pool module
+const dateTimeUtils = require("./dateTimeUtils");
 
 router.use(cors());
 
@@ -825,7 +826,7 @@ router.post('/api/transactions/sync', async (req, res) => {
                     transaction.type || 'Selling',
                     transaction.customerId || null,
                     transaction.paymentMethod || 'Cash',
-                    createdDate,
+                    dateTimeUtils.toSLMySQLDateTime(transaction.createdAt || transaction.date || new Date()),
                     transaction.total || 0,
                     transaction.amountPaid || 0,
                     transaction.amountPaid || 0,
@@ -1057,7 +1058,7 @@ router.post('/api/transactions/sync', async (req, res) => {
             transaction.type || 'Selling',
             transaction.customerId || null,
             transaction.paymentMethod || 'Cash',
-            createdDate,
+            dateTimeUtils.toSLMySQLDateTime(transaction.createdAt || transaction.date || new Date()),
             transaction.total || 0,
             transaction.amountPaid || 0,
             transaction.amountPaid || 0,

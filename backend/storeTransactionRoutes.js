@@ -26,6 +26,9 @@ const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
              OR ${codeField} LIKE 'STOCKOP-%' 
              OR ${codeField} LIKE 'SLO-%'
              OR ${codeField} LIKE 'WEB-%'
+             OR ${codeField} LIKE '%-WEB-%'
+             OR ${codeField} LIKE '%-SLO-%'
+             OR ${codeField} LIKE 'RETURN-EXP-%'
         THEN CONVERT_TZ(${field}, '+00:00', '+05:30')
         ELSE ${field}
     END
@@ -870,7 +873,7 @@ router.post('/api/searchBank', async (req, res) => {
 
 
 router.post('/api/addTransaction', async (req, res) => {
-    console.log('Add transactions request received:', req.body);
+    console.log('Add transactions request received:1', req.body);
 
     try {
         // Ensure the MySQL connection pool is defined
@@ -908,7 +911,7 @@ router.post('/api/addTransaction', async (req, res) => {
             TYPE: req.body.TYPE,
             CUSTOMER: req.body.CUSTOMER ? req.body.CUSTOMER : null,
             METHOD: req.body.METHOD ? req.body.METHOD : null,
-            DATE: req.body.DATE,
+            DATE: dateTimeUtils.toSLMySQLDateTime(req.body.DATE || new Date()), // Save as SLT
             SUB_TOTAL: req.body.SUB_TOTAL,
             PAYMENT_AMOUNT: req.body.AMOUNT_SETTLED ? req.body.AMOUNT_SETTLED : req.body.SUB_TOTAL,
             AMOUNT_SETTLED: req.body.AMOUNT_SETTLED ? req.body.AMOUNT_SETTLED : req.body.SUB_TOTAL,
@@ -1584,9 +1587,45 @@ router.post('/api/adjustInventory', async (req, res) => {
         console.log('[adjustInventory] Request body:', req.body);
         if (!pool) return res.status(500).json({ success: false, message: 'DB connection error' });
 
-        const { ITEM_ID, STORE_NO, TYPE, QUANTITY, REASON, CREATED_BY } = req.body;
+        const { ITEM_ID, STORE_NO, TYPE, QUANTITY, REASON, CREATED_BY, DATE } = req.body;
         // TYPE: 'AdjIn' (+), 'AdjOut' (-), 'Opening' (set to value), 'StockClear' (set to 0)
         // QUANTITY: float (value to adjust by or set to) - Optional for StockClear
+
+        // Handle Operation Timestamp (SLT to UTC conversion)
+        // POS sends DATE in SLT (Sri Lanka Time, UTC+5:30) as full ISO string.
+        // Web Dashboard sends DATE as YYYY-MM-DD.
+        // We only apply point-in-time calculation for high-precision timestamps (POS/Sync).
+        let opTimestamp = new Date(); // Default to now
+        let isHighPrecision = false;
+
+        if (DATE) {
+            try {
+                if (DATE.includes('Z') || (DATE.includes('T') && (DATE.includes('+') || DATE.includes('.')))) {
+                    // Full ISO/Timestamp - treat as POS Sync
+                    opTimestamp = new Date(DATE);
+                    isHighPrecision = true;
+                } else {
+                    // Local SLT string or simple Date (web dashboard)
+                    // For web dashboard, we use CURRENT SERVER TIME for CREATED_DATE/STOCK_DATE
+                    // to avoid backdating issues when it's not a high-precision sync.
+                    opTimestamp = new Date();
+                    isHighPrecision = false;
+                }
+
+                if (isNaN(opTimestamp.getTime())) {
+                    console.warn('[adjustInventory] Invalid DATE format provided:', DATE);
+                    opTimestamp = new Date();
+                    isHighPrecision = false;
+                }
+            } catch (e) {
+                console.error('[adjustInventory] Error parsing DATE:', DATE, e);
+                opTimestamp = new Date();
+                isHighPrecision = false;
+            }
+        }
+
+        const utcDateStr = opTimestamp.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+        console.log(`[adjustInventory] Mode: ${isHighPrecision ? 'POS Sync' : 'Web Manual'} | Op Time UTC: ${utcDateStr}`);
 
         // StockClear doesn't need QUANTITY
         if (!ITEM_ID || !STORE_NO || !TYPE) {
@@ -1613,9 +1652,10 @@ router.post('/api/adjustInventory', async (req, res) => {
         // Get current stock from LEDGER (not cache) for accurate calculations
         let currentStock = 0;
         try {
-            // Get current stock using Unified Calculator
-            currentStock = await calculateCurrentStock(pool, ITEM_ID, STORE_NO);
-            console.log(`[adjustInventory] Calculated Stock for Item ${ITEM_ID} Store ${STORE_NO}: ${currentStock}`);
+            // Calculate current stock (before adjustment)
+            // Only use point-in-time calculation if it's a high-precision sync
+            currentStock = await calculateCurrentStock(pool, ITEM_ID, STORE_NO, isHighPrecision ? opTimestamp : null);
+            console.log(`[adjustInventory] Calculated Stock for Item ${ITEM_ID} Store ${STORE_NO} AT ${DATE || 'NOW'}: ${currentStock}`);
 
             console.log('[adjustInventory] Calculated current stock from ledger:', currentStock);
         } catch (e) {
@@ -1701,10 +1741,10 @@ router.post('/api/adjustInventory', async (req, res) => {
 
         // 2. Create Transaction Record (The Ledger Entry)
         // Use Date (DDMMYY) + random suffix for unique code
-        const now = new Date();
-        const day = String(now.getDate()).padStart(2, '0');
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const year = String(now.getFullYear()).slice(-2);
+        // Use the operation date (opTimestamp) for the code generator to keep it consistent
+        const day = String(opTimestamp.getDate()).padStart(2, '0');
+        const month = String(opTimestamp.getMonth() + 1).padStart(2, '0');
+        const year = String(opTimestamp.getFullYear()).slice(-2);
         const dateStr = `${day}${month}${year}`;
 
         const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -1715,13 +1755,16 @@ router.post('/api/adjustInventory', async (req, res) => {
             STORE_NO: STORE_NO,
             TYPE: transactionType,
             CREATED_BY: CREATED_BY || 1,
-            CREATED_DATE: new Date(),
+            CREATED_DATE: opTimestamp,
+            DATE: dateTimeUtils.toSLMySQLDateTime(opTimestamp),
             SUB_TOTAL: 0,
             COMMENTS: comment,
-            IS_ACTIVE: 1
+            IS_ACTIVE: 1,
+            STOCK_DATE: opTimestamp // Use operation time for stock ordering
         };
 
         const txRes = await pool.query('INSERT INTO store_transactions SET ?', txObj);
+
         const transactionId = txRes.insertId;
         console.log('[adjustInventory] Created transaction:', transactionId, txObj);
 
@@ -2266,8 +2309,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
 
 
 // Soft delete inventory transaction
-// Soft delete inventory transaction
-router.post('/api/deleteInventoryTransaction', async (req, res) => {
+const deleteInventoryTransaction = async (req, res) => {
     try {
         const { TRANSACTION_ID } = req.body;
 
@@ -2302,7 +2344,10 @@ router.post('/api/deleteInventoryTransaction', async (req, res) => {
         console.error("Error deleting inventory transaction:", e);
         return res.status(500).json({ success: false, message: e.message });
     }
-});
+};
+
+router.post('/api/deleteInventoryTransaction', deleteInventoryTransaction);
+router.post('/api/inventory/transaction/delete', deleteInventoryTransaction);
 
 // Helper to adjust stock (cache)
 async function adjustStock(itemId, storeNo, delta) {

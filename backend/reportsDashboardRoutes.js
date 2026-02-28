@@ -50,13 +50,16 @@ const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
              OR ${codeField} LIKE 'ADJ-%' 
              OR ${codeField} LIKE 'STOCKOP-%' 
              OR ${codeField} LIKE 'SLO-%'
-        THEN CONVERT_TZ(${field}, '+00:00', '+05:30')
-        ELSE ${field}
+             OR ${codeField} LIKE 'WEB-%'
+             OR ${codeField} LIKE '%-WEB-%'
+             OR ${codeField} LIKE '%-SLO-%'
+        THEN DATE_FORMAT(CONVERT_TZ(${field}, '+00:00', '+05:30'), '%Y-%m-%d %H:%i:%s')
+        ELSE DATE_FORMAT(${field}, '%Y-%m-%d %H:%i:%s')
     END
 `;
 
 // SQL Helper for Stock Operations (Always server-created UTC)
-const OP_SL_TIME_SQL = (field = 'sso.CREATED_DATE') => `CONVERT_TZ(${field}, '+00:00', '+05:30')`;
+const OP_SL_TIME_SQL = (field = 'sso.CREATED_DATE') => `DATE_FORMAT(CONVERT_TZ(${field}, '+00:00', '+05:30'), '%Y-%m-%d %H:%i:%s')`;
 
 // =====================================================
 // 1. GET ITEMS LIST (for dashboard item selection)
@@ -274,7 +277,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 st.CODE as TX_CODE,
                 st.TYPE,
                 st.STORE_NO,
-                st.CREATED_DATE,
+                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
                 st.COMMENTS,
                 st.SUB_TOTAL,
                 sti.QUANTITY,
@@ -290,7 +293,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
               AND st.COMMENTS NOT LIKE '%[OP-%'  -- Exclude operation-linked transactions
               AND st.COMMENTS NOT LIKE '%[S2-%'   -- Exclude store operation codes
               AND st.COMMENTS NOT LIKE '%[S1-%'
-            ORDER BY st.CREATED_DATE ASC
+              AND st.COMMENTS NOT LIKE '%[WEB-%'
+            ORDER BY CREATED_DATE ASC
         `;
         const allTransactions = await pool.query(txByStoreQuery, [itemId, startBoundary, endBoundary]);
 
@@ -347,7 +351,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 sso.OP_TYPE,
                 sso.CLEARANCE_TYPE,
                 sso.DATE as OP_DATE,
-                sso.CREATED_DATE,
+                ${OP_SL_TIME_SQL('sso.CREATED_DATE')} as CREATED_DATE,
                 sso.STORE_NO,
                 sso.BILL_CODE,
                 sso.BILL_AMOUNT,
@@ -375,7 +379,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
               AND ssoi.IS_ACTIVE = 1
               AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} > ?
               AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
-            ORDER BY sso.CREATED_DATE ASC
+            ORDER BY CREATED_DATE ASC
         `;
         const rawStockOps = await pool.query(opsQuery, [itemId, startBoundary, endBoundary]);
 
@@ -387,7 +391,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 finalOpRow = await pool.query(`
                     SELECT DISTINCT
                         sso.OP_ID, sso.OP_CODE, sso.OP_TYPE, sso.CLEARANCE_TYPE,
-                        sso.DATE as OP_DATE, sso.CREATED_DATE, sso.STORE_NO,
+                        sso.DATE as OP_DATE, ${OP_SL_TIME_SQL('sso.CREATED_DATE')} as CREATED_DATE, sso.STORE_NO,
                         sso.BILL_CODE, sso.BILL_AMOUNT, sso.WASTAGE_AMOUNT, sso.SURPLUS_AMOUNT,
                         sso.COMMENTS, sso.CUSTOMER_NAME, sso.LORRY_NAME, sso.DRIVER_NAME,
                         sso.DESTINATION, sso.REFERENCE_OP_ID,
@@ -599,7 +603,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 sso.OP_CODE,
                 sso.OP_TYPE,
                 sso.DATE as OP_DATE,
-                sso.CREATED_DATE,
+                ${OP_SL_TIME_SQL('sso.CREATED_DATE')} as CREATED_DATE,
                 sso.STORE_NO,
                 soc.SOURCE_ITEM_ID,
                 COALESCE(si_src.NAME, soc.SOURCE_ITEM_NAME) AS SOURCE_ITEM_NAME,
@@ -629,7 +633,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 sso.OP_CODE,
                 sso.OP_TYPE,
                 sso.DATE as OP_DATE,
-                sso.CREATED_DATE,
+                ${OP_SL_TIME_SQL('sso.CREATED_DATE')} as CREATED_DATE,
                 sso.STORE_NO,
                 soc.SOURCE_ITEM_ID,
                 COALESCE(si_src.NAME, soc.SOURCE_ITEM_NAME) AS SOURCE_ITEM_NAME,
@@ -679,6 +683,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                       AND st.COMMENTS NOT LIKE '%[OP-%'
                       AND st.COMMENTS NOT LIKE '%[S2-%'
                       AND st.COMMENTS NOT LIKE '%[S1-%'
+                      AND st.COMMENTS NOT LIKE '%[WEB-%'
                 `, [targetId, startBoundary, endBoundary]);
 
                 const opRows = await pool.query(`
@@ -837,6 +842,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
               AND st.COMMENTS NOT LIKE '%[OP-%'  -- Exclude operation-linked transactions
               AND st.COMMENTS NOT LIKE '%[S2-%'   -- Exclude store operation codes
               AND st.COMMENTS NOT LIKE '%[S1-%'
+              AND st.COMMENTS NOT LIKE '%[WEB-%'
             GROUP BY DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}), st.TYPE, st.STORE_NO
             ORDER BY tx_date ASC
         `;
@@ -1279,6 +1285,7 @@ router.post('/api/graphs/item-data', async (req, res) => {
               AND st.COMMENTS NOT LIKE '%[OP-%'
               AND st.COMMENTS NOT LIKE '%[S2-%'
               AND st.COMMENTS NOT LIKE '%[S1-%'
+              AND st.COMMENTS NOT LIKE '%[WEB-%'
               AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= ?
               AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?
         `;
@@ -1554,7 +1561,7 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         }
 
         // -------------------------------------------------------
-        // STEP 1: Fetch individual transaction events strictly BETWEEN
+        // STEP 1: Fetch ALL transactions strictly BETWEEN
         // startDatetime (exclusive) and endDatetime (inclusive)
         // -------------------------------------------------------
         const txEventsQuery = `
@@ -1579,67 +1586,127 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         const txEvents = await pool.query(txEventsQuery, [itemId, startDatetime, endDatetime]);
 
         // -------------------------------------------------------
-        // STEP 2: Fetch stock operation events in the same window
-        // -------------------------------------------------------
-        const opEventsQuery = `
-            SELECT
-                ${OP_SL_TIME_SQL('sso.CREATED_DATE')} as event_time,
-                sso.OP_TYPE as event_type,
-                'stock_operation' as event_source,
-                sso.STORE_NO,
-                sso.OP_CODE as tx_code,
-                sso.COMMENTS,
-                ssoi.CLEARED_QUANTITY as QUANTITY,
-                ssoi.TOTAL,
-                ssoi.ORIGINAL_STOCK
-            FROM store_stock_operations sso
-            JOIN store_stock_operation_items ssoi ON sso.OP_ID = ssoi.OP_ID
-            WHERE ssoi.ITEM_ID = ?
-              AND sso.IS_ACTIVE = 1
-              AND ssoi.IS_ACTIVE = 1
-              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} > ?
-              AND ${OP_SL_TIME_SQL('sso.CREATED_DATE')} <= ?
-            ORDER BY event_time ASC
-        `;
-        const opEvents = await pool.query(opEventsQuery, [itemId, startDatetime, endDatetime]);
-
-        // -------------------------------------------------------
-        // STEP 3: Merge + sort all events chronologically
+        // STEP 2: Group by Operation Code & Merge
         // -------------------------------------------------------
         const allEvents = [];
+        const opGroups = {}; // { 'OP-1234': { opCode, delta_s1, delta_s2 } }
+        const opCodeSet = new Set();
 
         for (const tx of txEvents) {
             const sign = TX_SIGN[tx.event_type] ?? 0;
             const qty = parseFloat(tx.QUANTITY) || 0;
-            const timeStr = normalizeTime(tx.event_time);
-            allEvents.push({
-                event_time: timeStr,
-                label: formatLabel(timeStr),
-                event_type: tx.event_type,
-                event_source: tx.event_source,
-                storeNo: tx.STORE_NO || 1,
-                tx_code: tx.tx_code,
-                delta_s1: tx.STORE_NO === 1 ? sign * qty : 0,
-                delta_s2: tx.STORE_NO === 2 ? sign * qty : 0
-            });
+            const delta_s1 = tx.STORE_NO === 1 ? sign * qty : 0;
+            const delta_s2 = tx.STORE_NO === 2 ? sign * qty : 0;
+
+            // Check if transaction is linked to an operation (matches OP-YYYY... or WEB-S... or S1-...)
+            const opMatch = tx.COMMENTS ? tx.COMMENTS.match(/\[((?:WEB-)?S[12]-\d{6}-CLR-[A-Za-z0-9\-]+|OP-\d{8}-\d{4})\]/i) : null;
+
+            if (opMatch && opMatch[1]) {
+                const opCode = opMatch[1];
+                opCodeSet.add(opCode);
+                if (!opGroups[opCode]) {
+                    opGroups[opCode] = { opCode, delta_s1: 0, delta_s2: 0, tx_code: opCode, breakdown: [] };
+                }
+                opGroups[opCode].delta_s1 += delta_s1;
+                opGroups[opCode].delta_s2 += delta_s2;
+                opGroups[opCode].breakdown.push({
+                    type: tx.event_type,
+                    store: tx.STORE_NO,
+                    delta_s1,
+                    delta_s2
+                });
+            } else {
+                // Standalone transaction
+                const timeStr = normalizeTime(tx.event_time);
+                allEvents.push({
+                    event_time: timeStr,
+                    label: formatLabel(timeStr),
+                    event_type: tx.event_type,
+                    event_source: tx.event_source,
+                    storeNo: tx.STORE_NO || 1,
+                    tx_code: tx.tx_code,
+                    delta_s1,
+                    delta_s2
+                });
+            }
         }
 
-        for (const op of opEvents) {
-            const qty = parseFloat(op.QUANTITY) || 0;
-            const opTypeNum = parseInt(op.event_type);
-            const timeStr = normalizeTime(op.event_time);
-            allEvents.push({
-                event_time: timeStr,
-                label: formatLabel(timeStr),
-                event_type: OP_TYPE_LABEL_MAP[opTypeNum] || `Op ${opTypeNum}`,
-                event_source: op.event_source,
-                storeNo: op.STORE_NO || 1,
-                tx_code: op.tx_code,
-                delta_s1: op.STORE_NO === 1 ? -qty : 0,
-                delta_s2: op.STORE_NO === 2 ? -qty : 0
-            });
+        // -------------------------------------------------------
+        // STEP 3: Fetch exact Operation Metadata for grouped events
+        // -------------------------------------------------------
+        if (opCodeSet.size > 0) {
+            const opCodesObj = Array.from(opCodeSet);
+            // using IN clause
+            const opMetaQuery = `
+                SELECT 
+                    OP_CODE, 
+                    OP_TYPE, 
+                    ${OP_SL_TIME_SQL('CREATED_DATE')} as precise_time,
+                    COMMENTS,
+                    BILL_CODE,
+                    BILL_AMOUNT,
+                    WASTAGE_AMOUNT,
+                    SURPLUS_AMOUNT,
+                    CUSTOMER_NAME,
+                    LORRY_NAME,
+                    DRIVER_NAME,
+                    DESTINATION
+                FROM store_stock_operations 
+                WHERE OP_CODE IN (?)
+            `;
+            const opMetadata = await pool.query(opMetaQuery, [opCodesObj]);
+            const metaMap = {};
+            for (const m of opMetadata) metaMap[m.OP_CODE] = m;
+
+            // Add grouped operations to allEvents
+            for (const opCode of Object.keys(opGroups)) {
+                const group = opGroups[opCode];
+                const meta = metaMap[opCode];
+                if (meta) {
+                    const timeStr = normalizeTime(meta.precise_time);
+                    const opTypeNum = parseInt(meta.OP_TYPE);
+                    allEvents.push({
+                        event_time: timeStr,
+                        label: formatLabel(timeStr),
+                        event_type: OP_TYPE_LABEL_MAP[opTypeNum] || `Op ${opTypeNum}`,
+                        event_source: 'stock_operation',
+                        storeNo: null, // Since operations can span stores (transfers), we rely on deltas
+                        tx_code: group.opCode,
+                        delta_s1: group.delta_s1,
+                        delta_s2: group.delta_s2,
+                        tx_breakdown: group.breakdown,
+                        op_details: {
+                            comments: meta.COMMENTS,
+                            billCode: meta.BILL_CODE,
+                            billAmount: meta.BILL_AMOUNT,
+                            wastage: meta.WASTAGE_AMOUNT,
+                            surplus: meta.SURPLUS_AMOUNT,
+                            customer: meta.CUSTOMER_NAME,
+                            lorry: meta.LORRY_NAME,
+                            driver: meta.DRIVER_NAME,
+                            destination: meta.DESTINATION
+                        }
+                    });
+                } else {
+                    // Fallback if metadata not found (rare)
+                    allEvents.push({
+                        event_time: normalizeTime(endDatetime), // fallback
+                        label: formatLabel(endDatetime),
+                        event_type: 'Unknown Operation',
+                        event_source: 'stock_operation',
+                        storeNo: null,
+                        tx_code: group.opCode,
+                        delta_s1: group.delta_s1,
+                        delta_s2: group.delta_s2,
+                        tx_breakdown: group.breakdown
+                    });
+                }
+            }
         }
 
+        // -------------------------------------------------------
+        // STEP 4: Sort chronologically
+        // -------------------------------------------------------
         allEvents.sort((a, b) => (a.event_time > b.event_time ? 1 : -1));
 
         // -------------------------------------------------------
@@ -1697,7 +1764,9 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                 prev_total: prevTotal,
                 s1: parseFloat(runS1.toFixed(3)),
                 s2: parseFloat(runS2.toFixed(3)),
-                total: parseFloat((runS1 + runS2).toFixed(3))
+                total: parseFloat((runS1 + runS2).toFixed(3)),
+                tx_breakdown: ev.tx_breakdown || null,
+                op_details: ev.op_details || null
             });
         }
 
@@ -1778,7 +1847,7 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                     time: null,
                     type: null,
                     tx_code: null,
-                    reason: `Cannot pin to a specific event. Total discrepancy: S1=${discrepancyS1}kg, S2=${discrepancyS2}kg. Possible external modification to stock not captured in transaction log.`
+                    reason: `Cannot pin to a specific event.Total discrepancy: S1 = ${discrepancyS1}kg, S2 = ${discrepancyS2}kg.Possible external modification to stock not captured in transaction log.`
                 });
             }
         }

@@ -218,7 +218,6 @@ const AddTransactionModal = ({ open, onClose, onSuccess }) => {
                 DUE_AMOUNT: 0,
                 COMMENTS: comments || '',
                 CREATED_BY: createdBy,
-                DATE: now,
                 CREATED_DATE: now,
                 BILL_DATA: JSON.stringify(billData),
                 ITEMS: txItems.map(i => ({
@@ -258,8 +257,8 @@ const AddTransactionModal = ({ open, onClose, onSuccess }) => {
                         type="button"
                         onClick={() => onChange(opt.value)}
                         className={`flex-1 py-2 px-3 text-sm font-semibold transition-all duration-200 ${value === opt.value
-                                ? `${opt.activeClass} text-white`
-                                : 'bg-white dark:bg-zinc-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800'
+                            ? `${opt.activeClass} text-white`
+                            : 'bg-white dark:bg-zinc-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800'
                             }`}
                     >
                         {opt.icon} {opt.label}
@@ -475,8 +474,8 @@ const AddTransactionModal = ({ open, onClose, onSuccess }) => {
                     {/* Grand Total */}
                     {txItems.length > 0 && (
                         <div className={`rounded-xl p-4 flex justify-between items-center ${mode === 'Selling'
-                                ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/30'
-                                : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/30'
+                            ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/30'
+                            : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/30'
                             }`}>
                             <span className={`font-semibold text-sm ${mode === 'Selling' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
                                 Grand Total ({mode})

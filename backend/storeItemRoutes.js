@@ -66,30 +66,16 @@ router.post('/api/addItem', async (req, res) => {
             return res.status(500).json({ success: false, message: 'Internal server error' });
         }
 
-        // Helper to format date for MySQL in Sri Lanka Time
+        // Helper to format date for MySQL in UTC
         const toMySQLDateTime = (isoStr) => {
             try {
-                let date;
-                if (!isoStr) {
-                    date = new Date();
-                } else {
-                    date = new Date(isoStr);
-                    if (isNaN(date.getTime())) {
-                        date = new Date();
-                    }
-                }
+                const date = isoStr ? new Date(isoStr) : new Date();
+                if (isNaN(date.getTime())) return new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-                return date.toLocaleString('sv-SE', {
-                    timeZone: 'Asia/Colombo',
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                }).replace('T', ' ');
+                // Return UTC format: YYYY-MM-DD HH:mm:ss
+                return date.toISOString().slice(0, 19).replace('T', ' ');
             } catch (e) {
-                return toMySQLDateTime();
+                return new Date().toISOString().slice(0, 19).replace('T', ' ');
             }
         };
 
@@ -313,8 +299,8 @@ router.post('/api/updateItem', async (req, res) => {
             }
         }
 
-        // Always update EDITED_DATE
-        setClauses.push('EDITED_DATE = NOW()');
+        // Always update EDITED_DATE with UTC time
+        setClauses.push('EDITED_DATE = UTC_TIMESTAMP()');
 
         // NOTE: STOCK column does not exist - stock is managed locally on POS only
 
@@ -364,8 +350,8 @@ router.post('/api/deactivateItem', async (req, res) => {
         const { ITEM_ID } = req.body;
 
         // Update the IS_ACTIVE column to 0 to deactivate the items
-        // Also update EDITED_DATE so that the sync endpoint picks it up
-        const updateResult = await pool.query('UPDATE store_items SET IS_ACTIVE = 0, EDITED_DATE = NOW() WHERE ITEM_ID = ?', [
+        // Also update EDITED_DATE so that the sync endpoint picks it up (UTC)
+        const updateResult = await pool.query('UPDATE store_items SET IS_ACTIVE = 0, EDITED_DATE = UTC_TIMESTAMP() WHERE ITEM_ID = ?', [
             ITEM_ID,
         ]);
 

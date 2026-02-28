@@ -1,4 +1,4 @@
-const calculateCurrentStock = async (pool, itemId, storeNo) => {
+const calculateCurrentStock = async (pool, itemId, storeNo, upToTimestamp = null) => {
     // UNIFIED STOCK CALCULATION QUERY
     // This query MUST be the single source of truth for stock calculations across the app.
     // It includes ALL transaction types:
@@ -6,6 +6,15 @@ const calculateCurrentStock = async (pool, itemId, storeNo) => {
     // Negative: AdjOut, Selling, StockClear, TransferOut, Wastage
 
     try {
+        // Build query conditions
+        let timeCondition = "";
+        const queryParams = [itemId, storeNo];
+
+        if (upToTimestamp) {
+            timeCondition = "AND st.CREATED_DATE <= ?";
+            queryParams.push(upToTimestamp);
+        }
+
         // Use pool.promise() to get a promise-based wrapper directly
         const [rows] = await pool.promise().query(`
             SELECT 
@@ -20,7 +29,9 @@ const calculateCurrentStock = async (pool, itemId, storeNo) => {
               AND st.IS_ACTIVE = 1 
               AND sti.IS_ACTIVE = 1
               AND st.STORE_NO = ?
-        `, [itemId, storeNo]);
+              ${timeCondition}
+        `, queryParams);
+
 
         const stock = parseFloat(rows[0]?.STOCK) || 0;
 

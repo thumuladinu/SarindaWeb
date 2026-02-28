@@ -1,4 +1,8 @@
 // index.js
+const isProduction = process.env.NODE_ENV === 'production';
+if (!isProduction) {
+    process.env.TZ = 'UTC';
+}
 const express = require('express');
 const mysql = require('mysql2');
 const bodyParser = require('body-parser');
@@ -25,6 +29,7 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
+    timezone: !isProduction ? 'Z' : undefined, // Set session timezone to UTC only in non-production
     dateStrings: true // Return dates as strings to prevent timezone conversion
 });
 

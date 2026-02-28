@@ -273,6 +273,27 @@ router.post('/api/stock-ops/create', async (req, res) => {
             }
         }
 
+        // Parse operation date (UTC assumed from POS/ISO)
+        // Only apply point-in-time calculation for high-precision timestamps (POS/Sync).
+        let opTimestamp = new Date();
+        let isHighPrecision = false;
+        if (data.DATE) {
+            try {
+                if (data.DATE.includes('Z') || (data.DATE.includes('T') && (data.DATE.includes('+') || data.DATE.includes('.')))) {
+                    opTimestamp = new Date(data.DATE);
+                    isHighPrecision = true;
+                } else {
+                    // For web dashboard / manual, use current server time
+                    opTimestamp = new Date();
+                    isHighPrecision = false;
+                }
+            } catch (e) {
+                console.error('[Stock Ops] Date parse error:', e);
+                opTimestamp = new Date();
+                isHighPrecision = false;
+            }
+        }
+
         // Insert main operation record
         const opRecord = {
             OP_CODE: opCode,
@@ -292,7 +313,8 @@ router.post('/api/stock-ops/create', async (req, res) => {
             SURPLUS_AMOUNT: surplusAmount,
             COMMENTS: data.COMMENTS || null,
             TRIP_ID: data.TRIP_ID || null,
-            DATE: data.DATE || new Date().toISOString(),
+            DATE: data.DATE || opTimestamp.toISOString(),
+            CREATED_DATE: opTimestamp, // Use operation timestamp
             CREATED_BY: data.CREATED_BY,
             CREATED_BY_NAME: data.CREATED_BY_NAME || null,
             LOCAL_ID: data.LOCAL_ID || null,
@@ -307,10 +329,10 @@ router.post('/api/stock-ops/create', async (req, res) => {
         const itemStocks = new Map();
         if (data.items && data.items.length > 0) {
             for (const item of data.items) {
-                // Use Unified Stock Calculator
-                const stock = await calculateCurrentStock(pool, item.ITEM_ID, data.STORE_NO || 1);
+                // Use Unified Stock Calculator AT THE OPERATION TIME only if high precision sync
+                const stock = await calculateCurrentStock(pool, item.ITEM_ID, data.STORE_NO || 1, isHighPrecision ? opTimestamp : null);
                 itemStocks.set(item.ITEM_ID, stock);
-                //console.log(`[Stock Ops] Pre-fetch stock for item ${item.ITEM_ID}: ${stock.toFixed(2)}kg`);
+                //console.log(`[Stock Ops] Pre-fetch stock for item ${item.ITEM_ID} at ${opTimestamp.toISOString()}: ${stock.toFixed(2)}kg`);
             }
         }
 
@@ -407,7 +429,7 @@ router.post('/api/stock-ops/create', async (req, res) => {
         let actualSurplus = surplusAmount;
 
         if (![5, 6].includes(opType)) {
-            const stockResult = await updateStockLevels(opType, data, clearanceType, opCode, itemStocks);
+            const stockResult = await updateStockLevels(opType, data, clearanceType, opCode, itemStocks, opTimestamp, isHighPrecision);
             if (stockResult?.billCode) {
                 billCode = stockResult.billCode;
                 // Update operation record with bill code and amount
@@ -629,7 +651,7 @@ router.post('/api/stock-ops/delete', async (req, res) => {
 // For Partial Conversion:
 //   Remove sum(destItems) from source, add each destination
 //
-async function updateStockLevels(opType, data, clearanceType, opCode = '', itemStocks = new Map()) {
+async function updateStockLevels(opType, data, clearanceType, opCode = '', itemStocks = new Map(), opTimestamp = new Date(), isHighPrecision = false) {
     const storeNo = data.STORE_NO || 1;
     const createdBy = data.CREATED_BY || 1;
 
@@ -638,7 +660,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
     //console.log(`[Stock Ops] Conversions:`, JSON.stringify(data.conversions?.map(c => ({ src: c.SOURCE_ITEM_ID, dest: c.DEST_ITEM_ID, qty: c.DEST_QUANTITY })) || []));
 
     // Generate transaction code
-    const now = new Date();
+    const now = opTimestamp;
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = String(now.getFullYear()).slice(-2);
@@ -647,7 +669,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
 
     // Helper to get current stock from ledger using Unified Calculator
     async function getCurrentStock(itemId) {
-        return await calculateCurrentStock(pool, itemId, storeNo);
+        return await calculateCurrentStock(pool, itemId, storeNo, isHighPrecision ? opTimestamp : null);
     }
 
     // Helper to create a stock adjustment transaction
@@ -660,7 +682,8 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
             STORE_NO: storeNo,
             TYPE: txType,
             CREATED_BY: createdBy,
-            CREATED_DATE: new Date(),
+            CREATED_DATE: opTimestamp,
+            STOCK_DATE: opTimestamp,
             SUB_TOTAL: 0,
             COMMENTS: `[${opCode}] ${comment}`,
             IS_ACTIVE: 1
@@ -815,7 +838,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
             // Generate BILL_DATA for receipt viewing
             const billData = {
                 billId: billCode,
-                date: new Date().toISOString(),
+                date: opTimestamp.toISOString(),
                 storeNo: storeNo,
                 items: [{
                     id: itemId,
@@ -841,7 +864,8 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
                 STORE_NO: storeNo,
                 TYPE: 'Selling',
                 CREATED_BY: createdBy,
-                CREATED_DATE: new Date(),
+                CREATED_DATE: opTimestamp,
+                DATE: dateTimeUtils.toSLMySQLDateTime(opTimestamp),
                 SUB_TOTAL: billTotal,
                 COMMENTS: `[${opCode}] Stock Operation Sale: ${itemCode} ${itemName}`,
                 BILL_DATA: JSON.stringify(billData),

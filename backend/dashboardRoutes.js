@@ -19,6 +19,10 @@ const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
              OR ${codeField} LIKE 'ADJ-%' 
              OR ${codeField} LIKE 'STOCKOP-%' 
              OR ${codeField} LIKE 'SLO-%'
+             OR ${codeField} LIKE 'WEB-%'
+             OR ${codeField} LIKE '%-WEB-%'
+             OR ${codeField} LIKE '%-SLO-%'
+             OR ${codeField} LIKE 'RETURN-EXP-%'
         THEN CONVERT_TZ(${field}, '+00:00', '+05:30')
         ELSE ${field}
     END

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import dayjs from 'dayjs';
-import { Select, DatePicker, Button, Spin, Empty, message, Tag } from 'antd';
+import { Select, DatePicker, TimePicker, Button, Spin, Empty, message, Tag } from 'antd';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
     Legend, ResponsiveContainer
@@ -45,19 +45,70 @@ const CustomTooltipEvents = ({ active, payload }) => {
     const color = EVENT_TYPE_COLORS[d.event_type] || '#9ca3af';
     const isSnapshot = d.event_source === 'snapshot';
     const deltaSign = (d.delta ?? 0) >= 0 ? '+' : '';
+
+    // Calculate involved stores
+    const activeStores = d.tx_breakdown ? Array.from(new Set(d.tx_breakdown.map(t => t.store))).sort() : (d.storeNo ? [d.storeNo] : []);
+    const storeLabel = activeStores.length > 0 ? activeStores.map(s => `S${s}`).join(' & ') : '';
+
     return (
         <div className="bg-[#18181b]/98 backdrop-blur-3xl p-4 rounded-xl border border-white/10 shadow-2xl z-50 min-w-[240px]">
             <p className="text-gray-400 font-bold mb-2 border-b border-white/10 pb-2 text-[11px] font-mono">{d.time}</p>
             <div className="flex items-center gap-2 mb-3">
                 <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
                 <span className="text-white font-semibold text-sm">{d.event_type}</span>
+                {storeLabel && <span className="px-1.5 py-0.5 rounded bg-white/10 border border-white/5 text-gray-300 text-[10px] ml-1 font-bold">{storeLabel}</span>}
                 {d.tx_code && <span className="text-gray-500 text-[10px] font-mono ml-auto">{d.tx_code}</span>}
             </div>
             {!isSnapshot && d.delta !== undefined && (
                 <p className={`text-xs font-bold mb-3 px-2 py-1 rounded-lg ${(d.delta ?? 0) >= 0 ? 'text-emerald-400 bg-emerald-400/10' : 'text-red-400 bg-red-400/10'}`}>
-                    {(d.delta ?? 0) >= 0 ? '▲' : '▼'} Change: {deltaSign}{(d.delta ?? 0).toFixed(3)} kg
+                    {(d.delta ?? 0) >= 0 ? '▲' : '▼'} Operation Net Change: {deltaSign}{(d.delta ?? 0).toFixed(3)} kg
                 </p>
             )}
+
+            {d.op_details && (
+                <div className="mb-3 space-y-1 bg-black/40 rounded border border-white/5 p-2">
+                    <p className="text-[9px] uppercase text-gray-500 font-bold tracking-wider mb-1.5">Operation Meta</p>
+                    {d.op_details.billCode && <div className="text-[10px] text-emerald-400 font-mono">Bill: {d.op_details.billCode}</div>}
+                    {Number(d.op_details.billAmount) > 0 && <div className="text-[10px] text-orange-400">Amount: Rs {Number(d.op_details.billAmount).toLocaleString()}</div>}
+                    {d.op_details.customer && <div className="text-[10px] text-gray-300 flex justify-between"><span>Customer:</span> <span>{d.op_details.customer}</span></div>}
+                    {d.op_details.lorry && <div className="text-[10px] text-gray-300 flex justify-between"><span>Lorry:</span> <span>{d.op_details.lorry}</span></div>}
+                    {d.op_details.destination && <div className="text-[10px] text-gray-300 flex justify-between"><span>Dest:</span> <span>{d.op_details.destination}</span></div>}
+                    {d.op_details.comments && <div className="text-[10px] text-gray-500 italic mt-1 border-t border-white/5 pt-1">{d.op_details.comments}</div>}
+                </div>
+            )}
+
+            {((d.tx_breakdown && d.tx_breakdown.length > 0) || (d.op_details?.wastage > 0 || d.op_details?.surplus > 0)) && (() => {
+                const aggregated = {};
+                if (d.tx_breakdown) {
+                    d.tx_breakdown.forEach(tx => {
+                        const txDelta = tx.delta_s1 + tx.delta_s2;
+                        if (!aggregated[tx.type]) aggregated[tx.type] = 0;
+                        aggregated[tx.type] += txDelta;
+                    });
+                }
+
+                return (
+                    <div className="mb-3 space-y-1.5 bg-black/40 rounded border border-white/5 p-2">
+                        <p className="text-[9px] uppercase text-gray-500 font-bold tracking-wider">Internal Breakdown</p>
+                        {Object.entries(aggregated).map(([type, typeDelta], idx) => {
+                            const txColor = EVENT_TYPE_COLORS[type] || '#6b7280';
+                            return (
+                                <div key={idx} className="flex justify-between items-center text-[10px] font-mono">
+                                    <span className="text-gray-300 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: txColor }}></span>
+                                        {type}
+                                    </span>
+                                    <span className={typeDelta >= 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                                        {(typeDelta >= 0 ? '+' : '')}{typeDelta.toFixed(3)}kg
+                                    </span>
+                                </div>
+                            );
+                        })}
+                        {Number(d.op_details?.wastage) > 0 && <div className="flex justify-between items-center text-[10px] font-mono border-t border-white/5 pt-1 mt-1"><span className="text-orange-400 font-bold">⚠️ Wastage</span><span className="text-orange-400 font-bold">{Number(d.op_details.wastage).toFixed(3)}kg</span></div>}
+                        {Number(d.op_details?.surplus) > 0 && <div className="flex justify-between items-center text-[10px] font-mono border-t border-white/5 pt-1 mt-1"><span className="text-blue-400 font-bold">✨ Surplus</span><span className="text-blue-400 font-bold">{Number(d.op_details.surplus).toFixed(3)}kg</span></div>}
+                    </div>
+                );
+            })()}
             <div className="text-[11px] space-y-1">
                 <div className="grid grid-cols-3 gap-1 text-gray-500 font-semibold pb-1 border-b border-white/5">
                     <span></span><span className="text-center">Before</span><span className="text-center">After</span>
@@ -83,7 +134,7 @@ const CustomTooltipEvents = ({ active, payload }) => {
 };
 
 // ─── Summary Table ────────────────────────────────────────────────────────────
-const SummaryTable = ({ summary }) => {
+const SummaryTable = ({ summary, isMobile }) => {
     if (!summary) return null;
     const { opening, closing, byType, validation } = summary;
 
@@ -103,7 +154,7 @@ const SummaryTable = ({ summary }) => {
     return (
         <div className="space-y-6">
             {/* Opening / Closing stock ribbon */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="flex flex-col sm:grid sm:grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="glass-card p-4 rounded-2xl border border-white/5 bg-white/5">
                     <p className="text-[11px] uppercase font-bold text-gray-500 tracking-wider mb-1">Opening Stock</p>
                     <p className="text-xl font-bold text-white">{Number(opening.total).toFixed(3)} <span className="text-sm font-normal text-gray-400">kg</span></p>
@@ -144,6 +195,44 @@ const SummaryTable = ({ summary }) => {
                         Stock Movement by Type
                     </h3>
                 </div>
+            </div>
+            {isMobile ? (
+                <div className="p-3 space-y-3">
+                    {byType.map((row, i) => {
+                        const col = rowColor(row);
+                        const dot = EVENT_TYPE_COLORS[row.type] || '#6b7280';
+                        return (
+                            <div key={i} className="bg-white/5 rounded-xl p-3 border border-white/5 space-y-2">
+                                <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: dot }} />
+                                        <span className="text-gray-200 font-bold">{row.type}</span>
+                                    </div>
+                                    <div className={`font-mono font-bold ${col}`}>{fmtKg(row.net)}</div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                                    <div className="flex flex-col">
+                                        <span className="text-gray-500 uppercase">Store 1</span>
+                                        <span className={row.s1 >= 0 ? 'text-emerald-400' : 'text-red-400'}>{fmtKg(row.s1)}</span>
+                                    </div>
+                                    <div className="flex flex-col text-right">
+                                        <span className="text-gray-500 uppercase">Store 2</span>
+                                        <span className={row.s2 >= 0 ? 'text-emerald-400' : 'text-red-400'}>{fmtKg(row.s2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <div className="bg-white/10 rounded-xl p-4 border border-white/10 shadow-lg mt-4">
+                        <p className="text-[10px] uppercase font-bold text-gray-500 mb-2">Total Movement Summary</p>
+                        <div className="space-y-1.5">
+                            <div className="flex justify-between text-xs"><span className="text-teal-400 font-medium text-xs">Total S1</span><span className={`font-mono font-bold ${totalS1 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalS1)}</span></div>
+                            <div className="flex justify-between text-xs"><span className="text-violet-400 font-medium text-xs">Total S2</span><span className={`font-mono font-bold ${totalS2 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalS2)}</span></div>
+                            <div className="flex justify-between text-sm border-t border-white/10 pt-1.5 mt-1.5"><span className="text-white font-bold">Grand Net</span><span className={`font-mono font-bold ${totalNet >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalNet)}</span></div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
                 <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                         <thead>
@@ -189,7 +278,7 @@ const SummaryTable = ({ summary }) => {
                         </tfoot>
                     </table>
                 </div>
-            </div>
+            )}
 
             {/* Validation proof */}
             <div className={`glass-card rounded-2xl border p-5 space-y-3 ${validation.valid ? 'border-emerald-500/20' : 'border-red-500/30 bg-red-500/5'}`}>
@@ -200,31 +289,42 @@ const SummaryTable = ({ summary }) => {
                     Mathematical Validation
                 </h3>
 
-                <div className="font-mono text-[11px] space-y-1.5 text-gray-400">
-                    <div className="flex justify-between gap-4">
-                        <span>Opening stock (at start of period)</span>
-                        <span className="text-white font-bold">S1={fmtVal(opening.s1)}  S2={fmtVal(opening.s2)}</span>
+                <div className="font-mono text-[11px] space-y-4 md:space-y-1.5 text-gray-400">
+                    <div className="flex flex-col md:flex-row md:justify-between md:gap-4 bg-black/20 md:bg-transparent p-2 md:p-0 rounded-lg md:rounded-none">
+                        <span className="text-[10px] md:text-[11px] uppercase md:normal-case font-bold md:font-normal text-gray-500 md:text-gray-400 mb-1 md:mb-0">Opening stock (at start of period)</span>
+                        <div className="flex justify-between md:justify-end gap-3 w-full md:w-auto">
+                            <span className="text-white font-bold">S1={fmtVal(opening.s1)}</span>
+                            <span className="text-white font-bold">S2={fmtVal(opening.s2)}</span>
+                        </div>
                     </div>
-                    <div className="flex justify-between gap-4">
-                        <span>+ Net events in period (sum of all deltas)</span>
-                        <span className={`font-bold ${summary.deltaSum.total >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            S1={fmtKg(summary.deltaSum.s1)}  S2={fmtKg(summary.deltaSum.s2)}
-                        </span>
+                    <div className="flex flex-col md:flex-row md:justify-between md:gap-4 bg-black/20 md:bg-transparent p-2 md:p-0 rounded-lg md:rounded-none">
+                        <span className="text-[10px] md:text-[11px] uppercase md:normal-case font-bold md:font-normal text-gray-500 md:text-gray-400 mb-1 md:mb-0">+ Net events in period (sum of all deltas)</span>
+                        <div className={`flex justify-between md:justify-end gap-3 w-full md:w-auto font-bold ${summary.deltaSum.total >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <span>S1={fmtKg(summary.deltaSum.s1)}</span>
+                            <span>S2={fmtKg(summary.deltaSum.s2)}</span>
+                        </div>
                     </div>
-                    <div className="flex justify-between gap-4 border-t border-white/10 pt-1.5">
-                        <span>= Expected closing stock</span>
-                        <span className="text-blue-400 font-bold">S1={fmtVal(validation.expected.s1)}  S2={fmtVal(validation.expected.s2)}</span>
+                    <div className="flex flex-col md:flex-row md:justify-between md:gap-4 border-t border-white/10 pt-1.5 bg-blue-500/5 md:bg-transparent p-2 md:p-0 rounded-lg md:rounded-none">
+                        <span className="text-[10px] md:text-[11px] uppercase md:normal-case font-bold md:font-normal text-blue-400/70 md:text-gray-400 mb-1 md:mb-0">= Expected closing stock</span>
+                        <div className="flex justify-between md:justify-end gap-3 w-full md:w-auto text-blue-400 font-bold">
+                            <span>S1={fmtVal(validation.expected.s1)}</span>
+                            <span>S2={fmtVal(validation.expected.s2)}</span>
+                        </div>
                     </div>
-                    <div className="flex justify-between gap-4">
-                        <span>Actual closing stock (from DB)</span>
-                        <span className="text-white font-bold">S1={fmtVal(validation.actual.s1)}  S2={fmtVal(validation.actual.s2)}</span>
+                    <div className="flex flex-col md:flex-row md:justify-between md:gap-4 bg-black/20 md:bg-transparent p-2 md:p-0 rounded-lg md:rounded-none">
+                        <span className="text-[10px] md:text-[11px] uppercase md:normal-case font-bold md:font-normal text-gray-500 md:text-gray-400 mb-1 md:mb-0">Actual closing stock (from DB)</span>
+                        <div className="flex justify-between md:justify-end gap-3 w-full md:w-auto text-white font-bold">
+                            <span>S1={fmtVal(validation.actual.s1)}</span>
+                            <span>S2={fmtVal(validation.actual.s2)}</span>
+                        </div>
                     </div>
-                    <div className={`flex justify-between gap-4 border-t border-white/10 pt-1.5 ${validation.valid ? 'text-emerald-400' : 'text-red-400'}`}>
-                        <span className="font-bold">{validation.valid ? '✓ Balanced — no discrepancy' : '✗ Discrepancy'}</span>
+                    <div className={`flex flex-col md:flex-row md:justify-between md:gap-4 border-t border-white/10 pt-1.5 p-2 md:p-0 ${validation.valid ? 'text-emerald-400' : 'text-red-400 bg-red-500/10 rounded-lg'}`}>
+                        <span className="font-bold mb-2 md:mb-0">{validation.valid ? '✓ Balanced — no discrepancy' : '✗ Discrepancy'}</span>
                         {!validation.valid && (
-                            <span className="font-bold">
-                                S1 Δ={fmtKg(validation.discrepancy.s1)}  S2 Δ={fmtKg(validation.discrepancy.s2)}
-                            </span>
+                            <div className="flex justify-between md:justify-end gap-3 w-full md:w-auto font-bold">
+                                <span>S1 Δ={fmtKg(validation.discrepancy.s1)}</span>
+                                <span>S2 Δ={fmtKg(validation.discrepancy.s2)}</span>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -259,6 +359,45 @@ export default function StockEvents() {
     const [loading, setLoading] = useState(false);
     const [hiddenSeries, setHiddenSeries] = useState([]);
     const [analyzed, setAnalyzed] = useState(false);
+    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const handleMobileDateChange = (index, date) => {
+        setDatetimeRange(prev => {
+            const currentRange = prev || [null, null];
+            const newRange = [...currentRange];
+            if (!date) {
+                newRange[index] = null;
+            } else {
+                const existing = currentRange[index];
+                if (existing) {
+                    newRange[index] = date.hour(existing.hour()).minute(existing.minute()).second(0);
+                } else {
+                    newRange[index] = date.hour(index === 0 ? 0 : 23).minute(index === 0 ? 0 : 59).second(0);
+                }
+            }
+            return newRange;
+        });
+    };
+
+    const handleMobileTimeChange = (index, time) => {
+        setDatetimeRange(prev => {
+            const currentRange = prev || [null, null];
+            const newRange = [...currentRange];
+            const datePart = currentRange[index] || dayjs();
+            if (!time) {
+                newRange[index] = datePart.hour(index === 0 ? 0 : 23).minute(index === 0 ? 0 : 59).second(0);
+            } else {
+                newRange[index] = datePart.hour(time.hour()).minute(time.minute()).second(0);
+            }
+            return newRange;
+        });
+    };
 
     // Fetch items list on mount
     useEffect(() => {
@@ -320,7 +459,7 @@ export default function StockEvents() {
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
             {/* Page header */}
-            <div className="flex items-start gap-4">
+            <div className="hidden md:flex items-start gap-4">
                 <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-gradient-to-br from-violet-500/20 to-blue-500/20 flex items-center justify-center ring-1 ring-white/10 flex-shrink-0">
                     <AreaChartOutlined className="text-violet-400 text-xl" />
                 </div>
@@ -341,7 +480,7 @@ export default function StockEvents() {
                     <Select
                         showSearch
                         className="w-full"
-                        size="large"
+                        size={isMobile ? "middle" : "large"}
                         placeholder="🔍 Search and select an item…"
                         value={selectedItem}
                         onChange={setSelectedItem}
@@ -365,19 +504,68 @@ export default function StockEvents() {
                     <div>
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                             <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center font-bold">2</span>
-                            Date & Time Range <span className="text-gray-600 lowercase normal-case font-normal">(select exact times for precise boundaries)</span>
+                            Date & Time Range <span className="text-gray-600 lowercase normal-case font-normal">{!isMobile && "(select exact times for precise boundaries)"}</span>
                         </p>
-                        <RangePicker
-                            showTime={{ format: 'HH:mm' }}
-                            format="YYYY-MM-DD HH:mm"
-                            size="large"
-                            className="w-full"
-                            value={datetimeRange}
-                            onChange={setDatetimeRange}
-                            allowClear
-                            placeholder={['Start date & time', 'End date & time']}
-                            suffixIcon={<CalendarOutlined className="text-gray-500" />}
-                        />
+                        {isMobile ? (
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <p className="text-[10px] text-gray-500 uppercase font-bold ml-1">Start Point</p>
+                                    <div className="flex gap-2">
+                                        <DatePicker
+                                            format="YYYY-MM-DD"
+                                            size="middle"
+                                            className="grow-[2] w-[66%]"
+                                            placeholder="Start Date"
+                                            value={datetimeRange?.[0]}
+                                            onChange={(val) => handleMobileDateChange(0, val)}
+                                        />
+                                        <TimePicker
+                                            format="HH:mm"
+                                            size="middle"
+                                            className="grow-[1] w-[34%]"
+                                            placeholder="Time"
+                                            value={datetimeRange?.[0]}
+                                            onChange={(val) => handleMobileTimeChange(0, val)}
+                                            allowClear={false}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <p className="text-[10px] text-gray-500 uppercase font-bold ml-1">End Point</p>
+                                    <div className="flex gap-2">
+                                        <DatePicker
+                                            format="YYYY-MM-DD"
+                                            size="middle"
+                                            className="grow-[2] w-[66%]"
+                                            placeholder="End Date"
+                                            value={datetimeRange?.[1]}
+                                            onChange={(val) => handleMobileDateChange(1, val)}
+                                        />
+                                        <TimePicker
+                                            format="HH:mm"
+                                            size="middle"
+                                            className="grow-[1] w-[34%]"
+                                            placeholder="Time"
+                                            value={datetimeRange?.[1]}
+                                            onChange={(val) => handleMobileTimeChange(1, val)}
+                                            allowClear={false}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <RangePicker
+                                showTime={{ format: 'HH:mm' }}
+                                format="YYYY-MM-DD HH:mm"
+                                size="large"
+                                className="w-full"
+                                value={datetimeRange}
+                                onChange={setDatetimeRange}
+                                allowClear
+                                placeholder={['Start date & time', 'End date & time']}
+                                suffixIcon={<CalendarOutlined className="text-gray-500" />}
+                            />
+                        )}
                     </div>
                 )}
 
@@ -389,7 +577,7 @@ export default function StockEvents() {
                         icon={<SearchOutlined />}
                         onClick={handleAnalyze}
                         loading={loading}
-                        className="w-full md:w-auto bg-gradient-to-r from-violet-600 to-blue-600 border-none font-semibold"
+                        className={`w-full md:w-auto bg-gradient-to-r from-violet-600 to-blue-600 border-none font-semibold ${isMobile ? 'h-9 text-xs' : ''}`}
                     >
                         {loading ? 'Analyzing…' : 'Analyze Events'}
                     </Button>
@@ -404,23 +592,23 @@ export default function StockEvents() {
             )}
 
             {!loading && analyzed && (
-                <div className="space-y-6">
+                <div className="space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
                     {/* ── Chart ── */}
-                    <div className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
+                    <div className="glass-card p-2 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
                         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-blue-400 to-teal-500 opacity-60 group-hover:opacity-100 transition-opacity" />
 
-                        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6">
-                            <div>
-                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-3 sm:gap-0 mb-6">
+                            <div className="space-y-1">
+                                <h2 className="text-base md:text-lg font-bold text-white flex items-center gap-2">
                                     <AreaChartOutlined className="text-violet-400" />
-                                    Inventory Volume — Event by Event
+                                    Inventory Volume
                                 </h2>
                                 {selectedItemName && (
-                                    <p className="text-xs text-gray-500 mt-0.5">{selectedItemName.CODE} — {selectedItemName.NAME}</p>
+                                    <p className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide font-medium">{selectedItemName.CODE} — {selectedItemName.NAME}</p>
                                 )}
                             </div>
                             <div className="flex items-center gap-2">
-                                <Tag color="default" className="border-white/10 text-gray-400 text-[10px] font-bold uppercase tracking-wider">
+                                <Tag color="default" className="border-white/10 bg-white/5 text-gray-400 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5">
                                     {eventCount} event{eventCount !== 1 ? 's' : ''}
                                 </Tag>
                             </div>
@@ -526,7 +714,7 @@ export default function StockEvents() {
                     </div>
 
                     {/* ── Summary & Validation ── */}
-                    {summary && <SummaryTable summary={summary} />}
+                    {summary && <SummaryTable summary={summary} isMobile={isMobile} />}
                 </div>
             )}
         </div>
