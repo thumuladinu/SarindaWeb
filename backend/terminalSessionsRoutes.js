@@ -20,12 +20,14 @@ router.post('/api/getTerminalSessions', async (req, res) => {
         // Find all sessions that overlap with the targeted date (in Sri Lankan Time)
         // (Started on the date OR ended on the date OR started before and ended after the date OR currently active)
         const query = `
-            SELECT * FROM terminal_sessions 
-            WHERE DATE(CONVERT_TZ(connectedAt, '+00:00', '+05:30')) = ?
-               OR DATE(CONVERT_TZ(disconnectedAt, '+00:00', '+05:30')) = ?
-               OR (DATE(CONVERT_TZ(connectedAt, '+00:00', '+05:30')) < ? AND DATE(CONVERT_TZ(disconnectedAt, '+00:00', '+05:30')) > ?)
-               OR (DATE(CONVERT_TZ(connectedAt, '+00:00', '+05:30')) <= ? AND disconnectedAt IS NULL)
-            ORDER BY terminalId, connectedAt ASC
+            SELECT TS.*, U.PHOTO as cashierPhoto 
+            FROM terminal_sessions TS
+            LEFT JOIN user_details U ON TS.cashier = U.NAME
+            WHERE DATE(CONVERT_TZ(TS.connectedAt, '+00:00', '+05:30')) = ?
+               OR DATE(CONVERT_TZ(TS.disconnectedAt, '+00:00', '+05:30')) = ?
+               OR (DATE(CONVERT_TZ(TS.connectedAt, '+00:00', '+05:30')) < ? AND DATE(CONVERT_TZ(TS.disconnectedAt, '+00:00', '+05:30')) > ?)
+               OR (DATE(CONVERT_TZ(TS.connectedAt, '+00:00', '+05:30')) <= ? AND TS.disconnectedAt IS NULL)
+            ORDER BY TS.terminalId, TS.connectedAt ASC
         `;
 
         pool.query(query, [targetDate, targetDate, targetDate, targetDate, targetDate], (err, results) => {
@@ -51,6 +53,7 @@ router.post('/api/getTerminalSessions', async (req, res) => {
                 const newSession = {
                     id: session.id,
                     cashier: session.cashier,
+                    cashierPhoto: session.cashierPhoto,
                     ip: session.ip,
                     connectedAt: session.connectedAt,
                     disconnectedAt: session.disconnectedAt,

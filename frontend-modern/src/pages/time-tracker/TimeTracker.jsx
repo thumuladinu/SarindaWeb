@@ -170,31 +170,33 @@ const TimeTracker = () => {
                                         return (
                                             <Tooltip
                                                 key={session.id || idx}
-                                                color="#fff"
-                                                overlayInnerStyle={{ color: '#000', padding: 0 }}
+                                                color="transparent"
+                                                overlayInnerStyle={{ padding: 0, boxShadow: 'none' }}
                                                 title={
-                                                    <div className="p-3 shadow-lg rounded-lg border border-gray-100">
-                                                        <div className="flex items-center gap-3 border-b pb-2 mb-2">
-                                                            <Avatar icon={<UserOutlined />} src={`https://api.dicebear.com/7.x/initials/svg?seed=${session.cashier}`} />
+                                                    <div className="p-3 shadow-xl rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#18181b]/95 backdrop-blur-md text-gray-800 dark:text-gray-200">
+                                                        <div className="flex items-center gap-3 border-b border-gray-100 dark:border-white/10 pb-2 mb-2">
+                                                            <Avatar
+                                                                icon={<UserOutlined />}
+                                                                src={session.cashierPhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${session.cashier}`}
+                                                            />
                                                             <div>
-                                                                <div className="font-bold">{session.cashier}</div>
-                                                                <div className="text-xs text-gray-500">{session.ip}</div>
+                                                                <div className="font-bold text-gray-800 dark:text-white">{session.cashier}</div>
                                                             </div>
                                                         </div>
                                                         <div className="text-xs space-y-1">
                                                             <div className="flex justify-between gap-4">
-                                                                <span className="text-gray-500">In:</span>
-                                                                <span className="font-medium">{dayjs(session.connectedAt + (session.connectedAt.includes('Z') ? '' : 'Z')).format('h:mm:ss A')}</span>
+                                                                <span className="text-gray-500 dark:text-gray-400">In:</span>
+                                                                <span className="font-medium text-gray-800 dark:text-gray-200">{dayjs(session.connectedAt + (session.connectedAt.includes('Z') ? '' : 'Z')).format('h:mm:ss A')}</span>
                                                             </div>
                                                             <div className="flex justify-between gap-4">
-                                                                <span className="text-gray-500">Out:</span>
-                                                                <span className="font-medium">
+                                                                <span className="text-gray-500 dark:text-gray-400">Out:</span>
+                                                                <span className="font-medium text-gray-800 dark:text-gray-200">
                                                                     {session.isActive ? 'Active Now' : dayjs(session.disconnectedAt + (session.disconnectedAt.includes('Z') ? '' : 'Z')).format('h:mm:ss A')}
                                                                 </span>
                                                             </div>
-                                                            <div className="flex justify-between gap-4 pt-1 mt-1 border-t border-gray-50">
-                                                                <span className="text-gray-500">Duration:</span>
-                                                                <span className="font-medium text-blue-600">
+                                                            <div className="flex justify-between gap-4 pt-1 mt-1 border-t border-gray-100 dark:border-white/10">
+                                                                <span className="text-gray-500 dark:text-gray-400">Duration:</span>
+                                                                <span className="font-medium text-blue-600 dark:text-blue-400">
                                                                     {formatDuration(session.connectedAt, session.disconnectedAt, session.isActive)}
                                                                 </span>
                                                             </div>

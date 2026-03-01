@@ -1,35 +1,44 @@
 MySQL connection pool created successfully
 >>> BACKEND RELOADED: Balance Fix Applied <<<
 Server is running on port 3001
-[Migration] UNIQUE index on CODE already exists - good!
-push_subscriptions table verified/created.
-Verified 'cash_floats' table.
 [Socket] Cleared dangling terminal sessions on startup
 notifications table verified/created.
+push_subscriptions table verified/created.
+Verified 'cash_floats' table.
+Client connected: 5tgy6f7LGjgn-fOlAAAB
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 51 items from POS
+[MergeSync] Received 51 items from POS
+[Migration] UNIQUE index on CODE already exists - good!
+[MergeSync] Web DB has 51 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Web DB has 51 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[Socket] Created new DB session: 11
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
 [Migration] Cannot create unique index on transactions - duplicates still exist.
-Client connected: 6Hh8fMaG9R5C-Nc9AAAB
-[Socket] Terminal Registered: WeighingStation - WS-KWT2RBM9A
-[Socket] Resumed recent DB session: 7
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
+Client disconnected: 5tgy6f7LGjgn-fOlAAAB
+Client connected: kkBH0GO7NOfv05X3AAAE
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 51 items from POS
+[Socket] Resumed recent DB session: 11
+[MergeSync] Web DB has 49 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Received 51 items from POS
+[MergeSync] Web DB has 50 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 8, toUpdateOnPOS: 43, newForPOS: 7 }
+Client disconnected: kkBH0GO7NOfv05X3AAAE
+Client connected: 8oUucXvsj0B7VI7bAAAH
 [MergeSync] Received 51 items from POS
 [MergeSync] Web DB has 49 valid items (all active states)
 [MergeSync] POS has 51 unique valid items
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-Client connected: Kgq5qcMXq0NoUHH2AAAD
 [Socket] Terminal Registered: POS - TL6E8
-[Socket] Resumed recent DB session: 8
-[MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 51 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
-Client disconnected: Kgq5qcMXq0NoUHH2AAAD
-Client connected: tjXFc8te7tFMKau8AAAG
-[Socket] Terminal Registered: POS - TL6E8
-[Socket] Resumed recent DB session: 8
-[MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
+[Socket] Resumed recent DB session: 11
 [MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
 [MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 51 valid items (all active states)
+[MergeSync] Web DB has 50 valid items (all active states)
 [MergeSync] POS has 51 unique valid items
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 8, toUpdateOnPOS: 43, newForPOS: 7 }
