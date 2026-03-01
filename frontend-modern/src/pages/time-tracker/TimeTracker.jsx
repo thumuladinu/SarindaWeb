@@ -1,0 +1,238 @@
+import React, { useState, useEffect } from 'react';
+import { Card, DatePicker, Avatar, Tooltip, Empty, Spin, message, Typography } from 'antd';
+import { ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+
+const { Title, Text } = Typography;
+
+const TimeTracker = () => {
+    const [selectedDate, setSelectedDate] = useState(dayjs());
+    const [loading, setLoading] = useState(false);
+    const [terminalData, setTerminalData] = useState([]);
+
+    const fetchSessions = async (date) => {
+        setLoading(true);
+        try {
+            const formattedDate = date.format('YYYY-MM-DD');
+            // Assuming API runs locally on 3001 or use Vite proxy
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+            const response = await fetch(`${API_URL}/api/getTerminalSessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ DATE: formattedDate })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                setTerminalData(data.terminals || []);
+            } else {
+                message.error('Failed to fetch session data');
+            }
+        } catch (error) {
+            console.error('Error fetching sessions:', error);
+            message.error('Network error fetching session data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchSessions(selectedDate);
+        // Refresh every minute to show up-to-date Active status for today
+        const interval = setInterval(() => {
+            if (selectedDate.isSame(dayjs(), 'day')) {
+                fetchSessions(selectedDate);
+            }
+        }, 60000);
+        return () => clearInterval(interval);
+    }, [selectedDate]);
+
+    // Handle date selection with 60 days past constraint
+    const disabledDate = (current) => {
+        return current && (current > dayjs().endOf('day') || current < dayjs().subtract(60, 'days').startOf('day'));
+    };
+
+    // Calculate position and width for timeline blocks
+    const getTimelineStyle = (start, end, isActive, dateStr) => {
+        const dayStart = dayjs(dateStr).startOf('day');
+        const dayEnd = dayjs(dateStr).endOf('day');
+
+        let sessionStart = dayjs(start + (start.includes('Z') ? '' : 'Z'));
+        let sessionEnd = isActive ? dayjs() : (end ? dayjs(end + (end.includes('Z') ? '' : 'Z')) : dayjs());
+
+        // Clamp to selected day
+        if (sessionStart.isBefore(dayStart)) sessionStart = dayStart;
+        if (sessionEnd.isAfter(dayEnd)) sessionEnd = dayEnd;
+
+        const totalMinutesInDay = 24 * 60;
+        const startMinutes = sessionStart.diff(dayStart, 'minute');
+        const durationMinutes = sessionEnd.diff(sessionStart, 'minute');
+
+        const leftPercent = (startMinutes / totalMinutesInDay) * 100;
+        const widthPercent = (durationMinutes / totalMinutesInDay) * 100;
+
+        // Ensure minimum visibility for very short sessions (e.g. 1% width)
+        return {
+            left: `${leftPercent}%`,
+            width: `${Math.max(widthPercent, 0.5)}%`,
+        };
+    };
+
+    // Format duration nicely
+    const formatDuration = (start, end, isActive) => {
+        const startTime = dayjs(start + (start.includes('Z') ? '' : 'Z'));
+        const endTime = isActive ? dayjs() : (end ? dayjs(end + (end.includes('Z') ? '' : 'Z')) : dayjs());
+        const diffMins = endTime.diff(startTime, 'minute');
+
+        if (diffMins < 60) return `${diffMins}m`;
+        const hours = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        return `${hours}h ${mins}m`;
+    };
+
+    return (
+        <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+            {/* Header Section */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-[#1f1f1f] p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
+                <div>
+                    <Title level={4} className="!m-0 flex items-center gap-2">
+                        <ClockCircleOutlined className="text-blue-500" />
+                        Terminal Time Tracker
+                    </Title>
+                    <Text type="secondary" className="text-sm">
+                        View connection history and cashier sessions
+                    </Text>
+                </div>
+
+                <DatePicker
+                    value={selectedDate}
+                    onChange={setSelectedDate}
+                    disabledDate={disabledDate}
+                    allowClear={false}
+                    className="w-full sm:w-auto min-w-[200px]"
+                    size="large"
+                />
+            </div>
+
+            {/* Timeline Area */}
+            <div className="space-y-4">
+                {loading && terminalData.length === 0 ? (
+                    <div className="flex justify-center items-center py-20">
+                        <Spin size="large" tip="Loading session data..." />
+                    </div>
+                ) : terminalData.length === 0 ? (
+                    <Empty
+                        description={`No terminal sessions found for ${selectedDate.format('MMM DD, YYYY')}`}
+                        className="py-12 bg-white dark:bg-[#1f1f1f] rounded-xl border border-gray-100 dark:border-gray-800"
+                    />
+                ) : (
+                    terminalData.map(terminal => (
+                        <Card
+                            key={terminal.terminalId}
+                            className="w-full shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                            bodyStyle={{ padding: '0px' }}
+                        >
+                            <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-[#262626]/50 flex justify-between items-center">
+                                <div>
+                                    <div className="font-bold text-lg text-gray-800 dark:text-gray-200">
+                                        {terminal.storeName || `Store ${terminal.storeNo}`}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-mono">
+                                            {terminal.terminalId}
+                                        </span>
+                                        <span className="uppercase tracking-wider">{terminal.type}</span>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-sm text-gray-500">Total Sessions</div>
+                                    <div className="font-bold text-lg">{terminal.sessions.length}</div>
+                                </div>
+                            </div>
+
+                            <div className="p-4 md:p-6">
+                                {/* Time Axis Header */}
+                                <div className="relative h-6 border-b border-gray-200 dark:border-gray-700 mb-6 text-xs text-gray-400">
+                                    {[0, 6, 12, 18, 24].map(hour => (
+                                        <div
+                                            key={hour}
+                                            className="absolute -ml-3"
+                                            style={{ left: `${(hour / 24) * 100}%` }}
+                                        >
+                                            <div className="flex flex-col items-center">
+                                                <span>{hour === 24 ? '12 AM' : dayjs().hour(hour).minute(0).format('h A')}</span>
+                                                <div className="h-2 w-px bg-gray-300 dark:bg-gray-600 mt-1"></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Timeline Track */}
+                                <div className="relative h-12 bg-gray-100 dark:bg-gray-800 rounded-lg w-full mt-4">
+                                    {terminal.sessions.map((session, idx) => {
+                                        const style = getTimelineStyle(session.connectedAt, session.disconnectedAt, session.isActive, selectedDate.format('YYYY-MM-DD'));
+
+                                        return (
+                                            <Tooltip
+                                                key={session.id || idx}
+                                                color="#fff"
+                                                overlayInnerStyle={{ color: '#000', padding: 0 }}
+                                                title={
+                                                    <div className="p-3 shadow-lg rounded-lg border border-gray-100">
+                                                        <div className="flex items-center gap-3 border-b pb-2 mb-2">
+                                                            <Avatar icon={<UserOutlined />} src={`https://api.dicebear.com/7.x/initials/svg?seed=${session.cashier}`} />
+                                                            <div>
+                                                                <div className="font-bold">{session.cashier}</div>
+                                                                <div className="text-xs text-gray-500">{session.ip}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-xs space-y-1">
+                                                            <div className="flex justify-between gap-4">
+                                                                <span className="text-gray-500">In:</span>
+                                                                <span className="font-medium">{dayjs(session.connectedAt + (session.connectedAt.includes('Z') ? '' : 'Z')).format('h:mm:ss A')}</span>
+                                                            </div>
+                                                            <div className="flex justify-between gap-4">
+                                                                <span className="text-gray-500">Out:</span>
+                                                                <span className="font-medium">
+                                                                    {session.isActive ? 'Active Now' : dayjs(session.disconnectedAt + (session.disconnectedAt.includes('Z') ? '' : 'Z')).format('h:mm:ss A')}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex justify-between gap-4 pt-1 mt-1 border-t border-gray-50">
+                                                                <span className="text-gray-500">Duration:</span>
+                                                                <span className="font-medium text-blue-600">
+                                                                    {formatDuration(session.connectedAt, session.disconnectedAt, session.isActive)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            >
+                                                <div
+                                                    className={`absolute h-full rounded-md cursor-pointer transition-all hover:-translate-y-1 hover:shadow-md border-2 
+                                                        ${session.isActive
+                                                            ? 'bg-green-500/80 border-green-600 animate-pulse'
+                                                            : 'bg-blue-500/80 border-blue-600'
+                                                        }`}
+                                                    style={style}
+                                                >
+                                                    {parseFloat(style.width) > 5 && (
+                                                        <div className="w-full h-full flex items-center justify-center truncate px-2 text-white text-xs font-semibold shadow-sm">
+                                                            {session.cashier}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </Tooltip>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </Card>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default TimeTracker;

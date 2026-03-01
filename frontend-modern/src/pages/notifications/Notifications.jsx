@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { App, Spin, Button, Tag, Empty, Tabs, Badge, Popconfirm, message } from 'antd';
+import { App, Spin, Button, Tag, Empty, Tabs, Badge, Popconfirm, message, Select } from 'antd';
 import { BellOutlined, SwapOutlined, CheckOutlined, CloseOutlined, UndoOutlined } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -321,7 +321,7 @@ export default function Notifications() {
     return (
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 sm:mb-8">
-                <div>
+                <div className="hidden md:block">
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 dark:text-white tracking-tight flex items-center">
                         <BellOutlined className="mr-3 text-emerald-500" /> Notifications
                     </h1>
@@ -341,7 +341,36 @@ export default function Notifications() {
             </div>
 
             <div className="relative">
-                <Tabs activeKey={activeTab} onChange={setActiveTab} className="notifications-tabs" items={tabItems} />
+                {/* Desktop Tabs */}
+                <div className="hidden md:block">
+                    <Tabs activeKey={activeTab} onChange={setActiveTab} className="notifications-tabs" items={tabItems} />
+                </div>
+
+                {/* Mobile Select Dropdown */}
+                <div className="md:hidden flex flex-col gap-2">
+                    <Select
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        className="w-full text-base h-12"
+                        size="large"
+                    >
+                        <Select.Option value="1">
+                            <span className="flex justify-between items-center w-full">
+                                <span><SwapOutlined className="mr-2" /> Requests</span>
+                                {pendingTransfers.length > 0 && <Badge count={pendingTransfers.length} style={{ backgroundColor: '#10b981' }} />}
+                            </span>
+                        </Select.Option>
+                        <Select.Option value="2">
+                            <span className="flex justify-between items-center w-full">
+                                <span><BellOutlined className="mr-2" /> Alerts & System</span>
+                                {systemAlerts.length > 0 && <Badge count={systemAlerts.length} style={{ backgroundColor: '#f97316' }} />}
+                            </span>
+                        </Select.Option>
+                    </Select>
+                    <div>
+                        {activeTab === '1' ? tabItems[0].children : tabItems[1].children}
+                    </div>
+                </div>
             </div>
         </div>
     );

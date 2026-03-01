@@ -13,8 +13,8 @@ const port = 3001; // Set your desired port
 
 // Enable CORS for local apps
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', process.env.FRONTEND_URL || '*'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:3000', process.env.FRONTEND_URL || '*'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
 }));
 
@@ -63,6 +63,7 @@ app.use(require('./reportsDashboardRoutes'));
 app.use(require('./notificationsRoutes'));
 app.use(require('./pushRoutes').router);
 app.use(require('./storeDestinationRoutes'));
+app.use(require('./terminalSessionsRoutes'));
 
 app.use('/api/stock-transfers', require('./transferRequestRoutes'));
 

@@ -11,6 +11,22 @@ module.exports = {
             }
         });
 
+        // Use index.js pool for DB operations
+        const pool = require('./index');
+
+        // On restart, close any sessions previously left dangling due to server crash or restart
+        if (pool) {
+            const formatDatetime = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
+            pool.query(
+                `UPDATE terminal_sessions SET disconnectedAt = ? WHERE disconnectedAt IS NULL`,
+                [formatDatetime(new Date())],
+                (err) => {
+                    if (err) console.error('Error closing dangling terminal sessions:', err);
+                    else console.log('[Socket] Cleared dangling terminal sessions on startup');
+                }
+            );
+        }
+
         const connectedTerminals = new Map(); // socketId -> { info, allowed: true }
 
         io.on('connection', (socket) => {
@@ -51,6 +67,64 @@ module.exports = {
 
                 // Notify Admins
                 io.emit('admin:terminals_update', Array.from(connectedTerminals.values()));
+
+                // DB: Insert or Reconnect Session
+                if (pool) {
+                    // Check if there's a recently disconnected session (within last 30 seconds) for this terminal
+                    const thirtySecondsAgo = new Date(Date.now() - 30000);
+                    // Create formatted date strings for MySQL
+                    const formatDatetime = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
+
+                    pool.query(
+                        `SELECT id FROM terminal_sessions 
+                         WHERE terminalId = ? 
+                         AND disconnectedAt IS NOT NULL 
+                         AND disconnectedAt >= ? 
+                         ORDER BY disconnectedAt DESC LIMIT 1`,
+                        [terminalId, formatDatetime(thirtySecondsAgo)],
+                        (err, results) => {
+                            if (err) {
+                                console.error('Error checking recent sessions:', err);
+                            } else if (results && results.length > 0) {
+                                // Resume recent session
+                                const sessionId = results[0].id;
+                                pool.query(
+                                    `UPDATE terminal_sessions SET disconnectedAt = NULL, cashier = ? WHERE id = ?`,
+                                    [terminalInfo.cashier, sessionId]
+                                );
+                                // Store DB inserted ID in terminalInfo map for easy reference on disconnect
+                                terminalInfo.dbSessionId = sessionId;
+                                connectedTerminals.set(socket.id, terminalInfo);
+                                console.log(`[Socket] Resumed recent DB session: ${sessionId}`);
+                            } else {
+                                // Create new session
+                                pool.query(
+                                    `INSERT INTO terminal_sessions 
+                                     (terminalId, storeNo, storeName, type, cashier, ip, connectedAt) 
+                                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                                    [
+                                        terminalInfo.terminalId,
+                                        terminalInfo.storeNo,
+                                        terminalInfo.storeName,
+                                        terminalInfo.type,
+                                        terminalInfo.cashier,
+                                        terminalInfo.ip,
+                                        formatDatetime(terminalInfo.connectedAt)
+                                    ],
+                                    (insertErr, insertResult) => {
+                                        if (insertErr) {
+                                            console.error('Error inserting terminal session:', insertErr);
+                                        } else {
+                                            terminalInfo.dbSessionId = insertResult.insertId;
+                                            connectedTerminals.set(socket.id, terminalInfo);
+                                            console.log(`[Socket] Created new DB session: ${insertResult.insertId}`);
+                                        }
+                                    }
+                                );
+                            }
+                        }
+                    );
+                }
             });
 
             // 2. Dynamic Update: Terminal sends new info (e.g. Cashier Login)
@@ -62,6 +136,17 @@ module.exports = {
 
                     // Notify Admins
                     io.emit('admin:terminals_update', Array.from(connectedTerminals.values()));
+
+                    // Update Cashier in DB if it changed and we have a dbSessionId
+                    if (data.cashier && data.cashier !== currentInfo.cashier && updatedInfo.dbSessionId && pool) {
+                        pool.query(
+                            `UPDATE terminal_sessions SET cashier = ? WHERE id = ?`,
+                            [data.cashier, updatedInfo.dbSessionId],
+                            (err) => {
+                                if (err) console.error('Error updating session cashier:', err);
+                            }
+                        );
+                    }
                 }
             });
 
@@ -119,6 +204,20 @@ module.exports = {
             socket.on('disconnect', () => {
                 console.log('Client disconnected:', socket.id);
                 if (connectedTerminals.has(socket.id)) {
+                    const terminalInfo = connectedTerminals.get(socket.id);
+
+                    // Disconnect logic for DB
+                    if (terminalInfo.dbSessionId && pool) {
+                        const formatDatetime = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
+                        pool.query(
+                            `UPDATE terminal_sessions SET disconnectedAt = ? WHERE id = ?`,
+                            [formatDatetime(new Date()), terminalInfo.dbSessionId],
+                            (err) => {
+                                if (err) console.error('Error closing terminal session:', err);
+                            }
+                        );
+                    }
+
                     connectedTerminals.delete(socket.id);
                     // Notify Admins
                     io.emit('admin:terminals_update', Array.from(connectedTerminals.values()));

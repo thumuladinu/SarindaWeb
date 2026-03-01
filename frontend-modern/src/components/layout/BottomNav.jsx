@@ -17,7 +17,8 @@ import {
     DashboardOutlined,
     LineChartOutlined,
     AreaChartOutlined,
-    DatabaseOutlined
+    DatabaseOutlined,
+    ClockCircleOutlined
 } from '@ant-design/icons';
 import { Drawer } from 'antd';
 
@@ -130,6 +131,7 @@ const BottomNav = () => {
                         <DrawerItem path="/reports-dashboard" icon={<DashboardOutlined />} label="Dashboards" />
                         <DrawerItem path="/graphs" icon={<LineChartOutlined />} label="Graphs" />
                         <DrawerItem path="/stock-events" icon={<AreaChartOutlined />} label="Stock Events" />
+                        <DrawerItem path="/time-tracker" icon={<ClockCircleOutlined />} label="Time Tracker" />
                         {Cookies.get('rememberedUser') && JSON.parse(Cookies.get('rememberedUser')).ROLE?.toLowerCase() === 'dev' && (
                             <DrawerItem path="/dev-cache" icon={<DatabaseOutlined />} label="Local Cache" />
                         )}

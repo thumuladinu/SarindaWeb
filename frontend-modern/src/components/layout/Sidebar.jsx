@@ -15,7 +15,8 @@ import {
     DashboardOutlined,
     LineChartOutlined,
     AreaChartOutlined,
-    DatabaseOutlined
+    DatabaseOutlined,
+    ClockCircleOutlined
 } from '@ant-design/icons';
 import { Tooltip } from 'antd';
 import logo from "../../assets/images/logo.png";
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
     { label: 'Dashboards', path: '/reports-dashboard', icon: <DashboardOutlined /> },
     { label: 'Graphs', path: '/graphs', icon: <LineChartOutlined /> }, // New
     { label: 'Stock Events', path: '/stock-events', icon: <AreaChartOutlined /> },
+    { label: 'Time Tracker', path: '/time-tracker', icon: <ClockCircleOutlined /> },
 ];
 
 export default function Sidebar() {
