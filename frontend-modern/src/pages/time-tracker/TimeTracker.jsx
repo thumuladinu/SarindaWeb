@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, DatePicker, Avatar, Tooltip, Empty, Spin, message, Typography } from 'antd';
 import { ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import axios from 'axios';
 
 const { Title, Text } = Typography;
 
@@ -14,18 +15,11 @@ const TimeTracker = () => {
         setLoading(true);
         try {
             const formattedDate = date.format('YYYY-MM-DD');
-            // Assuming API runs locally on 3001 or use Vite proxy
-            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-            const response = await fetch(`${API_URL}/api/getTerminalSessions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ DATE: formattedDate })
-            });
+            const response = await axios.post('/api/getTerminalSessions', { DATE: formattedDate });
 
-            const data = await response.json();
-            if (data.success) {
-                setTerminalData(data.terminals || []);
+            if (response.data.success) {
+                setTerminalData(response.data.terminals || []);
             } else {
                 message.error('Failed to fetch session data');
             }
