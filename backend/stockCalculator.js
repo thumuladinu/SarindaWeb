@@ -1,4 +1,24 @@
+// SQL Helper for selective SL Time conversion
+// Server-created records (Actual UTC) -> Shift to SLT
+// Synced records (Already SLT string) -> Keep as-is
+const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
+    CASE 
+        WHEN ${codeField} IS NULL 
+             OR ${codeField} LIKE 'ADJ-%' 
+             OR ${codeField} LIKE 'STOCKOP-%' 
+             OR ${codeField} LIKE 'SLO-%'
+             OR ${codeField} LIKE 'WEB-%'
+             OR ${codeField} LIKE '%-WEB-%'
+             OR ${codeField} LIKE '%-SLO-%'
+             OR ${codeField} LIKE 'RETURN-EXP-%'
+             OR ${codeField} LIKE 'TX-%'
+        THEN CONVERT_TZ(${field}, '+00:00', '+05:30')
+        ELSE ${field}
+    END
+`;
+
 const calculateCurrentStock = async (pool, itemId, storeNo, upToTimestamp = null) => {
+    console.log(`[stockCalculator] Calculating stock for Item ${itemId} Store ${storeNo} at ${upToTimestamp}`);
     // UNIFIED STOCK CALCULATION QUERY
     // This query MUST be the single source of truth for stock calculations across the app.
     // It includes ALL transaction types:
@@ -11,7 +31,7 @@ const calculateCurrentStock = async (pool, itemId, storeNo, upToTimestamp = null
         const queryParams = [itemId, storeNo];
 
         if (upToTimestamp) {
-            timeCondition = "AND st.CREATED_DATE <= ?";
+            timeCondition = `AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?`;
             queryParams.push(upToTimestamp);
         }
 

@@ -329,8 +329,8 @@ router.post('/api/stock-ops/create', async (req, res) => {
         const itemStocks = new Map();
         if (data.items && data.items.length > 0) {
             for (const item of data.items) {
-                // Use Unified Stock Calculator AT THE OPERATION TIME only if high precision sync
-                const stock = await calculateCurrentStock(pool, item.ITEM_ID, data.STORE_NO || 1, isHighPrecision ? opTimestamp : null);
+                // Use Unified Stock Calculator AT THE OPERATION TIME only if high precision sync. Convert opTimestamp to SLT string to match CREATED_DATE in DB.
+                const stock = await calculateCurrentStock(pool, item.ITEM_ID, data.STORE_NO || 1, isHighPrecision ? dateTimeUtils.toSLMySQLDateTime(opTimestamp) : null);
                 itemStocks.set(item.ITEM_ID, stock);
                 //console.log(`[Stock Ops] Pre-fetch stock for item ${item.ITEM_ID} at ${opTimestamp.toISOString()}: ${stock.toFixed(2)}kg`);
             }
@@ -669,7 +669,7 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
 
     // Helper to get current stock from ledger using Unified Calculator
     async function getCurrentStock(itemId) {
-        return await calculateCurrentStock(pool, itemId, storeNo, isHighPrecision ? opTimestamp : null);
+        return await calculateCurrentStock(pool, itemId, storeNo, isHighPrecision ? dateTimeUtils.toSLMySQLDateTime(opTimestamp) : null);
     }
 
     // Helper to create a stock adjustment transaction
@@ -1765,6 +1765,18 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
         const termCode = (TERMINAL_CODE || 'POS').slice(0, 5).toUpperCase();
         const opCode = await generateOpCode(storeNo, termCode);
 
+        // Parse operation date (UTC assumed from POS/ISO)
+        let opTimestamp = new Date();
+        if (data.DATE) {
+            try {
+                if (data.DATE.includes('Z') || (data.DATE.includes('T') && (data.DATE.includes('+') || data.DATE.includes('.')))) {
+                    opTimestamp = new Date(data.DATE);
+                }
+            } catch (e) {
+                console.error('[Stock Ops] Date parse error for return:', e);
+            }
+        }
+
         // --- Handle Expenses if provided ---
         const expenseAmt = parseFloat(data.returnExpenseAmount) || 0;
         if (expenseAmt > 0) {
@@ -1791,7 +1803,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
                     PAYMENT_AMOUNT: expenseAmt,
                     COMMENTS: `Automated: Expense for this return. Return code: ${opCode}`,
                     CREATED_BY: CREATED_BY || 0,
-                    CREATED_DATE: new Date(),
+                    CREATED_DATE: opTimestamp,
                     EDITED_DATE: new Date(),
                     IS_ACTIVE: 1,
                     BILL_DATA: JSON.stringify({ note: 'Automated Return Expense', relatedOp: opCode, itemId: ITEM_ID })
@@ -1820,7 +1832,8 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             REFERENCE_OP_ID: (validRefOpId === 'DIRECT') ? null : validRefOpId, // Use numeric ID or null
             RETURN_TYPE: hasConversion ? 'CONVERSION' : 'DIRECT',
             COMMENTS: COMMENTS || `Return from ${refOp.OP_CODE}`,
-            DATE: new Date().toISOString(),
+            DATE: opTimestamp.toISOString(),
+            CREATED_DATE: opTimestamp,
             CREATED_BY: CREATED_BY,
             CREATED_BY_NAME: CREATED_BY_NAME || null,
             IS_ACTIVE: 1
@@ -1871,7 +1884,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
                     STORE_NO: storeNo,
                     TYPE: 'AdjIn',
                     CREATED_BY: CREATED_BY,
-                    CREATED_DATE: new Date(),
+                    CREATED_DATE: opTimestamp,
                     SUB_TOTAL: 0,
                     COMMENTS: `[${opCode}] Return: Added ${destQty.toFixed(2)}kg of ${conv.DEST_ITEM_NAME || 'Item'} (from ${refOp.OP_CODE})`,
                     IS_ACTIVE: 1
@@ -1916,7 +1929,7 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
                 STORE_NO: storeNo,
                 TYPE: 'AdjIn',
                 CREATED_BY: CREATED_BY,
-                CREATED_DATE: new Date(),
+                CREATED_DATE: opTimestamp,
                 SUB_TOTAL: 0,
                 COMMENTS: `[${opCode}] Return: Added ${returnQty.toFixed(2)}kg of ${itemName} (from ${refOp.OP_CODE})`,
                 IS_ACTIVE: 1

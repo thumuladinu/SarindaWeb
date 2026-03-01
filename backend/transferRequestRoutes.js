@@ -15,7 +15,7 @@ const query = (sql, params) => {
 };
 
 // Helper: Approve Transfer Logic (Reused by /approve and /request with auto-approve)
-const approveTransfer = async (transferId, approvedBy, approvedByName, clearanceType) => {
+const approveTransfer = async (transferId, approvedBy, approvedByName, clearanceType, opTimestampInput = null) => {
     // Get request details
     const [request] = await query(
         `SELECT * FROM store_stock_transfers WHERE id = ?`, [transferId]
@@ -24,11 +24,14 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
     if (!request) throw new Error('Request not found');
     if (request.status !== 'PENDING') throw new Error('Request already processed');
 
+    // Use passed opTimestamp or fallback to current time
+    const opTimestamp = opTimestampInput ? new Date(opTimestampInput) : new Date();
+
     // LOGIC: Create Stock Transactions
     // 1. Store 1: Remove Stock (Transfer Out)
     // 2. Store 2: Add Stock (Transfer In)
 
-    const commonId = `TRA-${Date.now()}`;
+    const commonId = `TRA-${opTimestamp.getTime()}`;
     const mainQty = parseFloat(request.main_item_qty) || 0;
 
     // --- STORE 1 (Source) Operations ---
@@ -49,9 +52,14 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
     // Helper to get current stock from ledger (Dynamic Calculation)
     const getCurrentStock = async (itemId, store) => {
         try {
-            // Use Unified Stock Calculator
-            const stock = await calculateCurrentStock(pool, itemId, store);
-            console.log(`[getCurrentStock] Item ${itemId}, Store ${store}: Calculated stock = ${stock}`);
+            // Import dateTimeUtils locally
+            const dateTimeUtils = require("./dateTimeUtils");
+
+            // Use Unified Stock Calculator with SLT timestamp Conversion
+            // The opTimestamp is UTC, but the ledger entries use SLT format strings for CREATED_DATE
+            const sltTimeString = dateTimeUtils.toSLMySQLDateTime(opTimestamp);
+            const stock = await calculateCurrentStock(pool, itemId, store, sltTimeString);
+            console.log(`[getCurrentStock] Item ${itemId}, Store ${store}, Time ${sltTimeString}: Calculated stock = ${stock}`);
             return stock;
         } catch (error) {
             console.error('[getCurrentStock] Error:', error);
@@ -98,20 +106,20 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
     }
 
     // Insert Master Op for Store 1
-    const now = new Date();
-    const dateStr = now.toISOString().slice(2, 10).replace(/-/g, ''); // YYMMDD
+    const dateStr = opTimestamp.toISOString().slice(2, 10).replace(/-/g, ''); // YYMMDD
     const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
 
     // Standard OpCode format: S{STORE}-{YYMMDD}-CLR-{TYPE}-{RANDOM}
     // Matches regex: [S%-%-CLR-%
     const opCode = `S${sourceStoreId}-${dateStr}-CLR-TRA-${randomSuffix}`;
-    const sourceOpLocalId = `S${sourceStoreId}-AUTO-OP-TRA-${Date.now()}`;
+    const sourceOpLocalId = `S${sourceStoreId}-AUTO-OP-TRA-${opTimestamp.getTime()}`;
 
+    // Note: Store as literal UTC parameters
     const opResult = await query(
         `INSERT INTO store_stock_operations
-        (LOCAL_ID, OP_TYPE, STORE_NO, CREATED_BY, CREATED_BY_NAME, COMMENTS, OP_CODE, CLEARANCE_TYPE, WASTAGE_AMOUNT, SURPLUS_AMOUNT, SYNCED)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        [sourceOpLocalId, opType, sourceStoreId, approvedBy, approvedByName, (request.comments ? request.comments + '\n' : '') + `Approved Request ${request.local_id}`, opCode, clearanceType, wastage, surplus]
+        (LOCAL_ID, OP_TYPE, STORE_NO, CREATED_BY, CREATED_BY_NAME, COMMENTS, OP_CODE, CLEARANCE_TYPE, WASTAGE_AMOUNT, SURPLUS_AMOUNT, SYNCED, DATE, CREATED_DATE)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        [sourceOpLocalId, opType, sourceStoreId, approvedBy, approvedByName, (request.comments ? request.comments + '\n' : '') + `Approved Request ${request.local_id}`, opCode, clearanceType, wastage, surplus, opTimestamp.toISOString(), opTimestamp]
     );
     const opId = opResult.insertId;
 
@@ -158,13 +166,16 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
 
     // --- STOCK UPDATES STORE 1 ---
 
+    // Import dateTimeUtils locally for database insertions
+    const dateTimeUtils = require("./dateTimeUtils");
+
     // Helper to create transaction and item
     const createTransaction = async (storeNo, type, itemId, qty, refId, comments) => {
         const result = await query(
             `INSERT INTO store_transactions
-        (DATE, STORE_NO, TYPE, REFERENCE_TRANSACTION, COMMENTS, CREATED_BY, IS_ACTIVE, CODE)
-            VALUES(NOW(), ?, ?, ?, ?, ?, 1, ?)`,
-            [storeNo, type, refId, comments, approvedBy, `TX - ${Date.now()} - ${Math.random().toString(36).substr(2, 4)}`]
+        (DATE, CREATED_DATE, STOCK_DATE, STORE_NO, TYPE, REFERENCE_TRANSACTION, COMMENTS, CREATED_BY, IS_ACTIVE, CODE)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+            [dateTimeUtils.toSLMySQLDateTime(opTimestamp), opTimestamp, opTimestamp, storeNo, type, refId, comments, approvedBy, `TX - ${opTimestamp.getTime()} - ${Math.random().toString(36).substr(2, 4)}`]
         );
         const transId = result.insertId;
 
@@ -195,9 +206,9 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
     // --- UPDATE REQUEST STATUS ---
     await query(
         `UPDATE store_stock_transfers 
-            SET status = 'APPROVED', approval_date = NOW(), approved_by = ?, approved_by_name = ?, clearance_type = ?
+            SET status = 'APPROVED', approval_date = ?, approved_by = ?, approved_by_name = ?, clearance_type = ?
         WHERE id = ? `,
-        [approvedBy, approvedByName, clearanceType, transferId]
+        [opTimestamp, approvedBy, approvedByName, clearanceType, transferId]
     );
 
     return { success: true, message: 'Request approved and processed' };
@@ -211,20 +222,25 @@ router.post('/request', async (req, res) => {
             hasConversion, storeFrom = 1, storeTo = 2,
             createdBy, createdByName, comments,
             conversions,
+            // DATE from local app indicating when it was originated
+            DATE, date,
             // Auto-Approve Flags (for offline sync)
             autoApprove, approvedBy, approvedByName, clearanceType
         } = req.body;
 
-        const localId = `S2 - REQ - ${Date.now()}`;
+        const requestTime = DATE || date || new Date().toISOString();
+        const requestTimeObj = new Date(requestTime);
+
+        const localId = req.body.LOCAL_ID || `S2 - REQ - ${requestTimeObj.getTime()}`;
 
         // Insert Request
         const result = await query(
             `INSERT INTO store_stock_transfers
         (local_id, main_item_id, main_item_code, main_item_name, main_item_qty, has_conversion,
-            store_from_id, store_to_id, created_by, created_by_name, comments, status)
-             VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+            store_from_id, store_to_id, created_by, created_by_name, comments, status, request_date)
+             VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`,
             [localId, mainItemId, mainItemCode, mainItemName, (mainItemQty === 'FULL' ? 0 : mainItemQty), hasConversion,
-                storeFrom, storeTo, createdBy || null, createdByName || null, comments]
+                storeFrom, storeTo, createdBy || null, createdByName || null, comments, requestTimeObj]
         );
 
         const transferId = result.insertId;
@@ -244,7 +260,7 @@ router.post('/request', async (req, res) => {
         // AUTO APPROVE Logic (if requested)
         if (autoApprove) {
             try {
-                await approveTransfer(transferId, approvedBy || createdBy, approvedByName || createdByName, clearanceType || 'FULL');
+                await approveTransfer(transferId, approvedBy || createdBy, approvedByName || createdByName, clearanceType || 'FULL', requestTime);
                 res.json({ success: true, message: 'Request submitted and auto-approved', transferId, localId, autoApproved: true });
                 return;
             } catch (approveError) {
@@ -297,12 +313,27 @@ router.get('/pending', async (req, res) => {
 
 // Approve Request (Store 1 Action)
 // Triggers Stock Clearance at Store 1 and Stock Addition at Store 2
-// Approve Request (Store 1 Action)
-// Triggers Stock Clearance at Store 1 and Stock Addition at Store 2
 router.post('/approve', async (req, res) => {
     try {
         const { transferId, approvedBy, approvedByName, clearanceType } = req.body; // clearanceType: FULL or PARTIAL
-        const result = await approveTransfer(transferId, approvedBy, approvedByName, clearanceType);
+
+        // Fetch original request_date to use as the true point-in-time calculation reference
+        const [request] = await query(
+            `SELECT request_date FROM store_stock_transfers WHERE id = ?`, [transferId]
+        );
+
+        if (!request) throw new Error('Request not found');
+
+        // request_date could be null for very old legacy entries, fallback to now safely
+        let requestTime = new Date().toISOString();
+        if (request.request_date) {
+            const dateObj = new Date(request.request_date);
+            if (!isNaN(dateObj.getTime())) {
+                requestTime = dateObj.toISOString();
+            }
+        }
+
+        const result = await approveTransfer(transferId, approvedBy, approvedByName, clearanceType, requestTime);
         res.json(result);
     } catch (error) {
         console.error('Approve error:', error);
