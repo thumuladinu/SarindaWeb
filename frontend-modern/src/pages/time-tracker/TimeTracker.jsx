@@ -222,6 +222,53 @@ const TimeTracker = () => {
                                         );
                                     })}
                                 </div>
+
+                                {/* Detailed Session Cards */}
+                                {terminal.sessions.length > 0 && (
+                                    <div className="mt-8 space-y-3">
+                                        <div className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Session Details</div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                            {/* Render sessions in reverse chronological order (newest first) */}
+                                            {[...terminal.sessions].reverse().map((session, idx) => {
+                                                const startTime = dayjs(session.connectedAt + (session.connectedAt.includes('Z') ? '' : 'Z'));
+                                                const endTime = session.isActive ? dayjs() : (session.disconnectedAt ? dayjs(session.disconnectedAt + (session.disconnectedAt.includes('Z') ? '' : 'Z')) : dayjs());
+                                                const duration = formatDuration(session.connectedAt, session.disconnectedAt, session.isActive);
+
+                                                return (
+                                                    <div
+                                                        key={session.id || `card-${idx}`}
+                                                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all hover:bg-white/50 dark:hover:bg-white/5
+                                                            ${session.isActive
+                                                                ? 'border-green-200 dark:border-green-500/30 bg-green-50/50 dark:bg-green-500/10'
+                                                                : 'border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-[#1f1f1f]'
+                                                            }`}
+                                                    >
+                                                        <Avatar
+                                                            size="large"
+                                                            className={`flex-shrink-0 border-2 ${session.isActive ? 'border-green-500' : 'border-transparent'}`}
+                                                            icon={<UserOutlined />}
+                                                            src={session.cashierPhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${session.cashier}`}
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-bold text-gray-800 dark:text-gray-200 truncate pr-2">
+                                                                {session.cashier}
+                                                                {session.isActive && <span className="ml-2 text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded uppercase tracking-wider relative -top-0.5">Active</span>}
+                                                            </div>
+                                                            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate flex items-center gap-1">
+                                                                <span className="font-mono">{startTime.format('h:mm:ss A')}</span>
+                                                                <span>-</span>
+                                                                <span className={session.isActive ? 'text-green-600 dark:text-green-400 font-medium whitespace-nowrap' : 'font-mono whitespace-nowrap'}>
+                                                                    {session.isActive ? 'Now' : endTime.format('h:mm:ss A')}
+                                                                </span>
+                                                                <span className="opacity-60 ml-1">({duration})</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </Card>
                     ))
