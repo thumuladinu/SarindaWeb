@@ -42,3 +42,40 @@ Client connected: 8oUucXvsj0B7VI7bAAAH
 [MergeSync] Web DB has 50 valid items (all active states)
 [MergeSync] POS has 51 unique valid items
 [MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 8, toUpdateOnPOS: 43, newForPOS: 7 }
+Client disconnected: 8oUucXvsj0B7VI7bAAAH
+Client connected: l_Gcxt8ccZKd3ZneAAAK
+[Socket] Terminal Registered: POS - TL6E8
+[Socket] Resumed recent DB session: 11
+[MergeSync] Received 51 items from POS
+[MergeSync] Received 51 items from POS
+[MergeSync] Web DB has 49 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Web DB has 49 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
+Client disconnected: l_Gcxt8ccZKd3ZneAAAK
+Client connected: 9PxO2z8d5CGx6aAlAAAN
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Received 51 items from POS
+[MergeSync] Received 51 items from POS
+[MergeSync] Web DB has 49 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Web DB has 49 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[Socket] Resumed recent DB session: 11
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
+Client disconnected: 9PxO2z8d5CGx6aAlAAAN
+[MergeSync] Received 51 items from POS
+Client connected: EKGC_HHptLL4LQYNAAAQ
+[Socket] Terminal Registered: POS - TL6E8
+[MergeSync] Web DB has 49 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[Socket] Resumed recent DB session: 11
+[MergeSync] Received 51 items from POS
+[MergeSync] Web DB has 49 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
+Client disconnected: EKGC_HHptLL4LQYNAAAQ

@@ -1494,9 +1494,24 @@ router.post('/api/weights/sync', async (req, res) => {
         };
 
         // Check if record exists for upsert
-        const existing = await pool.query('SELECT ID FROM weight_measurements WHERE CODE = ?', [code]);
+        const existing = await pool.query('SELECT ID, ITEM_DETAILS FROM weight_measurements WHERE CODE = ?', [code]);
 
         if (existing && existing.length > 0) {
+            // Preserve existing status and payment info if present
+            try {
+                const oldRecord = existing[0];
+                const oldDetails = typeof oldRecord.ITEM_DETAILS === 'string' ? JSON.parse(oldRecord.ITEM_DETAILS) : (oldRecord.ITEM_DETAILS || {});
+
+                // If it was already collected, preserve that status
+                if (oldDetails.status === 'Money Collected') {
+                    itemDetails.status = 'Money Collected';
+                    itemDetails.collectedAt = oldDetails.collectedAt;
+                    itemDetails.transactionCode = oldDetails.transactionCode;
+                }
+            } catch (e) {
+                console.warn('[WeightSync] Failed to parse existing ITEM_DETAILS:', e.message);
+            }
+
             // Update existing record
             await pool.query(`
                 UPDATE weight_measurements SET 
@@ -1532,7 +1547,7 @@ router.post('/api/weights/sync', async (req, res) => {
         try {
             const [existingTxForWeight] = await pool.query(
                 `SELECT TRANSACTION_ID FROM store_transactions
-                 WHERE WEIGHT_CODE = ? AND IS_ACTIVE = 1 LIMIT 1`,
+                 WHERE WEIGHT_CODE = ? AND CODE IS NOT NULL AND IS_ACTIVE = 1 LIMIT 1`,
                 [s2Code]
             );
 
