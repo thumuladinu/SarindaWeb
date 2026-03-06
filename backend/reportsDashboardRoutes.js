@@ -1444,6 +1444,8 @@ router.post('/api/graphs/item-data', async (req, res) => {
 
             return {
                 label: b.label,
+                buyQty: parseFloat(b.buyQty.toFixed(3)),
+                sellQty: parseFloat(b.sellQty.toFixed(3)),
                 avgBuyPrice: b.buyQty > 0 ? parseFloat((b.buyTotal / b.buyQty).toFixed(2)) : null,
                 avgSellPrice: b.sellQty > 0 ? parseFloat((b.sellTotal / b.sellQty).toFixed(2)) : null,
                 sellAmount: parseFloat(b.sellTotal.toFixed(2)),

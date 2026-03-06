@@ -1340,7 +1340,24 @@ router.post('/api/deactivateTransaction', async (req, res) => {
         }
 
         // Extract the transactions ID from the request body
-        const { TRANSACTION_ID, ALL, ITEM_DEL } = req.body;
+        let { TRANSACTION_ID, ALL, ITEM_DEL } = req.body;
+
+        // Resolve string CODE to numeric TRANSACTION_ID
+        if (typeof TRANSACTION_ID === 'string') {
+            const isNumericString = !isNaN(TRANSACTION_ID) && !isNaN(parseFloat(TRANSACTION_ID));
+            if (isNumericString) {
+                TRANSACTION_ID = parseInt(TRANSACTION_ID, 10);
+            } else {
+                const lookup = await pool.query('SELECT TRANSACTION_ID FROM store_transactions WHERE CODE = ?', [TRANSACTION_ID]);
+                if (lookup && lookup.length > 0) {
+                    TRANSACTION_ID = lookup[0].TRANSACTION_ID;
+                    console.log(`[Deactivate] Resolved string code ${req.body.TRANSACTION_ID} to numeric ID ${TRANSACTION_ID}`);
+                } else {
+                    console.warn(`[Deactivate] Could not resolve code ${req.body.TRANSACTION_ID} to an ID`);
+                    return res.status(404).json({ success: false, message: 'Transaction not found for deletion' });
+                }
+            }
+        }
 
         let updateResult;
 
@@ -1382,9 +1399,18 @@ router.post('/api/deactivateTransaction', async (req, res) => {
                 await adjustStock(item.ITEM_ID, prevStoreNo, delta);
             }
 
-            const deactiveItemsQuery = await pool.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [
-                TRANSACTION_ID,
-            ]);
+            if (ALL) {
+                // Deactivate all items associated with any transaction in the reference tree
+                await pool.query(
+                    `UPDATE store_transactions_items 
+                     SET IS_ACTIVE = 0 
+                     WHERE TRANSACTION_ID IN (
+                        SELECT TRANSACTION_ID FROM store_transactions WHERE REFERENCE_TRANSACTION = ?
+                     )`, [TRANSACTION_ID]
+                );
+            } else {
+                await pool.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [TRANSACTION_ID]);
+            }
         }
 
         if (updateResult.affectedRows > 0) {

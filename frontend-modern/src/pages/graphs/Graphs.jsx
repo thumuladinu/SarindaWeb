@@ -225,6 +225,38 @@ export default function Graphs() {
         return null;
     };
 
+
+    const CustomTooltipQty = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return (
+                <div className="bg-[#18181b]/95 backdrop-blur-3xl p-4 rounded-xl border border-white/10 shadow-2xl z-50 ring-1 ring-white/5">
+                    <p className="text-gray-300 font-bold mb-3 border-b border-white/10 pb-2">{label}</p>
+                    <div className="space-y-2 mb-3 border-b border-white/10 pb-3">
+                        {payload.map((entry, idx) => (
+                            <div key={idx} className="flex items-center gap-3">
+                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                                <span className="text-gray-400 text-sm">{entry.name}:</span>
+                                <span className="font-bold text-white tracking-wide">{formatStock(entry.value)}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-500">Avg Buy Price:</span>
+                            <span className="text-gray-300 font-medium">{formatLKR(data.avgBuyPrice)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-500">Avg Sell Price:</span>
+                            <span className="text-gray-300 font-medium">{formatLKR(data.avgSellPrice)}</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
     return (
         <div className="animate-fade-in pb-24 md:pb-8">
             {/* Header */}
@@ -332,6 +364,109 @@ export default function Graphs() {
                 </div>
             ) : (
                 <div className="flex flex-col gap-6 md:gap-8">
+                    {/* Movement Analysis (Qty) */}
+                    <div id="movement-qty-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg md:shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/5 relative overflow-hidden group">
+                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 to-emerald-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+
+                        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
+                            <h2 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 md:gap-3">
+                                <span className="w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                                    <BarChartOutlined className="text-blue-500 text-sm md:text-base" />
+                                </span>
+                                Movement Analysis (Qty)
+                            </h2>
+                            <div className="flex items-center gap-2 md:gap-3">
+                                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period} Qty</span>
+                            </div>
+                        </div>
+
+                        <div className="h-[280px] md:h-[350px] w-full -ml-4 md:ml-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
+                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value} kg`} fontWeight={600} width={65} />
+                                    <Tooltip content={<CustomTooltipQty />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20 }} />
+                                    <Legend
+                                        onClick={handleLegendClick}
+                                        iconType="circle"
+                                        wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
+                                        formatter={(value, entry) => (
+                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                                {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
+                                            </span>
+                                        )}
+                                    />
+                                    <Line hide={hiddenSeries.includes('buyQty')} type="monotone" name="Incoming Qty" dataKey="buyQty" stroke="#3b82f6" strokeWidth={3} dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }} activeDot={{ r: 5, stroke: '#3b82f6', strokeWidth: 3, fill: '#fff' }} connectNulls />
+                                    <Line hide={hiddenSeries.includes('sellQty')} type="monotone" name="Outgoing Qty" dataKey="sellQty" stroke="#f97316" strokeWidth={3} dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }} activeDot={{ r: 5, stroke: '#f97316', strokeWidth: 3, fill: '#fff' }} connectNulls />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Item Price Changes */}
+                    <div id="price-action-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg md:shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/5 relative overflow-hidden group">
+                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-500 to-emerald-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+
+                        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
+                            <h2 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 md:gap-3">
+                                <span className="w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
+                                    <LineChartOutlined className="text-orange-500 text-sm md:text-base" />
+                                </span>
+                                Price Action Trends
+                            </h2>
+                            <div className="flex items-center gap-2 md:gap-3">
+                                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period} Avg</span>
+                            </div>
+                        </div>
+
+                        <div className="h-[280px] md:h-[450px] w-full -ml-4 md:ml-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
+                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value} `} domain={['auto', 'auto']} fontWeight={600} width={65} />
+                                    <Tooltip content={<CustomTooltipPrice />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20 }} />
+                                    <Legend
+                                        onClick={handleLegendClick}
+                                        iconType="circle"
+                                        wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
+                                        formatter={(value, entry) => (
+                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
+                                                {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
+                                            </span>
+                                        )}
+                                    />
+
+                                    <Line
+                                        hide={hiddenSeries.includes('avgBuyPrice')}
+                                        type="monotone"
+                                        name="Avg Buying Price"
+                                        dataKey="avgBuyPrice"
+                                        stroke="#f97316"
+                                        strokeWidth={3}
+                                        dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }}
+                                        activeDot={{ r: 5, stroke: '#f97316', strokeWidth: 3, fill: '#fff' }}
+                                        connectNulls={true}
+                                        animationDuration={1500}
+                                    />
+                                    <Line
+                                        hide={hiddenSeries.includes('avgSellPrice')}
+                                        type="monotone"
+                                        name="Avg Selling Price"
+                                        dataKey="avgSellPrice"
+                                        stroke="#10b981"
+                                        strokeWidth={3}
+                                        dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }}
+                                        activeDot={{ r: 5, stroke: '#10b981', strokeWidth: 3, fill: '#fff' }}
+                                        connectNulls={true}
+                                        animationDuration={1500}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
                     {/* Financial Overview (Sales vs Buying) */}
                     <div id="financial-overview-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg border border-white/5 relative overflow-hidden group">
                         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 to-orange-500 opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -409,69 +544,6 @@ export default function Graphs() {
                                     />
                                     <Area hide={hiddenSeries.includes('profitSoldAmt')} type="monotone" name="Profit (Sold Amt)" dataKey="profitSoldAmt" stroke="#8b5cf6" fill="url(#colorProfit)" strokeWidth={3} activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 3, fill: '#fff' }} />
                                 </AreaChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* Item Price Changes */}
-                    <div id="price-action-chart" className="glass-card p-4 md:p-8 rounded-2xl md:rounded-3xl shadow-lg md:shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/5 relative overflow-hidden group">
-                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-500 to-emerald-500 opacity-50 group-hover:opacity-100 transition-opacity" />
-
-                        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0 mb-6 md:mb-8 md:pr-4">
-                            <h2 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 md:gap-3">
-                                <span className="w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
-                                    <LineChartOutlined className="text-orange-500 text-sm md:text-base" />
-                                </span>
-                                Price Action Trends
-                            </h2>
-                            <div className="flex items-center gap-2 md:gap-3">
-                                <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-500 bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-white/5">{period} Avg</span>
-                            </div>
-                        </div>
-
-                        <div className="h-[280px] md:h-[450px] w-full -ml-4 md:ml-0">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
-                                    <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} fontWeight={600} />
-                                    <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value} `} domain={['auto', 'auto']} fontWeight={600} width={65} />
-                                    <Tooltip content={<CustomTooltipPrice />} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 20 }} />
-                                    <Legend
-                                        onClick={handleLegendClick}
-                                        iconType="circle"
-                                        wrapperStyle={{ paddingTop: '20px', fontSize: '11px', cursor: 'pointer' }}
-                                        formatter={(value, entry) => (
-                                            <span className={`font-semibold tracking-wide ml-1 transition-opacity ${hiddenSeries.includes(entry.dataKey) ? 'opacity-30' : 'opacity-100'}`} style={{ color: entry.color }}>
-                                                {value} {hiddenSeries.includes(entry.dataKey) ? '(Hidden)' : ''}
-                                            </span>
-                                        )}
-                                    />
-
-                                    <Line
-                                        hide={hiddenSeries.includes('avgBuyPrice')}
-                                        type="monotone"
-                                        name="Avg Buying Price"
-                                        dataKey="avgBuyPrice"
-                                        stroke="#f97316"
-                                        strokeWidth={3}
-                                        dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }}
-                                        activeDot={{ r: 5, stroke: '#f97316', strokeWidth: 3, fill: '#fff' }}
-                                        connectNulls={true}
-                                        animationDuration={1500}
-                                    />
-                                    <Line
-                                        hide={hiddenSeries.includes('avgSellPrice')}
-                                        type="monotone"
-                                        name="Avg Selling Price"
-                                        dataKey="avgSellPrice"
-                                        stroke="#10b981"
-                                        strokeWidth={3}
-                                        dot={{ r: 3, fill: '#18181b', strokeWidth: 2 }}
-                                        activeDot={{ r: 5, stroke: '#10b981', strokeWidth: 3, fill: '#fff' }}
-                                        connectNulls={true}
-                                        animationDuration={1500}
-                                    />
-                                </LineChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
@@ -626,6 +698,38 @@ export default function Graphs() {
                             </div>
                         </div>
 
+                        <div id="export-movement-chart" style={{ width: '100%', marginBottom: '40px', backgroundColor: 'transparent' }}>
+                            <div className="hide-for-pdf-capture" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                                <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Movement Analysis (Qty)</h2>
+                            </div>
+                            <div style={{ height: '350px', width: '100%' }}>
+                                <LineChart width={1520} height={350} data={graphData} margin={{ top: 10, right: 30, left: 10, bottom: 40 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickMargin={15} ticks={exportTicks} tickFormatter={(val) => dayjs(val).format('MMM DD')} />
+                                    <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(value) => `${value} kg`} width={100} />
+                                    <Legend verticalAlign="bottom" height={40} iconSize={12} wrapperStyle={{ paddingTop: '20px', fontSize: '16px', fontWeight: 600 }} />
+                                    <Line type="monotone" name="Incoming (Bought) Qty" dataKey="buyQty" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls isAnimationActive={false} />
+                                    <Line type="monotone" name="Outgoing (Sold) Qty" dataKey="sellQty" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls isAnimationActive={false} />
+                                </LineChart>
+                            </div>
+                        </div>
+
+                        <div id="export-price-chart" style={{ width: '100%', marginBottom: '40px', backgroundColor: 'transparent' }}>
+                            <div className="hide-for-pdf-capture" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                                <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Price Action Trends</h2>
+                            </div>
+                            <div style={{ height: '400px', width: '100%' }}>
+                                <LineChart width={1520} height={400} data={graphData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
+                                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickMargin={15} ticks={exportTicks} tickFormatter={(val) => dayjs(val).format('MMM DD')} />
+                                    <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value}`} width={80} />
+                                    <Legend verticalAlign="bottom" height={40} iconSize={0} wrapperStyle={{ paddingTop: '40px', fontSize: '16px', fontWeight: 600 }} cursor="default" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />
+                                    {!hiddenSeries.includes('avgBuyPrice') && <Line type="monotone" name="Avg Buying Price" dataKey="avgBuyPrice" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls={true} isAnimationActive={false} />}
+                                    {!hiddenSeries.includes('avgSellPrice') && <Line type="monotone" name="Avg Selling Price" dataKey="avgSellPrice" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls={true} isAnimationActive={false} />}
+                                </LineChart>
+                            </div>
+                        </div>
+
                         <div id="export-revenue-chart" style={{ width: '100%', marginBottom: '40px', backgroundColor: 'transparent' }}>
                             <div className="hide-for-pdf-capture" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
                                 <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Sales vs Buying Overview</h2>
@@ -660,22 +764,6 @@ export default function Graphs() {
                                     <Legend verticalAlign="bottom" height={40} iconSize={12} wrapperStyle={{ paddingTop: '20px', fontSize: '16px', fontWeight: 600 }} />
                                     <Area type="monotone" name="Profit (Sold Amt)" dataKey="profitSoldAmt" stroke="#8b5cf6" strokeWidth={3} fill="url(#colorProfitExp)" isAnimationActive={false} />
                                 </AreaChart>
-                            </div>
-                        </div>
-
-                        <div id="export-price-chart" style={{ width: '100%', marginBottom: '40px', backgroundColor: 'transparent' }}>
-                            <div className="hide-for-pdf-capture" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                                <h2 style={{ color: 'white', fontSize: '24px', margin: 0 }}>Price Action Trends</h2>
-                            </div>
-                            <div style={{ height: '400px', width: '100%' }}>
-                                <LineChart width={1520} height={400} data={graphData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={true} />
-                                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickMargin={15} ticks={exportTicks} tickFormatter={(val) => dayjs(val).format('MMM DD')} />
-                                    <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs ${value}`} width={80} />
-                                    <Legend verticalAlign="bottom" height={40} iconSize={0} wrapperStyle={{ paddingTop: '40px', fontSize: '16px', fontWeight: 600 }} cursor="default" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />
-                                    {!hiddenSeries.includes('avgBuyPrice') && <Line type="monotone" name="Avg Buying Price" dataKey="avgBuyPrice" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls={true} isAnimationActive={false} />}
-                                    {!hiddenSeries.includes('avgSellPrice') && <Line type="monotone" name="Avg Selling Price" dataKey="avgSellPrice" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#18181b', strokeWidth: 2 }} connectNulls={true} isAnimationActive={false} />}
-                                </LineChart>
                             </div>
                         </div>
 
