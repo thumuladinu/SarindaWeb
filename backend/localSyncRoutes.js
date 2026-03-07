@@ -1560,35 +1560,48 @@ router.post('/api/weights/sync', async (req, res) => {
                 );
                 console.log(`[WeightSync] POS already paid for ${code} — marked Collected (tx: ${existingTxForWeight.TRANSACTION_ID})`);
             } else {
-                // POS hasn't paid yet — create stock placeholder transaction for inventory
-                const stockDate = toMySQLDateTime(weightData.createdAt);
-                const placeholderResult = await pool.query(`
-                    INSERT INTO store_transactions
-                        (TYPE, STORE_NO, WEIGHT_CODE, STOCK_DATE, IS_ACTIVE, CREATED_DATE)
-                    VALUES ('Buying', 2, ?, ?, 1, NOW())
-                `, [s2Code, stockDate]);
-                const placeholderId = placeholderResult.insertId;
+                // POS hasn't paid yet — create stock placeholder transaction for inventory,
+                // BUT only if a placeholder doesn't already exist for this weight code.
+                const [existingPlaceholder] = await pool.query(
+                    `SELECT TRANSACTION_ID FROM store_transactions
+                     WHERE WEIGHT_CODE = ? AND IS_ACTIVE = 1 LIMIT 1`,
+                    [s2Code]
+                );
 
-                // Insert items for stock calculation
-                const weightItems = itemDetails.items || [];
-                for (const wItem of weightItems) {
-                    const prodCode = (wItem.productCode || wItem.code || '').toUpperCase();
-                    const netWeight = parseFloat(wItem.netWeight != null ? wItem.netWeight : wItem.netWt) || 0;
-                    let itemId = null;
-                    if (prodCode) {
-                        const [byCode] = await pool.query(
-                            'SELECT ITEM_ID FROM store_items WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1',
-                            [prodCode]
-                        );
-                        if (byCode && byCode.ITEM_ID) itemId = byCode.ITEM_ID;
+                if (existingPlaceholder && existingPlaceholder.TRANSACTION_ID) {
+                    // Any active transaction already exists for this weight (placeholder or paid) — skip insert.
+                    console.log(`[WeightSync] Transaction already exists (ID: ${existingPlaceholder.TRANSACTION_ID}) for ${code} — skipping duplicate insert`);
+                } else {
+                    // No placeholder yet — safe to create one
+                    const stockDate = toMySQLDateTime(weightData.createdAt);
+                    const placeholderResult = await pool.query(`
+                        INSERT INTO store_transactions
+                            (TYPE, STORE_NO, WEIGHT_CODE, STOCK_DATE, IS_ACTIVE, CREATED_DATE)
+                        VALUES ('Buying', 2, ?, ?, 1, NOW())
+                    `, [s2Code, stockDate]);
+                    const placeholderId = placeholderResult.insertId;
+
+                    // Insert items for stock calculation
+                    const weightItems = itemDetails.items || [];
+                    for (const wItem of weightItems) {
+                        const prodCode = (wItem.productCode || wItem.code || '').toUpperCase();
+                        const netWeight = parseFloat(wItem.netWeight != null ? wItem.netWeight : wItem.netWt) || 0;
+                        let itemId = null;
+                        if (prodCode) {
+                            const [byCode] = await pool.query(
+                                'SELECT ITEM_ID FROM store_items WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1',
+                                [prodCode]
+                            );
+                            if (byCode && byCode.ITEM_ID) itemId = byCode.ITEM_ID;
+                        }
+                        await pool.query(`
+                            INSERT INTO store_transactions_items
+                                (TRANSACTION_ID, ITEM_ID, PRICE, QUANTITY, TOTAL, IS_ACTIVE, CREATED_DATE)
+                            VALUES (?, ?, 0, ?, 0, 1, NOW())
+                        `, [placeholderId, itemId, netWeight]);
                     }
-                    await pool.query(`
-                        INSERT INTO store_transactions_items
-                            (TRANSACTION_ID, ITEM_ID, PRICE, QUANTITY, TOTAL, IS_ACTIVE, CREATED_DATE)
-                        VALUES (?, ?, 0, ?, 0, 1, NOW())
-                    `, [placeholderId, itemId, netWeight]);
+                    console.log(`[WeightSync] Created stock placeholder tx (ID: ${placeholderId}) for ${code} with ${weightItems.length} item(s)`);
                 }
-                console.log(`[WeightSync] Created stock placeholder tx (ID: ${placeholderId}) for ${code} with ${weightItems.length} item(s)`);
             }
         } catch (crossCheckError) {
             // Non-fatal — log and continue
