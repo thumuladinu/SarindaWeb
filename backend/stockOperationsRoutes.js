@@ -2113,112 +2113,102 @@ router.post('/api/stock-ops/trips', async (req, res) => {
 
         const operations = await pool.query(query, params);
 
-        // Fetch items for each operation
-        for (let op of operations) {
-            // Get base items
-            const baseItems = await pool.query(
-                'SELECT * FROM store_stock_operation_items WHERE OP_ID = ? AND IS_ACTIVE = 1',
-                [op.OP_ID]
-            );
+        // Bulk Fetch all related data
+        if (operations.length > 0) {
+            const opIds = operations.map(o => o.OP_ID);
 
-            // Check if operation has conversions
-            const conversions = await pool.query(
-                'SELECT * FROM store_stock_operation_conversions WHERE OP_ID = ? AND IS_ACTIVE = 1',
-                [op.OP_ID]
-            );
+            // 1. Bulk Items & Conversions
+            const allItems = await pool.query('SELECT * FROM store_stock_operation_items WHERE OP_ID IN (?) AND IS_ACTIVE = 1', [opIds]);
+            const allConversions = await pool.query('SELECT * FROM store_stock_operation_conversions WHERE OP_ID IN (?) AND IS_ACTIVE = 1', [opIds]);
 
-            // Calculate the total converted quantity ONCE per operation (sum of all destination quantities)
-            const totalDestQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
-
-            // Get the source item (first item in the operation)
-            const sourceItem = baseItems[0] || {};
-
-            // Special handling for ops 3, 4 (Full/Partial + Sales)
-            const isOpWithSales = [3, 4].includes(op.OP_TYPE);
-            const soldQty = parseFloat(sourceItem.SOLD_QUANTITY) || 0;
-            const clearedQty = parseFloat(sourceItem.CLEARED_QUANTITY) || 0;
-            const originalStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
-
-            // Fetch the source item's AdjOut/StockClear transaction to get the actual "total removed" quantity
-            // IMPORTANT: The OP_CODE is stored in COMMENTS (e.g. "[S2-260213-CLR-WEIGH-004] ..."), NOT in CODE
-            // This matches exactly how getInventoryHistory finds transactions (line 1964 of storeTransactionRoutes.js)
-            const sourceTxRows = await pool.query(
-                `SELECT sti.QUANTITY, st.TYPE
-                 FROM store_transactions st 
-                 JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
-                 WHERE st.COMMENTS LIKE ? 
-                   AND sti.ITEM_ID = ? 
-                   AND st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1`,
-                [`[${op.OP_CODE}]%`, sourceItem.ITEM_ID]
-            );
-
-            // Find AdjOut/StockClear transaction (source removed)
-            const sourceAdjOut = sourceTxRows.find(r => r.TYPE === 'AdjOut' || r.TYPE === 'StockClear');
-            const adjustmentQty = sourceAdjOut ? parseFloat(sourceAdjOut.QUANTITY) : 0;
-
-            // Find Selling transaction (for ops 3, 4)
-            const sellingTx = sourceTxRows.find(r => r.TYPE === 'Selling');
-
-            // ===== Calculate mainQty: EXACT SAME LOGIC as getInventoryHistory (lines 2104-2116) =====
-            // Op 3, 4 (Sales):  mainQty = soldQty
-            // Op 1 (Full Clear): mainQty = adjustmentQty (NO subtraction of conversions)
-            // Op 2 (Partial):    mainQty = adjustmentQty - totalDestQty
-            let mainQty = 0;
-            if (isOpWithSales) {
-                // For Sales ops: main qty = sold amount (from operation items table)
-                // Fallback to Selling transaction if stored value is 0
-                mainQty = soldQty || (sellingTx ? parseFloat(sellingTx.QUANTITY) : 0);
-            } else if (op.OP_TYPE === 1) {
-                // Op 1 (Full Clear): main qty = total removed (entire stock cleared, NO subtraction)
-                mainQty = adjustmentQty || originalStock;
-            } else if (op.OP_TYPE === 2) {
-                // Op 2 (Partial Clear): main qty = total removed - converted
-                const totalRemoved = adjustmentQty || clearedQty;
-                mainQty = totalRemoved - totalDestQty;
-                if (mainQty < 0) mainQty = 0;
-            } else {
-                // For other ops (transfers, returns, etc.), use cleared quantity as-is
-                mainQty = clearedQty || adjustmentQty;
+            // 2. Bulk Source Transactions
+            const likeConditions = operations.map(() => 'st.COMMENTS LIKE ?').join(' OR ');
+            const likeParams = operations.map(op => `[${op.OP_CODE}]%`);
+            let allSourceTxs = [];
+            if (likeParams.length > 0) {
+                const txQuery = `
+                    SELECT sti.QUANTITY, st.TYPE, sti.ITEM_ID, st.COMMENTS
+                    FROM store_transactions st 
+                    JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                    WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 AND (${likeConditions})
+                `;
+                allSourceTxs = await pool.query(txQuery, likeParams);
             }
 
-            // Apply mainQty to ALL items in the operation
-            for (let item of baseItems) {
-                // Store the calculated mainQty for display
-                item.MAIN_QTY = mainQty;
-                item.CONVERTED_QTY = totalDestQty;
-                item.CONVERSIONS = conversions;
+            // 3. Bulk Billed Items
+            const billedOps = operations.filter(o => o.BILL_CODE);
+            let allBillItems = [];
+            if (billedOps.length > 0) {
+                const billCodes = billedOps.map(o => o.BILL_CODE);
+                const billQuery = `
+                    SELECT bi.PRICE, bi.QUANTITY, bi.TOTAL, bi.ITEM_ID, st.CODE as BILL_CODE
+                    FROM store_transactions st
+                    JOIN store_transactions_items bi ON st.TRANSACTION_ID = bi.TRANSACTION_ID
+                    WHERE st.CODE IN (?) AND bi.IS_ACTIVE = 1
+                `;
+                allBillItems = await pool.query(billQuery, [billCodes]);
             }
 
-            // If billed, fetch bill data for each item
-            if (op.BILL_CODE) {
+            // 4. Bulk Returns
+            const lorryOpIds = operations.filter(o => [7, 8].includes(o.OP_TYPE)).map(o => o.OP_ID);
+            let allReturns = [];
+            if (lorryOpIds.length > 0) {
+                allReturns = await pool.query('SELECT * FROM store_lorry_returns WHERE OP_ID IN (?) AND IS_ACTIVE = 1', [lorryOpIds]);
+            }
+
+            // Map data sequentially in Node.js Memory
+            for (let op of operations) {
+                const baseItems = allItems.filter(i => i.OP_ID === op.OP_ID);
+                const conversions = allConversions.filter(c => c.OP_ID === op.OP_ID);
+                const totalDestQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+                const sourceItem = baseItems[0] || {};
+                const isOpWithSales = [3, 4].includes(op.OP_TYPE);
+                const soldQty = parseFloat(sourceItem.SOLD_QUANTITY) || 0;
+                const clearedQty = parseFloat(sourceItem.CLEARED_QUANTITY) || 0;
+                const originalStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
+
+                const codePrefix = `[${op.OP_CODE}]`;
+                const sourceTxRows = allSourceTxs.filter(tx => tx.COMMENTS && tx.COMMENTS.startsWith(codePrefix) && (String(tx.ITEM_ID) === String(sourceItem.ITEM_ID)));
+
+                // Find AdjOut/StockClear transaction (source removed)
+                const sourceAdjOut = sourceTxRows.find(r => r.TYPE === 'AdjOut' || r.TYPE === 'StockClear');
+                const adjustmentQty = sourceAdjOut ? parseFloat(sourceAdjOut.QUANTITY) : 0;
+
+                // Find Selling transaction (for ops 3, 4)
+                const sellingTx = sourceTxRows.find(r => r.TYPE === 'Selling');
+
+                let mainQty = 0;
+                if (isOpWithSales) {
+                    mainQty = soldQty || (sellingTx ? parseFloat(sellingTx.QUANTITY) : 0);
+                } else if (op.OP_TYPE === 1) {
+                    mainQty = adjustmentQty || originalStock;
+                } else if (op.OP_TYPE === 2) {
+                    const totalRemoved = adjustmentQty || clearedQty;
+                    mainQty = totalRemoved - totalDestQty;
+                    if (mainQty < 0) mainQty = 0;
+                } else {
+                    mainQty = clearedQty || adjustmentQty;
+                }
+
                 for (let item of baseItems) {
-                    // Try to find bill_item data
-                    const billItems = await pool.query(
-                        `SELECT bi.PRICE, bi.QUANTITY, bi.TOTAL 
-                             FROM store_transactions st
-                             JOIN store_transactions_items bi ON st.TRANSACTION_ID = bi.TRANSACTION_ID
-                             WHERE st.CODE = ? AND bi.ITEM_ID = ? AND bi.IS_ACTIVE = 1
-                             LIMIT 1`,
-                        [op.BILL_CODE, item.ITEM_ID]
-                    );
+                    item.MAIN_QTY = mainQty;
+                    item.CONVERTED_QTY = totalDestQty;
+                    item.CONVERSIONS = conversions;
 
-                    if (billItems && billItems.length > 0) {
-                        item.BILL_PRICE_PER_KG = billItems[0].PRICE;
-                        item.BILL_QUANTITY = billItems[0].QUANTITY;
-                        item.BILL_TOTAL = billItems[0].TOTAL;
+                    if (op.BILL_CODE) {
+                        const bItem = allBillItems.find(b => b.BILL_CODE === op.BILL_CODE && String(b.ITEM_ID) === String(item.ITEM_ID));
+                        if (bItem) {
+                            item.BILL_PRICE_PER_KG = bItem.PRICE;
+                            item.BILL_QUANTITY = bItem.QUANTITY;
+                            item.BILL_TOTAL = bItem.TOTAL;
+                        }
                     }
                 }
-            }
 
-            // Set items for this operation
-            op.items = baseItems;
-
-            // Also fetch lorry returns if applicable, for completeness in the modal
-            if ([7, 8].includes(op.OP_TYPE)) {
-                op.returns = await pool.query(
-                    'SELECT * FROM store_lorry_returns WHERE OP_ID = ? AND IS_ACTIVE = 1',
-                    [op.OP_ID]
-                );
+                op.items = baseItems;
+                if ([7, 8].includes(op.OP_TYPE)) {
+                    op.returns = allReturns.filter(r => r.OP_ID === op.OP_ID);
+                }
             }
         }
 
@@ -2482,19 +2472,32 @@ router.post('/api/stock-ops/history-paginated', async (req, res) => {
             `;
             stockOpsRows = await pool.query(opsDetailQuery, [opsIds]);
 
-            // Populate items and conversions for operations
-            for (let op of stockOpsRows) {
-                op.items = await pool.query('SELECT * FROM store_stock_operation_items WHERE OP_ID = ? AND IS_ACTIVE = 1', [op.OP_ID]);
-                op.conversions = await pool.query('SELECT * FROM store_stock_operation_conversions WHERE OP_ID = ? AND IS_ACTIVE = 1', [op.OP_ID]);
+            // Bulk Fetch: Populate items and conversions for operations
+            if (stockOpsRows.length > 0) {
+                const fetchedOpIds = stockOpsRows.map(o => o.OP_ID);
+                const allItems = await pool.query('SELECT * FROM store_stock_operation_items WHERE OP_ID IN (?) AND IS_ACTIVE = 1', [fetchedOpIds]);
+                const allConversions = await pool.query('SELECT * FROM store_stock_operation_conversions WHERE OP_ID IN (?) AND IS_ACTIVE = 1', [fetchedOpIds]);
+
+                // Bulk fetch stock adjustments using dynamic OR conditions
+                const likeConditions = stockOpsRows.map(() => 'st.COMMENTS LIKE ?').join(' OR ');
+                const likeParams = stockOpsRows.map(op => `[${op.CODE}]%`);
 
                 const txQuery = `
-                    SELECT st.TYPE, sti.QUANTITY, sti.ITEM_ID, i.NAME as ITEM_NAME, i.CODE as ITEM_CODE
+                    SELECT st.TYPE, sti.QUANTITY, sti.ITEM_ID, i.NAME as ITEM_NAME, i.CODE as ITEM_CODE, st.COMMENTS
                     FROM store_transactions st
                     JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
                     LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
-                    WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 AND st.COMMENTS LIKE ?
+                    WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 AND (${likeConditions})
                 `;
-                op.stockAdjustments = await pool.query(txQuery, [`[${op.CODE}]%`]);
+                const allAdjustments = await pool.query(txQuery, likeParams);
+
+                // Re-map memory objects
+                for (let op of stockOpsRows) {
+                    op.items = allItems.filter(item => item.OP_ID === op.OP_ID);
+                    op.conversions = allConversions.filter(conv => conv.OP_ID === op.OP_ID);
+                    const codePrefix = `[${op.CODE}]`;
+                    op.stockAdjustments = allAdjustments.filter(adj => adj.COMMENTS && adj.COMMENTS.startsWith(codePrefix));
+                }
             }
         }
 
