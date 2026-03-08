@@ -52,12 +52,18 @@ const TripsPage = () => {
         }
     };
 
+    const firstUpdate = React.useRef(true);
+
     useEffect(() => {
         fetchTripsData(pagination.current, pagination.pageSize, tripIdSearch, dateRange);
     }, []);
 
     // Debounce Search
     useEffect(() => {
+        if (firstUpdate.current) {
+            firstUpdate.current = false;
+            return;
+        }
         const timer = setTimeout(() => {
             fetchTripsData(1, pagination.pageSize, tripIdSearch, dateRange);
         }, 600);

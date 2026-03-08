@@ -129,8 +129,21 @@ export default function StockOperations() {
         fetchDestinations(); // Fetch destinations
     }, []); // Only fetch once on mount, filtering handles the rest or manual refresh
 
+    const firstHistoryUpdate = React.useRef(true);
+
     useEffect(() => {
-        fetchHistory(historyPagination.current, historyPagination.pageSize);
+        if (firstHistoryUpdate.current) {
+            firstHistoryUpdate.current = false;
+            fetchHistory(historyPagination.current, historyPagination.pageSize);
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            // Reset to page 1 on filter changes automatically
+            fetchHistory(1, historyPagination.pageSize);
+        }, 500);
+
+        return () => clearTimeout(timer);
     }, [historyFilters]);
 
     // Update Preview when inputs change
