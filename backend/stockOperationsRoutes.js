@@ -13,8 +13,8 @@ const util = require('util');
 const { calculateCurrentStock } = require("./stockCalculator");
 const dateTimeUtils = require("./dateTimeUtils");
 
-// SQL Helper for Stock Operations (Always server-created UTC)
-const OP_SL_TIME_SQL = (field = 'CREATED_DATE') => `CONVERT_TZ(${field}, '+00:00', '+05:30')`;
+// SQL// Helper for SL time conversion in stock_operations
+const OP_SL_TIME_SQL = (field = 'CREATED_DATE') => `CASE WHEN ${field} > '1970-01-01' THEN CONVERT_TZ(${field}, '+00:00', '+05:30') ELSE NULL END`;
 
 router.use(cors());
 
@@ -2028,7 +2028,8 @@ router.get('/api/stock-ops/returns', async (req, res) => {
 
 router.post('/api/stock-ops/trips', async (req, res) => {
     try {
-        const { storeNo, startDate, endDate, tripId, itemName, limit = 50 } = req.body;
+        const { storeNo, startDate, endDate, tripId, itemName, limit = 50, page = 1 } = req.body;
+        const offset = (page - 1) * limit;
 
         let query = `
             SELECT DISTINCT so.*,
@@ -2073,8 +2074,42 @@ router.post('/api/stock-ops/trips', async (req, res) => {
             params.push(`%${itemName}%`, `%${itemName}%`);
         }
 
-        query += ' ORDER BY so.CREATED_DATE DESC LIMIT ?';
-        params.push(parseInt(limit));
+        // First get the total count for pagination
+        let countQuery = `
+            SELECT COUNT(DISTINCT so.OP_ID) as total
+            FROM store_stock_operations so
+            LEFT JOIN store_stock_operation_items soi ON so.OP_ID = soi.OP_ID
+            WHERE so.IS_ACTIVE = 1
+              AND so.TRIP_ID IS NOT NULL
+        `;
+        const countParams = [];
+
+        if (storeNo) {
+            countQuery += ' AND so.STORE_NO = ?';
+            countParams.push(storeNo);
+        }
+        if (startDate) {
+            countQuery += ` AND DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) >= ?`;
+            countParams.push(startDate);
+        }
+        if (endDate) {
+            countQuery += ` AND DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) <= ?`;
+            countParams.push(endDate);
+        }
+        if (tripId) {
+            countQuery += ' AND so.TRIP_ID LIKE ?';
+            countParams.push(`%${tripId}%`);
+        }
+        if (itemName) {
+            countQuery += ' AND (soi.ITEM_NAME LIKE ? OR soi.ITEM_CODE LIKE ?)';
+            countParams.push(`%${itemName}%`, `%${itemName}%`);
+        }
+
+        const countResult = await pool.query(countQuery, countParams);
+        const total = countResult[0] ? countResult[0].total : 0;
+
+        query += ' ORDER BY so.CREATED_DATE DESC LIMIT ? OFFSET ?';
+        params.push(parseInt(limit), parseInt(offset));
 
         const operations = await pool.query(query, params);
 
@@ -2188,7 +2223,7 @@ router.post('/api/stock-ops/trips', async (req, res) => {
         }
 
 
-        return res.status(200).json({ success: true, trips: operations });
+        return res.status(200).json({ success: true, trips: operations, total: total });
 
     } catch (error) {
         console.error('[Stock Ops] Trips error:', error);
@@ -2197,3 +2232,417 @@ router.post('/api/stock-ops/trips', async (req, res) => {
 });
 
 module.exports = router;
+// =====================================================
+// GET STOCK HISTORY (PAGINATED) - For Stock Operations Advanced History
+// =====================================================
+
+router.post('/api/stock-ops/history-paginated', async (req, res) => {
+    try {
+        const { startDate, endDate, store, type, item, search, limit = 50, page = 1 } = req.body;
+        const offset = (page - 1) * limit;
+
+        // Define SL_TIME_SQL for transactions (matching getInventoryHistory logic)
+        // Handled strict SQL mode by gracefully handling zero dates.
+        const SL_TIME_SQL = (field = 'st.EDITED_DATE', fallbackField = '') => {
+            return fallbackField
+                ? `COALESCE(
+                     CASE WHEN ${field} > '1970-01-01' THEN CONVERT_TZ(${field}, '+00:00', '+05:30') ELSE NULL END,
+                     CONVERT_TZ((SELECT CREATED_DATE FROM store_transactions WHERE CODE = ${fallbackField} AND is_active = 1 LIMIT 1), '+00:00', '+05:30')
+                   )`
+                : `CASE WHEN ${field} > '1970-01-01' THEN CONVERT_TZ(${field}, '+00:00', '+05:30') ELSE NULL END`;
+        };
+        // OP_SL_TIME_SQL is already defined globally in this file
+
+        // Base Query Definitions - We essentially mirror getInventoryHistory logic but natively support filtering before fetching heavy metadata
+
+        // 1. Transactions Base Query
+        let txWhereClauses = ["st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 AND st.TYPE IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'StockClear') AND (st.COMMENTS IS NULL OR (st.COMMENTS NOT LIKE '[OP-%' AND st.COMMENTS NOT LIKE '[S%-%-CLR-%'))"];
+        let txParams = [];
+
+        // 2. Stock Operations Base Query
+        let opsWhereClauses = ["so.IS_ACTIVE = 1"];
+        let opsParams = [];
+
+        // --- Apply Filters ---
+
+        // Date Filter
+        if (startDate) {
+            txWhereClauses.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= ?`);
+            txParams.push(startDate);
+            opsWhereClauses.push(`DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) >= ?`);
+            opsParams.push(startDate);
+        }
+        if (endDate) {
+            txWhereClauses.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?`);
+            txParams.push(endDate);
+            opsWhereClauses.push(`DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) <= ?`);
+            opsParams.push(endDate);
+        }
+
+        // Store Filter
+        if (store && store !== 'all') {
+            txWhereClauses.push("st.STORE_NO = ?");
+            txParams.push(store);
+            opsWhereClauses.push("so.STORE_NO = ?");
+            opsParams.push(store);
+        }
+
+        // Item Filter 
+        // Note: For Stock Operations, filtering by item requires joining with items table. 
+        // For performance, we'll do an EXISTS clause or similar.
+        if (item && item !== 'all') {
+            txWhereClauses.push("sti.ITEM_ID = ?");
+            txParams.push(item);
+
+            opsWhereClauses.push("EXISTS (SELECT 1 FROM store_stock_operation_items soi WHERE soi.OP_ID = so.OP_ID AND soi.ITEM_ID = ? AND soi.IS_ACTIVE = 1)");
+            opsParams.push(item);
+        }
+
+        // Search Filter (Code, Trip ID, Item Name)
+        if (search && search.trim()) {
+            const searchPattern = `%${search.trim()}%`;
+
+            // For Transactions
+            txWhereClauses.push("(st.CODE LIKE ? OR i.NAME LIKE ? OR i.CODE LIKE ?)");
+            txParams.push(searchPattern, searchPattern, searchPattern);
+
+            // For Stock Operations
+            opsWhereClauses.push(`(
+                so.OP_CODE LIKE ? OR 
+                so.TRIP_ID LIKE ? OR 
+                so.BILL_CODE LIKE ? OR 
+                EXISTS (SELECT 1 FROM store_stock_operation_items soi WHERE soi.OP_ID = so.OP_ID AND (soi.ITEM_NAME LIKE ? OR soi.ITEM_CODE LIKE ?) AND soi.IS_ACTIVE=1)
+            )`);
+            opsParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+        }
+
+        // Type Filter (Translating Frontend 'AdjIn', 'AdjOut', 'StockClear', 'Opening' into equivalent DB logic)
+        // Frontend sends: 'AdjIn', 'AdjOut', 'StockClear', 'Opening' (For manual transactions)
+        // Or specific stock operation names. For simplicity if 'type' is one of the manual ones, we might need to filter stock ops too.
+        // Actually, matching the frontend's logic: `item.DISPLAY_TYPE === historyFilters.type`
+        // We will build a unified query logic or apply it after a broad fetch if needed, 
+        // but for pagination, we MUST do it in SQL.
+
+        let txTypeCondition = true;
+        let opsTypeCondition = true;
+
+        if (type && type !== 'all') {
+            // If the type is one of the strict transaction types
+            if (['AdjIn', 'AdjOut', 'Opening', 'StockClear'].includes(type) || type.includes('Adjustment')) {
+                // For transactions, we need to map the DisplayType logic:
+                // "COMMENTS LIKE '%Opening Stock%' -> Opening" etc.
+                if (type === 'Opening') {
+                    txWhereClauses.push("(st.TYPE = 'Opening' OR st.COMMENTS LIKE '%Opening Stock%')");
+                    opsTypeCondition = false; // Stock ops are never 'Opening'
+                } else if (type === 'StockClear') {
+                    txWhereClauses.push("(st.TYPE = 'StockClear' OR st.COMMENTS LIKE '%Stock Cleared%')");
+                    // Assuming Stock Ops 1, 2, 3, 4, 6, 7, 8 involve clearance. Frontend handles DISPLAY_TYPE = OP_TYPE_NAME
+                    // This gets tricky if 'type' value exactly matches OP_TYPE_NAME from previous query.
+                } else if (type === 'AdjIn') {
+                    txWhereClauses.push("(st.TYPE = 'AdjIn' OR st.COMMENTS LIKE '%Stock Added%')");
+                } else if (type === 'AdjOut') {
+                    txWhereClauses.push("(st.TYPE = 'AdjOut' OR st.COMMENTS LIKE '%Stock Removed%')");
+                }
+            } else {
+                // It might be a stock operation type exact string match e.g. 'Partial Clear (Standard)'
+                txTypeCondition = false; // Matches no standard transactions
+
+                // Map the string to OP_TYPE numbers
+                const typeMap = {
+                    'Full Clear (Standard)': [1],
+                    'Partial Clear (Standard)': [2],
+                    'Full Clear + Sales': [3],
+                    'Partial Clear + Sales': [4],
+                    'Transfer (Standard)': [5],
+                    'Transfer + Full Clear': [6],
+                    'Partial Clear + Lorry': [7],
+                    'Full Clear + Lorry': [8],
+                    'Item Conversion': [9],
+                    'Cash Float Adjustment': [10],
+                    'Stock Return': [11]
+                };
+
+                if (typeMap[type]) {
+                    opsWhereClauses.push(`so.OP_TYPE IN (${typeMap[type].join(',')})`);
+                }
+            }
+        }
+
+        // --- Build Combined Query ---
+
+        const txSelect = `
+            SELECT 
+                st.TRANSACTION_ID as ID,
+                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as SORT_DATE,
+                'transaction' as SOURCE
+            FROM store_transactions st
+            JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+            LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
+            WHERE ${txWhereClauses.join(' AND ')}
+        `;
+
+        const opsSelect = `
+            SELECT 
+                so.OP_ID as ID,
+                ${OP_SL_TIME_SQL('so.CREATED_DATE')} as SORT_DATE,
+                'stock_operation' as SOURCE
+            FROM store_stock_operations so
+            WHERE ${opsWhereClauses.join(' AND ')}
+        `;
+
+        // We use UNION to combine the IDs and sort dates, so we can accurately paginate over the combined set
+
+        let unionQuery = "";
+        let combinedParams = [];
+
+        if (txTypeCondition && opsTypeCondition) {
+            unionQuery = `${txSelect} UNION ALL ${opsSelect}`;
+            combinedParams = [...txParams, ...opsParams];
+        } else if (txTypeCondition) {
+            unionQuery = txSelect;
+            combinedParams = [...txParams];
+        } else if (opsTypeCondition) {
+            unionQuery = opsSelect;
+            combinedParams = [...opsParams];
+        }
+
+        // Count Query
+        const countQuery = `SELECT COUNT(*) as total FROM (${unionQuery}) as combined_results`;
+        const countResult = await pool.query(countQuery, combinedParams);
+        const total = countResult[0] ? countResult[0].total : 0;
+
+        // Fetch Paginated IDs
+        const paginatedQuery = `
+            SELECT * FROM (${unionQuery}) as sorted_results
+            ORDER BY SORT_DATE DESC
+            LIMIT ? OFFSET ?
+        `;
+        combinedParams.push(parseInt(limit), parseInt(offset));
+
+        const paginatedIds = await pool.query(paginatedQuery, combinedParams);
+
+        if (paginatedIds.length === 0) {
+            return res.json({ success: true, result: [], total: total });
+        }
+
+        // Separate IDs by source
+        const txIds = paginatedIds.filter(r => r.SOURCE === 'transaction').map(r => r.ID);
+        const opsIds = paginatedIds.filter(r => r.SOURCE === 'stock_operation').map(r => r.ID);
+
+        // --- Fetch Full Details for the current page ---
+        let transactionRows = [];
+        let stockOpsRows = [];
+
+        if (txIds.length > 0) {
+            const txDetailQuery = `
+                SELECT 
+                    st.TRANSACTION_ID, st.CODE, st.TYPE, st.STORE_NO, st.COMMENTS,
+                    ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
+                    st.CREATED_BY, sti.ITEM_ID, sti.QUANTITY as ITEM_QTY,
+                    i.NAME as ITEM_NAME, i.CODE as ITEM_CODE, u.NAME as CREATED_BY_NAME,
+                    'transaction' as SOURCE_TYPE
+                FROM store_transactions st
+                JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
+                LEFT JOIN user_details u ON st.CREATED_BY = u.USER_ID
+                WHERE st.TRANSACTION_ID IN (?)
+            `;
+            transactionRows = await pool.query(txDetailQuery, [txIds]);
+        }
+
+        if (opsIds.length > 0) {
+            const opsDetailQuery = `
+                SELECT 
+                    so.OP_ID, so.OP_CODE as CODE, so.REFERENCE_OP_ID,
+                    parent_op.OP_CODE as REF_OP_CODE, parent_op.BILL_CODE as REF_BILL_CODE,
+                    so.OP_TYPE, so.CLEARANCE_TYPE, so.STORE_NO, so.COMMENTS,
+                    ${OP_SL_TIME_SQL('so.CREATED_DATE')} as CREATED_DATE,
+                    so.CREATED_BY, so.CREATED_BY_NAME, so.WASTAGE_AMOUNT, so.SURPLUS_AMOUNT,
+                    so.CUSTOMER_NAME, so.LORRY_NAME, so.DRIVER_NAME, so.DESTINATION,
+                    so.BILL_CODE, so.BILL_AMOUNT, st_bill.SUB_TOTAL as TRANSACTION_BILL_AMOUNT,
+                    'stock_operation' as SOURCE_TYPE,
+                    CASE so.OP_TYPE
+                        WHEN 1 THEN 'Full Clear (Standard)'
+                        WHEN 2 THEN 'Partial Clear (Standard)'
+                        WHEN 3 THEN 'Full Clear + Sales'
+                        WHEN 4 THEN 'Partial Clear + Sales'
+                        WHEN 5 THEN 'Transfer (Standard)'
+                        WHEN 6 THEN 'Transfer + Full Clear'
+                        WHEN 7 THEN 'Partial Clear + Lorry'
+                        WHEN 8 THEN 'Full Clear + Lorry'
+                        WHEN 9 THEN 'Item Conversion'
+                        WHEN 10 THEN 'Cash Float Adjustment'
+                        WHEN 11 THEN 'Stock Return'
+                        ELSE 'Stock Operation'
+                    END AS OP_TYPE_NAME
+                FROM store_stock_operations so
+                LEFT JOIN store_stock_operations parent_op ON so.REFERENCE_OP_ID = parent_op.OP_ID
+                LEFT JOIN store_transactions st_bill ON so.BILL_CODE COLLATE utf8mb4_unicode_ci = st_bill.CODE COLLATE utf8mb4_unicode_ci AND st_bill.IS_ACTIVE = 1
+                WHERE so.OP_ID IN (?)
+            `;
+            stockOpsRows = await pool.query(opsDetailQuery, [opsIds]);
+
+            // Populate items and conversions for operations
+            for (let op of stockOpsRows) {
+                op.items = await pool.query('SELECT * FROM store_stock_operation_items WHERE OP_ID = ? AND IS_ACTIVE = 1', [op.OP_ID]);
+                op.conversions = await pool.query('SELECT * FROM store_stock_operation_conversions WHERE OP_ID = ? AND IS_ACTIVE = 1', [op.OP_ID]);
+
+                const txQuery = `
+                    SELECT st.TYPE, sti.QUANTITY, sti.ITEM_ID, i.NAME as ITEM_NAME, i.CODE as ITEM_CODE
+                    FROM store_transactions st
+                    JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                    LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
+                    WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 AND st.COMMENTS LIKE ?
+                `;
+                op.stockAdjustments = await pool.query(txQuery, [`[${op.CODE}]%`]);
+            }
+        }
+
+        // --- Process and Format Data (Reusing getInventoryHistory mapping logic) ---
+
+        const transactionResult = transactionRows.map(row => {
+            let displayType = row.TYPE;
+            const comments = row.COMMENTS || '';
+
+            if (comments.includes('Opening Stock')) displayType = 'Opening';
+            else if (comments.includes('Stock Cleared')) displayType = 'StockClear';
+            else if (comments.includes('Stock Added')) displayType = 'AdjIn';
+            else if (comments.includes('Stock Removed')) displayType = 'AdjOut';
+
+            // Filter out by type exactly as getInventoryHistory would, but we do this IF 'type' filter is set and it matched our generalized SQL types 
+            // In typical use, 'Opening' was already filtered. But we'll enforce the exact mapping.
+            return {
+                ...row,
+                DISPLAY_TYPE: displayType,
+                SOURCE_TYPE: 'transaction'
+            };
+        });
+
+        // Re-Filter exact type if we matched purely by generalized WHERE clauses earlier (This ensures 100% accuracy to previous logic)
+        let filteredTxResults = transactionResult;
+        if (type && type !== 'all' && ['AdjIn', 'AdjOut', 'Opening', 'StockClear'].includes(type)) {
+            filteredTxResults = transactionResult.filter(r => r.DISPLAY_TYPE === type);
+        } else if (type && type !== 'all' && !['AdjIn', 'AdjOut', 'Opening', 'StockClear'].includes(type) && !type.includes('Adjustment')) {
+            filteredTxResults = []; // Filter out plain transactions if type is a specific stock operation string
+        }
+
+        const stockOpsResult = stockOpsRows.map(row => {
+            const sourceItem = row.items?.[0] || {};
+            const conversions = row.conversions || [];
+            const adjustments = row.stockAdjustments || [];
+
+            const isOpWithSales = [3, 4].includes(row.OP_TYPE);
+            let soldQty = parseFloat(sourceItem.SOLD_QUANTITY) || 0;
+            let originalStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
+
+            const sellingTx = adjustments.find(a => a.TYPE === 'Selling' && (a.ITEM_ID === sourceItem.ITEM_ID || String(a.ITEM_ID) === String(sourceItem.ITEM_ID)));
+            const sourceAdjOut = adjustments.find(a => (a.TYPE === 'AdjOut' || a.TYPE === 'StockClear') && (a.ITEM_ID === sourceItem.ITEM_ID || String(a.ITEM_ID) === String(sourceItem.ITEM_ID)));
+            const sourceAdjIn = adjustments.find(a => a.TYPE === 'AdjIn' && (a.ITEM_ID === sourceItem.ITEM_ID || String(a.ITEM_ID) === String(sourceItem.ITEM_ID)));
+
+            let adjustmentQty = 0;
+            let adjustmentType = 'AdjOut';
+            let previousStock = originalStock;
+
+            if (isOpWithSales) {
+                if (row.OP_TYPE === 3) adjustmentQty = previousStock;
+                else {
+                    const convertedQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+                    adjustmentQty = soldQty + convertedQty;
+                }
+                adjustmentType = 'AdjOut';
+                if (!previousStock && sourceAdjOut) previousStock = parseFloat(sourceAdjOut.QUANTITY) || 0;
+            } else if (sourceAdjOut) {
+                adjustmentQty = parseFloat(sourceAdjOut.QUANTITY) || 0;
+                adjustmentType = 'AdjOut';
+                if (!previousStock) previousStock = adjustmentQty;
+            } else if (row.OP_TYPE === 11) {
+                const totalDestQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+                if (totalDestQty > 0) adjustmentQty = totalDestQty;
+                else adjustmentQty = parseFloat(sourceItem.CLEARED_QUANTITY) || 0;
+                adjustmentType = 'AdjIn';
+                previousStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
+            } else if (sourceAdjIn && !conversions.some(c => c.DEST_ITEM_ID === sourceItem.ITEM_ID || String(c.DEST_ITEM_ID) === String(sourceItem.ITEM_ID))) {
+                adjustmentQty = parseFloat(sourceAdjIn.QUANTITY) || 0;
+                adjustmentType = 'AdjIn';
+                if (!previousStock) previousStock = -adjustmentQty;
+            }
+
+            const totalDestQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+            let wastage = parseFloat(row.WASTAGE_AMOUNT) || 0;
+            let surplus = parseFloat(row.SURPLUS_AMOUNT) || 0;
+
+            if (!wastage && !surplus && conversions.length > 0) {
+                if (previousStock > 0) {
+                    const baseForCalc = isOpWithSales ? (previousStock - soldQty) : previousStock;
+                    const diff = baseForCalc - totalDestQty;
+                    if (diff > 0) wastage = diff;
+                    else if (diff < 0) surplus = Math.abs(diff);
+                } else if (previousStock < 0) {
+                    surplus = Math.abs(previousStock) + totalDestQty;
+                } else if (previousStock === 0 && totalDestQty > 0) {
+                    surplus = totalDestQty;
+                }
+            }
+
+            let sourceStoreNo = row.STORE_NO;
+            let targetStoreNo = row.STORE_NO === 1 ? 2 : 1;
+
+            const otherStoreItem = (row.items || []).find(i => i.STORE_NO !== row.STORE_NO);
+            if (otherStoreItem) targetStoreNo = otherStoreItem.STORE_NO;
+
+            const sourceItems = (row.items || []).filter(i => i.STORE_NO === sourceStoreNo);
+            const targetItems = (row.items || []).filter(i => i.STORE_NO !== sourceStoreNo);
+
+            let mainQty = 0;
+            if (isOpWithSales) mainQty = soldQty;
+            else if (row.OP_TYPE === 2) {
+                mainQty = adjustmentQty - totalDestQty;
+                if (mainQty < 0) mainQty = 0;
+            } else if (row.OP_TYPE === 1) mainQty = adjustmentQty;
+
+            const breakdown = {
+                source: {
+                    itemId: sourceItem.ITEM_ID, itemCode: sourceItem.ITEM_CODE, itemName: sourceItem.ITEM_NAME,
+                    adjustmentQty: adjustmentQty, adjustmentType: adjustmentType, previousStock: previousStock,
+                    soldQty: soldQty, mainQty: mainQty
+                },
+                destinations: conversions.map(c => ({
+                    itemId: c.DEST_ITEM_ID, itemCode: c.DEST_ITEM_CODE, itemName: c.DEST_ITEM_NAME, quantity: parseFloat(c.DEST_QUANTITY) || 0
+                })),
+                targetItems: targetItems.map(i => ({
+                    itemId: i.ITEM_ID, itemCode: i.ITEM_CODE, itemName: i.ITEM_NAME,
+                    previousStock: parseFloat(i.ORIGINAL_STOCK) || 0, addedQty: Math.abs(parseFloat(i.CLEARED_QUANTITY) || 0),
+                    currentStock: parseFloat(i.REMAINING_STOCK) || 0, storeNo: i.STORE_NO
+                })),
+                store2Items: targetItems.map(i => ({
+                    itemId: i.ITEM_ID, itemCode: i.ITEM_CODE, itemName: i.ITEM_NAME,
+                    previousStock: parseFloat(i.ORIGINAL_STOCK) || 0, addedQty: Math.abs(parseFloat(i.CLEARED_QUANTITY) || 0), currentStock: parseFloat(i.REMAINING_STOCK) || 0
+                })),
+                sourceStore: sourceStoreNo, targetStore: targetStoreNo, isTransferOperation: [5, 6].includes(row.OP_TYPE),
+                wastage: wastage, surplus: surplus, totalDestQty: totalDestQty, isSalesOperation: isOpWithSales,
+                billCode: row.BILL_CODE, billAmount: parseFloat(row.TRANSACTION_BILL_AMOUNT) || parseFloat(row.BILL_AMOUNT) || 0,
+                lorryName: row.LORRY_NAME || null, driverName: row.DRIVER_NAME || null, destination: row.DESTINATION || null,
+                referenceOpId: row.REFERENCE_OP_ID, refOpCode: row.REF_OP_CODE, refBillCode: row.REF_BILL_CODE
+            };
+
+            return {
+                TRANSACTION_ID: `OP-${row.OP_ID}`, OP_ID: row.OP_ID, OP_CODE: row.CODE, CODE: row.CODE, TYPE: `OP_${row.OP_TYPE}`,
+                STORE_NO: row.STORE_NO, COMMENTS: row.COMMENTS, CREATED_DATE: row.CREATED_DATE, CREATED_BY: row.CREATED_BY, CREATED_BY_NAME: row.CREATED_BY_NAME,
+                ITEM_NAME: sourceItem.ITEM_NAME || 'Unknown Item', ITEM_CODE: sourceItem.ITEM_CODE || '', ITEM_ID: sourceItem.ITEM_ID || null,
+                ITEM_QTY: adjustmentQty, DISPLAY_TYPE: row.OP_TYPE_NAME, SOURCE_TYPE: 'stock_operation', OP_TYPE: row.OP_TYPE, OP_TYPE_NAME: row.OP_TYPE_NAME,
+                CLEARANCE_TYPE: row.CLEARANCE_TYPE, WASTAGE_AMOUNT: wastage, SURPLUS_AMOUNT: surplus, SOLD_QUANTITY: soldQty, CUSTOMER_NAME: row.CUSTOMER_NAME,
+                LORRY_NAME: row.LORRY_NAME, BILL_CODE: row.BILL_CODE, BILL_AMOUNT: row.BILL_AMOUNT,
+                items: row.items, conversions: row.conversions, breakdown: breakdown
+            };
+        });
+
+        // 5. Combine and sort
+        const allResults = [...filteredTxResults, ...stockOpsResult].sort((a, b) => new Date(b.CREATED_DATE) - new Date(a.CREATED_DATE));
+
+        return res.json({ success: true, result: allResults, total: total });
+
+    } catch (e) {
+        console.error("Error fetching paginated inventory history:", e);
+        return res.status(500).json({ success: false, message: e.message });
+    }
+});

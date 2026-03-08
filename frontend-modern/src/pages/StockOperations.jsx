@@ -6,7 +6,7 @@
    ===================================================== */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { message, notification, Modal, Button, Input, Select, DatePicker, Radio, Tag, Spin, InputNumber, Popconfirm, Table, Descriptions, Checkbox } from 'antd';
+import { message, notification, Modal, Button, Input, Select, DatePicker, Radio, Tag, Spin, InputNumber, Popconfirm, Table, Descriptions, Checkbox, Pagination } from 'antd';
 import {
     DeleteOutlined,
     StockOutlined,
@@ -63,14 +63,9 @@ export default function StockOperations() {
     const [historyLoading, setHistoryLoading] = useState(false);
 
     // History Filters State
-    const [historyFilters, setHistoryFilters] = useState({
-        search: '',
-        store: 'all',
-        type: 'all', // 'AdjIn', 'AdjOut', 'StockClear', 'Opening' - mapped from Op Types
-        item: 'all',
-        dateRange: null
-    });
+    const [historyFilters, setHistoryFilters] = useState({ search: '', store: 'all', type: 'all', item: 'all', dateRange: null });
     const [filtersCollapsed, setFiltersCollapsed] = useState(true);
+    const [historyPagination, setHistoryPagination] = useState({ current: 1, pageSize: 12, total: 0 });
 
     // Detail View Modal State
     const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -130,10 +125,13 @@ export default function StockOperations() {
     // Initial Load
     useEffect(() => {
         fetchProducts();
-        fetchHistory();
         fetchCustomers(); // Fetch customers
         fetchDestinations(); // Fetch destinations
     }, []); // Only fetch once on mount, filtering handles the rest or manual refresh
+
+    useEffect(() => {
+        fetchHistory(historyPagination.current, historyPagination.pageSize);
+    }, [historyFilters]);
 
     // Update Preview when inputs change
     useEffect(() => {
@@ -188,19 +186,24 @@ export default function StockOperations() {
         }
     };
 
-    const fetchHistory = async () => {
+    const fetchHistory = async (page = 1, limit = 12) => {
         setHistoryLoading(true);
         try {
-            // Using getInventoryHistory to match Inventory page logic
-            // Allow fetching a wider range to show history properly
-            const response = await axios.post('/api/getInventoryHistory', {
+            const payload = {
                 startDate: historyFilters.dateRange ? historyFilters.dateRange[0].format('YYYY-MM-DD') : dayjs().subtract(14, 'day').format('YYYY-MM-DD'),
-                endDate: historyFilters.dateRange ? historyFilters.dateRange[1].format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD')
-            });
+                endDate: historyFilters.dateRange ? historyFilters.dateRange[1].format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+                limit,
+                page
+            };
+            if (historyFilters.search) payload.search = historyFilters.search;
+            if (historyFilters.store && historyFilters.store !== 'all') payload.store = historyFilters.store;
+            if (historyFilters.type && historyFilters.type !== 'all') payload.type = historyFilters.type;
+            if (historyFilters.item && historyFilters.item !== 'all') payload.item = historyFilters.item;
+
+            const response = await axios.post('/api/stock-ops/history-paginated', payload);
             if (response.data.success) {
-                // Filter to show ONLY Stock Operations
-                const filtered = response.data.result.filter(h => h.SOURCE_TYPE === 'stock_operation');
-                setHistory(filtered);
+                setHistory(response.data.result || []);
+                setHistoryPagination(prev => ({ ...prev, current: page, pageSize: limit, total: response.data.total || 0 }));
             }
         } catch (error) {
             console.error('Failed to fetch history', error);
@@ -291,22 +294,8 @@ export default function StockOperations() {
         });
     };
 
-    // Filter History Data locally based on UI filters
-    const filteredHistory = useMemo(() => {
-        return history.filter(item => {
-            const matchSearch = historyFilters.search === '' ||
-                (item.CODE && item.CODE.toLowerCase().includes(historyFilters.search.toLowerCase())) ||
-                (item.ITEM_NAME && item.ITEM_NAME.toLowerCase().includes(historyFilters.search.toLowerCase()));
-
-            const matchStore = historyFilters.store === 'all' || String(item.STORE_NO) === String(historyFilters.store);
-
-            const matchType = historyFilters.type === 'all' || item.DISPLAY_TYPE === historyFilters.type;
-
-            const matchItem = historyFilters.item === 'all' || String(item.ITEM_ID) === String(historyFilters.item);
-
-            return matchSearch && matchStore && matchType && matchItem;
-        });
-    }, [history, historyFilters]);
+    // Filter History Data locally based on UI filters - No longer needed, handled by backend
+    const filteredHistory = history;
 
     const updateStockPreview = async () => {
         const currentStock = selectedStore === 1
@@ -811,9 +800,9 @@ export default function StockOperations() {
         { title: 'Type', dataIndex: 'DISPLAY_TYPE', key: 'TYPE', width: 180, render: (type) => <Tag icon={['AdjIn', 'Opening'].includes(type) ? <RiseOutlined /> : <FallOutlined />} color={['AdjIn', 'Opening'].includes(type) ? 'success' : 'error'} style={{ whiteSpace: 'nowrap' }}>{type}</Tag> },
         { title: 'Item', dataIndex: 'ITEM_NAME', key: 'ITEM', render: (text, record) => <div className="flex flex-col"><span className="font-medium">{record.ITEM_NAME}</span><span className="text-xs text-gray-400">{record.ITEM_CODE}</span></div> },
         { title: 'Store', dataIndex: 'STORE_NO', key: 'STORE', width: 70, align: 'center', render: (store) => <Tag>S{store}</Tag> },
-        { title: 'Reason / Notes', dataIndex: 'COMMENTS', key: 'NOTE', ellipsis: true, className: 'text-xs text-gray-500' },
+        { title: 'Reason / Notes', dataIndex: 'COMMENTS', key: 'NOTE', ellipsis: true, className: 'hidden xl:table-cell text-xs text-gray-500' },
         {
-            title: '', key: 'action', width: 50, render: (_, record) => (
+            title: '', key: 'action', width: 50, className: 'w-[50px] min-w-[50px] max-w-[50px]', render: (_, record) => (
                 currentUser?.ROLE !== 'MONITOR' ? (
                     <div onClick={(e) => e.stopPropagation()}>
                         <Popconfirm
@@ -874,9 +863,16 @@ export default function StockOperations() {
                     dataSource={filteredHistory}
                     rowKey={record => record.TRANSACTION_ID || record.OP_ID}
                     loading={historyLoading}
-                    pagination={{ pageSize: 12 }}
+                    pagination={{
+                        current: historyPagination.current,
+                        pageSize: historyPagination.pageSize,
+                        total: historyPagination.total,
+                        showSizeChanger: true,
+                        pageSizeOptions: ['12', '24', '50', '100'],
+                        onChange: (page, pageSize) => fetchHistory(page, pageSize)
+                    }}
                     size="middle"
-                    scroll={{ x: 900 }}
+                    scroll={{ x: 'max-content' }}
                     onRow={(record) => ({
                         onClick: () => openHistoryDetail(record),
                         className: 'cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors'
@@ -934,6 +930,22 @@ export default function StockOperations() {
                     </div>
                 ))}
                 {!historyLoading && filteredHistory.length === 0 && <div className="text-center py-10 text-gray-500">No history records</div>}
+
+                {/* Mobile Pagination */}
+                {!historyLoading && filteredHistory.length > 0 && (
+                    <div className="flex justify-center mt-4 pb-4">
+                        <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                            <Pagination
+                                current={historyPagination.current}
+                                pageSize={historyPagination.pageSize}
+                                total={historyPagination.total}
+                                onChange={(page, pageSize) => fetchHistory(page, pageSize)}
+                                size="small"
+                                showSizeChanger={false}
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* == OPERATION MODAL (3-STEP WIZARD) == */}

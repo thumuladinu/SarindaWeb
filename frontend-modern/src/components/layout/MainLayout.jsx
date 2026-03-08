@@ -60,7 +60,7 @@ export default function MainLayout() {
             <Sidebar />
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col md:ml-64 relative min-h-screen">
+            <div className="flex-1 flex flex-col md:ml-20 xl:ml-64 relative min-h-screen transition-all duration-300 ease-in-out">
                 {/* Header */}
                 <Header />
 

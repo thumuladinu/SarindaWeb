@@ -57,9 +57,9 @@ export default function Dashboard() {
             </div>
             <div className="relative z-10">
                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase tracking-wider mb-2">{title}</p>
-                <h3 className={`text-2xl md:text-3xl font-bold ${type === 'danger' ? 'text-red-500' : type === 'success' ? 'text-emerald-500' : 'text-gray-800 dark:text-white'}`}>
+                <div className={`text-2xl lg:text-3xl font-bold ${type === 'danger' ? 'text-red-500' : type === 'success' ? 'text-emerald-500' : 'text-gray-800 dark:text-white'} truncate`}>
                     {value}
-                </h3>
+                </div>
             </div>
         </div>
     );
@@ -126,7 +126,7 @@ export default function Dashboard() {
             {/* Global Stats Grid */}
 
             {/* Global Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-4 gap-4 mb-8">
                 <StatCard
                     title="Today's Sales"
                     value={formatCurrency(data.global.sales)}

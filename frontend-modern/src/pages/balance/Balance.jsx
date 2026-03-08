@@ -340,7 +340,7 @@ export default function Balance() {
                         <div className="glass-card p-8 rounded-2xl flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 text-white shadow-xl relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
                             <span className="text-gray-400 uppercase tracking-widest text-xs sm:text-sm mb-2">Current Cash In Hand</span>
-                            <span className={`text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black font-mono tracking-tight break-all ${balanceData.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                            <span className={`text-2xl sm:text-4xl md:text-3xl lg:text-4xl xl:text-6xl font-black font-mono tracking-tight break-all ${balanceData.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                                 Rs. {balanceData.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                             <span className="text-gray-500 text-xs mt-4">
@@ -349,14 +349,14 @@ export default function Balance() {
                         </div>
 
                         {/* Breakdown Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                        <div className="flex flex-col xl:grid xl:grid-cols-4 gap-3 sm:gap-4">
                             <Card className="glass-card border-none shadow-sm !p-3 sm:!p-4">
                                 <Statistic
                                     title={<span className="text-gray-500 font-semibold text-xs sm:text-sm">Opening</span>}
                                     value={balanceData.opening}
                                     precision={2}
                                     prefix="+"
-                                    valueStyle={{ color: '#3f8600', fontWeight: 'bold', fontSize: 'clamp(14px, 4vw, 24px)' }}
+                                    valueStyle={{ color: '#3f8600', fontWeight: 'bold', fontSize: 'clamp(14px, 2.5vw, 24px)' }}
                                 />
                             </Card>
                             <Card className="glass-card border-none shadow-sm !p-3 sm:!p-4">
@@ -365,7 +365,7 @@ export default function Balance() {
                                     value={balanceData.sales}
                                     precision={2}
                                     prefix="+"
-                                    valueStyle={{ color: '#3f8600', fontWeight: 'bold', fontSize: 'clamp(14px, 4vw, 24px)' }}
+                                    valueStyle={{ color: '#3f8600', fontWeight: 'bold', fontSize: 'clamp(14px, 2.5vw, 24px)' }}
                                 />
                             </Card>
                             <Card className="glass-card border-none shadow-sm !p-3 sm:!p-4">
@@ -374,7 +374,7 @@ export default function Balance() {
                                     value={balanceData.buying}
                                     precision={2}
                                     prefix="-"
-                                    valueStyle={{ color: '#cf1322', fontWeight: 'bold', fontSize: 'clamp(14px, 4vw, 24px)' }}
+                                    valueStyle={{ color: '#cf1322', fontWeight: 'bold', fontSize: 'clamp(14px, 2.5vw, 24px)' }}
                                 />
                             </Card>
                             <Card className="glass-card border-none shadow-sm !p-3 sm:!p-4">
@@ -383,7 +383,7 @@ export default function Balance() {
                                     value={balanceData.expenses}
                                     precision={2}
                                     prefix="-"
-                                    valueStyle={{ color: '#d46b08', fontWeight: 'bold', fontSize: 'clamp(14px, 4vw, 24px)' }}
+                                    valueStyle={{ color: '#d46b08', fontWeight: 'bold', fontSize: 'clamp(14px, 2.5vw, 24px)' }}
                                 />
                             </Card>
                         </div>

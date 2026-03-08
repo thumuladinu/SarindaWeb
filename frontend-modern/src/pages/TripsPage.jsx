@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Input, DatePicker, Tag, Row, Col, Statistic, Card, Spin, Modal, Descriptions, App } from 'antd';
+import { Table, Button, Input, DatePicker, Tag, Row, Col, Statistic, Card, Spin, Modal, Descriptions, App, Pagination } from 'antd';
 import { SearchOutlined, ReloadOutlined, DatabaseOutlined, CalendarOutlined, EyeOutlined, TruckOutlined, TagsOutlined, CheckCircleOutlined, CloseCircleOutlined, UserOutlined, ShopOutlined, FileTextOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -42,10 +42,7 @@ const TripsPage = () => {
 
             if (response.data.success) {
                 setTripsData(response.data.trips || []);
-                // Backend currently doesn't return pagination metadata in the new endpoint, 
-                // but we can simulate or adjust if needed. For now, just setting data.
-                // If backend added pagination count, we'd use it. 
-                // Assuming unlimited or simple limit for now as per code.
+                setPagination(prev => ({ ...prev, current: page, pageSize, total: response.data.total || 0 }));
             }
         } catch (error) {
             console.error('Fetch error:', error);
@@ -215,7 +212,14 @@ const TripsPage = () => {
                     dataSource={tripsData}
                     rowKey="OP_ID"
                     loading={loading}
-                    pagination={false} // Simple list for now as per api
+                    pagination={{
+                        current: pagination.current,
+                        pageSize: pagination.pageSize,
+                        total: pagination.total,
+                        showSizeChanger: true,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                        onChange: (page, pageSize) => fetchTripsData(page, pageSize, tripIdSearch, dateRange)
+                    }}
                     size="middle"
                     rowClassName="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors cursor-pointer"
                     onRow={(record) => ({
@@ -287,6 +291,20 @@ const TripsPage = () => {
                         </div>
                     </div>
                 ))}
+                {!loading && tripsData.length > 0 && (
+                    <div className="flex justify-center mt-4 pb-4">
+                        <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                            <Pagination
+                                current={pagination.current}
+                                pageSize={pagination.pageSize}
+                                total={pagination.total}
+                                onChange={(page, pageSize) => fetchTripsData(page, pageSize, tripIdSearch, dateRange)}
+                                size="small"
+                                showSizeChanger={false}
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Details Modal */}
