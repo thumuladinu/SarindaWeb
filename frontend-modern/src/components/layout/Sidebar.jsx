@@ -26,6 +26,7 @@ import logo from "../../assets/images/logo.png";
 
 const NAV_ITEMS = [
     { label: 'Dashboard', path: '/dashboard', icon: <AppstoreOutlined /> },
+    { label: 'Store Manager', path: '/dashboard', icon: <ShopOutlined /> }, // New Store Manager link pointing to dashboard
     { label: 'Transactions', path: '/transactions', icon: <TransactionOutlined /> },
     { label: 'Balance', path: '/balance', icon: <WalletOutlined /> },
     { label: 'Items', path: '/items', icon: <ShopOutlined /> },
