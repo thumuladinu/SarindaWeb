@@ -1569,8 +1569,35 @@ router.post('/api/weights/sync', async (req, res) => {
                 );
 
                 if (existingPlaceholder && existingPlaceholder.TRANSACTION_ID) {
-                    // Any active transaction already exists for this weight (placeholder or paid) — skip insert.
-                    console.log(`[WeightSync] Transaction already exists (ID: ${existingPlaceholder.TRANSACTION_ID}) for ${code} — skipping duplicate insert`);
+                    // Update existing transaction items to reflect the new edit
+                    const placeholderId = existingPlaceholder.TRANSACTION_ID;
+                    console.log(`[WeightSync] Updating existing stock placeholder tx (ID: ${placeholderId}) for ${code}`);
+
+                    // 1. Deactivate old items
+                    await pool.query(
+                        `UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?`,
+                        [placeholderId]
+                    );
+
+                    // 2. Insert new items for stock calculation
+                    const weightItems = itemDetails.items || [];
+                    for (const wItem of weightItems) {
+                        const prodCode = (wItem.productCode || wItem.code || '').toUpperCase();
+                        const netWeight = parseFloat(wItem.netWeight != null ? wItem.netWeight : wItem.netWt) || 0;
+                        let itemId = null;
+                        if (prodCode) {
+                            const [byCode] = await pool.query(
+                                'SELECT ITEM_ID FROM store_items WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1',
+                                [prodCode]
+                            );
+                            if (byCode && byCode.ITEM_ID) itemId = byCode.ITEM_ID;
+                        }
+                        await pool.query(`
+                            INSERT INTO store_transactions_items
+                                (TRANSACTION_ID, ITEM_ID, PRICE, QUANTITY, TOTAL, IS_ACTIVE, CREATED_DATE)
+                            VALUES (?, ?, 0, ?, 0, 1, NOW())
+                        `, [placeholderId, itemId, netWeight]);
+                    }
                 } else {
                     // No placeholder yet — safe to create one
                     const stockDate = toMySQLDateTime(weightData.createdAt);
