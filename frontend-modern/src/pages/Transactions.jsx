@@ -60,7 +60,8 @@ export default function Transactions() {
         minAmount: '',
         maxAmount: '',
         dateRange: null,
-        item: null
+        item: null,
+        terminal: null
     });
 
     // Fetch Users Mapping
@@ -96,7 +97,8 @@ export default function Transactions() {
                 maxAmount: filters.maxAmount || null,
                 startDate: filters.dateRange ? filters.dateRange[0].format('YYYY-MM-DD') : null,
                 endDate: filters.dateRange ? filters.dateRange[1].format('YYYY-MM-DD') : null,
-                itemIds: filters.item || []
+                itemIds: filters.item || [],
+                terminal: filters.terminal || null
             };
 
             const response = await axios.post('/api/getAllTransactionsCashBook', payload);

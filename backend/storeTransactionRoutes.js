@@ -299,6 +299,7 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
         const startDate = req.body.startDate || null;
         const endDate = req.body.endDate || null;
         const itemIds = req.body.itemIds || (req.body.itemId ? [req.body.itemId] : []);
+        const terminal = req.body.terminal || null;
 
         // Build WHERE clause dynamically
         // STRICT FILTER: Only show Buying, Selling, and Expenses (Financials)
@@ -336,6 +337,16 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
         if (endDate) {
             whereConditions.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?`);
             queryParams.push(endDate);
+        }
+        if (terminal) {
+            whereConditions.push(`
+                (CASE 
+                    WHEN (LENGTH(st.CODE) - LENGTH(REPLACE(st.CODE, '-', ''))) + 1 > 4 
+                    THEN SUBSTRING_INDEX(SUBSTRING_INDEX(st.CODE, '-', 4), '-', -1)
+                    ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(st.CODE, '-', 3), '-', -1)
+                END) = ?
+            `);
+            queryParams.push(terminal);
         }
         if (itemIds && itemIds.length > 0) {
             // Create placeholders for IN clause: ?,?,?
@@ -403,6 +414,42 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
         return res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
+
+
+router.post('/api/getUniqueTerminals', async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(500).json({ success: false, message: 'Internal server error' });
+        }
+
+        // Extract terminal code: 4th part if more than 4 parts, else 3rd part
+        const sql = `
+            SELECT DISTINCT 
+                CASE 
+                    WHEN (LENGTH(CODE) - LENGTH(REPLACE(CODE, '-', ''))) + 1 > 4 
+                    THEN SUBSTRING_INDEX(SUBSTRING_INDEX(CODE, '-', 4), '-', -1)
+                    ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(CODE, '-', 3), '-', -1)
+                END as TERMINAL 
+            FROM store_transactions 
+            WHERE IS_ACTIVE = 1 
+              AND CODE LIKE '%-%-%-%' 
+              AND TYPE IN ('Buying', 'Selling')
+        `;
+
+        const result = await pool.query(sql);
+
+        if (Array.isArray(result)) {
+            const terminals = result.map(row => row.TERMINAL).filter(t => t);
+            return res.status(200).json({ success: true, terminals });
+        } else {
+            return res.status(500).json({ success: false, message: 'Internal server error' });
+        }
+    } catch (error) {
+        console.error('Error fetching unique terminals:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
 
 
 

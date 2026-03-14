@@ -468,6 +468,40 @@ router.post('/api/stock-ops/create', async (req, res) => {
 
         //console.log(`[Stock Ops] Created operation ${opCode} (Type: ${opType})${billCode ? `, Bill: ${billCode}` : ''}`);
 
+        // --- Trigger Notification ---
+        try {
+            const { createNotification } = require('./notificationService');
+            let notifTitle = 'Stock Operation';
+            let notifMessage = `New operation ${opCode} at Store ${storeNo}`;
+
+            const typeLabels = {
+                1: 'Full Clear',
+                2: 'Partial Clear',
+                3: 'Full Clear + Bill',
+                4: 'Half Clear + Bill',
+                5: 'Stock Transfer',
+                6: 'Full Clear + Transfer',
+                7: 'Partial Clear + Lorry',
+                8: 'Full Clear + Lorry',
+                9: 'Item Conversion'
+            };
+
+            if (typeLabels[opType]) {
+                notifTitle = typeLabels[opType];
+                const itemName = data.items?.[0]?.ITEM_NAME || 'Multiple Items';
+                const qty = data.items?.[0]?.CLEARED_QUANTITY || 0;
+
+                // User wants format: Full Clear: S1-260314-CLR-POS-001 for TEst1 at Store 1 By ( casiers anme)
+                // If Full Clear, we don't mention KG if it's 0 or redundant
+                const qtyStr = (opType === 1 || opType === 3 || opType === 6 || opType === 8) ? '' : `${qty} kg of `;
+                notifMessage = `${notifTitle}: ${opCode} for ${itemName} at Store ${storeNo} By ${data.CREATED_BY_NAME || 'Unknown'}`;
+            }
+
+            await createNotification('STOCK_OP', opId, notifTitle, notifMessage);
+        } catch (notifErr) {
+            console.error('[Stock Ops] Notification error:', notifErr);
+        }
+
         return res.status(200).json({
             success: true,
             message: 'Stock operation created successfully',
@@ -1960,8 +1994,8 @@ router.post('/api/stock-ops/create-return', async (req, res) => {
             await createNotification(
                 'RETURN',
                 opId,
-                'New Return Registered',
-                `A return of ${returnQty} kg ${itemName} was recorded at Store ${storeNo} (ref: ${refOp.OP_CODE})`
+                'Stock Return',
+                `Stock Return: ${opCode} for ${returnQty} kg ${itemName} at Store ${storeNo} By ${CREATED_BY_NAME} (ref: ${refOp.OP_CODE})`
             );
         } catch (notifyErr) {
             console.error('[Stock Ops] Error sending Return notification:', notifyErr);
@@ -2649,3 +2683,171 @@ router.post('/api/stock-ops/history-paginated', async (req, res) => {
         return res.status(500).json({ success: false, message: e.message });
     }
 });
+
+// --- Get Single Stock Operation Detail (For deep linking) ---
+router.get('/api/stock-ops/details/:opId', async (req, res) => {
+    try {
+        const { opId } = req.params;
+
+        const opsDetailQuery = `
+            SELECT 
+                so.OP_ID, so.OP_CODE as CODE, so.REFERENCE_OP_ID,
+                parent_op.OP_CODE as REF_OP_CODE, parent_op.BILL_CODE as REF_BILL_CODE,
+                so.OP_TYPE, so.CLEARANCE_TYPE, so.STORE_NO, so.COMMENTS,
+                ${OP_SL_TIME_SQL('so.CREATED_DATE')} as CREATED_DATE,
+                so.CREATED_BY, so.CREATED_BY_NAME, so.WASTAGE_AMOUNT, so.SURPLUS_AMOUNT,
+                so.CUSTOMER_NAME, so.LORRY_NAME, so.DRIVER_NAME, so.DESTINATION,
+                so.BILL_CODE, so.BILL_AMOUNT, st_bill.SUB_TOTAL as TRANSACTION_BILL_AMOUNT,
+                'stock_operation' as SOURCE_TYPE,
+                CASE so.OP_TYPE
+                    WHEN 1 THEN 'Full Clear (Standard)'
+                    WHEN 2 THEN 'Partial Clear (Standard)'
+                    WHEN 3 THEN 'Full Clear + Sales'
+                    WHEN 4 THEN 'Partial Clear + Sales'
+                    WHEN 5 THEN 'Transfer (Standard)'
+                    WHEN 6 THEN 'Transfer + Full Clear'
+                    WHEN 7 THEN 'Partial Clear + Lorry'
+                    WHEN 8 THEN 'Full Clear + Lorry'
+                    WHEN 9 THEN 'Item Conversion'
+                    WHEN 10 THEN 'Cash Float Adjustment'
+                    WHEN 11 THEN 'Stock Return'
+                    ELSE 'Stock Operation'
+                END AS OP_TYPE_NAME
+            FROM store_stock_operations so
+            LEFT JOIN store_stock_operations parent_op ON so.REFERENCE_OP_ID = parent_op.OP_ID
+            LEFT JOIN store_transactions st_bill ON so.BILL_CODE COLLATE utf8mb4_unicode_ci = st_bill.CODE COLLATE utf8mb4_unicode_ci AND st_bill.IS_ACTIVE = 1
+            WHERE so.OP_ID = ?
+        `;
+        const ops = await pool.query(opsDetailQuery, [opId]);
+
+        if (ops.length === 0) {
+            return res.status(404).json({ success: false, message: 'Stock operation not found' });
+        }
+
+        const op = ops[0];
+
+        // Fetch Items
+        op.items = await pool.query('SELECT * FROM store_stock_operation_items WHERE OP_ID = ? AND IS_ACTIVE = 1', [opId]);
+
+        // Fetch Conversions
+        op.conversions = await pool.query('SELECT * FROM store_stock_operation_conversions WHERE OP_ID = ? AND IS_ACTIVE = 1', [opId]);
+
+        // Fetch Adjustments
+        const txQuery = `
+            SELECT st.TYPE, sti.QUANTITY, sti.ITEM_ID, i.NAME as ITEM_NAME, i.CODE as ITEM_CODE, st.COMMENTS
+            FROM store_transactions st
+            JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+            LEFT JOIN store_items i ON sti.ITEM_ID = i.ITEM_ID
+            WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 AND st.COMMENTS LIKE ?
+        `;
+        op.stockAdjustments = await pool.query(txQuery, [`[${op.CODE}]%`]);
+
+        // Mapping logic (Simplified version of the mapping in history-paginated)
+        const sourceItem = op.items?.[0] || {};
+        const conversions = op.conversions || [];
+        const adjustments = op.stockAdjustments || [];
+
+        const isOpWithSales = [3, 4].includes(op.OP_TYPE);
+        let soldQty = parseFloat(sourceItem.SOLD_QUANTITY) || 0;
+        let originalStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
+
+        const sourceAdjOut = adjustments.find(a => (a.TYPE === 'AdjOut' || a.TYPE === 'StockClear') && (a.ITEM_ID === sourceItem.ITEM_ID || String(a.ITEM_ID) === String(sourceItem.ITEM_ID)));
+        const sourceAdjIn = adjustments.find(a => a.TYPE === 'AdjIn' && (a.ITEM_ID === sourceItem.ITEM_ID || String(a.ITEM_ID) === String(sourceItem.ITEM_ID)));
+
+        let adjustmentQty = 0;
+        let adjustmentType = 'AdjOut';
+        let previousStock = originalStock;
+
+        if (isOpWithSales) {
+            if (op.OP_TYPE === 3) adjustmentQty = previousStock;
+            else {
+                const totalConverted = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+                adjustmentQty = soldQty + totalConverted;
+            }
+            adjustmentType = 'AdjOut';
+            if (!previousStock && sourceAdjOut) previousStock = parseFloat(sourceAdjOut.QUANTITY) || 0;
+        } else if (sourceAdjOut) {
+            adjustmentQty = parseFloat(sourceAdjOut.QUANTITY) || 0;
+            adjustmentType = 'AdjOut';
+            if (!previousStock) previousStock = adjustmentQty;
+        } else if (op.OP_TYPE === 11) {
+            const totalConverted = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+            if (totalConverted > 0) adjustmentQty = totalConverted;
+            else adjustmentQty = parseFloat(sourceItem.CLEARED_QUANTITY) || 0;
+            adjustmentType = 'AdjIn';
+            previousStock = parseFloat(sourceItem.ORIGINAL_STOCK) || 0;
+        } else if (sourceAdjIn && !conversions.some(c => c.DEST_ITEM_ID === sourceItem.ITEM_ID || String(c.DEST_ITEM_ID) === String(sourceItem.ITEM_ID))) {
+            adjustmentQty = parseFloat(sourceAdjIn.QUANTITY) || 0;
+            adjustmentType = 'AdjIn';
+            if (!previousStock) previousStock = -adjustmentQty;
+        }
+
+        const totalDestQty = conversions.reduce((sum, c) => sum + (parseFloat(c.DEST_QUANTITY) || 0), 0);
+        let wastage = parseFloat(op.WASTAGE_AMOUNT) || 0;
+        let surplus = parseFloat(op.SURPLUS_AMOUNT) || 0;
+
+        if (!wastage && !surplus && conversions.length > 0) {
+            const baseForCalc = isOpWithSales ? (previousStock - soldQty) : previousStock;
+            const diff = baseForCalc - totalDestQty;
+            if (diff > 0) wastage = diff;
+            else if (diff < 0) surplus = Math.abs(diff);
+        }
+
+        let sourceStoreNo = op.STORE_NO;
+        let targetStoreNo = op.STORE_NO === 1 ? 2 : 1;
+        const otherStoreItem = (op.items || []).find(i => i.STORE_NO !== op.STORE_NO);
+        if (otherStoreItem) targetStoreNo = otherStoreItem.STORE_NO;
+
+        const targetItems = (op.items || []).filter(i => i.STORE_NO !== sourceStoreNo);
+
+        let mainQty = 0;
+        if (isOpWithSales) mainQty = soldQty;
+        else if (op.OP_TYPE === 2) {
+            mainQty = adjustmentQty - totalDestQty;
+            if (mainQty < 0) mainQty = 0;
+        } else if (op.OP_TYPE === 1) mainQty = adjustmentQty;
+
+        const breakdown = {
+            source: {
+                itemId: sourceItem.ITEM_ID, itemCode: sourceItem.ITEM_CODE, itemName: sourceItem.ITEM_NAME,
+                adjustmentQty: adjustmentQty, adjustmentType: adjustmentType, previousStock: previousStock,
+                soldQty: soldQty, mainQty: mainQty
+            },
+            destinations: conversions.map(c => ({
+                itemId: c.DEST_ITEM_ID, itemCode: c.DEST_ITEM_CODE, itemName: c.DEST_ITEM_NAME, quantity: parseFloat(c.DEST_QUANTITY) || 0
+            })),
+            targetItems: targetItems.map(i => ({
+                itemId: i.ITEM_ID, itemCode: i.ITEM_CODE, itemName: i.ITEM_NAME,
+                previousStock: parseFloat(i.ORIGINAL_STOCK) || 0, addedQty: Math.abs(parseFloat(i.CLEARED_QUANTITY) || 0),
+                currentStock: parseFloat(i.REMAINING_STOCK) || 0, storeNo: i.STORE_NO
+            })),
+            store2Items: targetItems.map(i => ({
+                itemId: i.ITEM_ID, itemCode: i.ITEM_CODE, itemName: i.ITEM_NAME,
+                previousStock: parseFloat(i.ORIGINAL_STOCK) || 0, addedQty: Math.abs(parseFloat(i.CLEARED_QUANTITY) || 0), currentStock: parseFloat(i.REMAINING_STOCK) || 0
+            })),
+            sourceStore: sourceStoreNo, targetStore: targetStoreNo, isTransferOperation: [5, 6].includes(op.OP_TYPE),
+            wastage: wastage, surplus: surplus, totalDestQty: totalDestQty, isSalesOperation: isOpWithSales,
+            billCode: op.BILL_CODE, billAmount: parseFloat(op.TRANSACTION_BILL_AMOUNT) || parseFloat(op.BILL_AMOUNT) || 0,
+            lorryName: op.LORRY_NAME || null, driverName: op.DRIVER_NAME || null, destination: op.DESTINATION || null,
+            referenceOpId: op.REFERENCE_OP_ID, refOpCode: op.REF_OP_CODE, refBillCode: op.REF_BILL_CODE
+        };
+
+        const result = {
+            TRANSACTION_ID: `OP-${op.OP_ID}`, OP_ID: op.OP_ID, OP_CODE: op.CODE, CODE: op.CODE, TYPE: `OP_${op.OP_TYPE}`,
+            STORE_NO: op.STORE_NO, COMMENTS: op.COMMENTS, CREATED_DATE: op.CREATED_DATE, CREATED_BY: op.CREATED_BY, CREATED_BY_NAME: op.CREATED_BY_NAME,
+            ITEM_NAME: sourceItem.ITEM_NAME || 'Unknown Item', ITEM_CODE: sourceItem.ITEM_CODE || '', ITEM_ID: sourceItem.ITEM_ID || null,
+            ITEM_QTY: adjustmentQty, DISPLAY_TYPE: op.OP_TYPE_NAME, SOURCE_TYPE: 'stock_operation', OP_TYPE: op.OP_TYPE, OP_TYPE_NAME: op.OP_TYPE_NAME,
+            CLEARANCE_TYPE: op.CLEARANCE_TYPE, WASTAGE_AMOUNT: wastage, SURPLUS_AMOUNT: surplus, SOLD_QUANTITY: soldQty, CUSTOMER_NAME: op.CUSTOMER_NAME,
+            LORRY_NAME: op.LORRY_NAME, BILL_CODE: op.BILL_CODE, BILL_AMOUNT: op.BILL_AMOUNT,
+            items: op.items, conversions: op.conversions, breakdown: breakdown
+        };
+
+        res.json({ success: true, result: result });
+
+    } catch (e) {
+        console.error("Error fetching single stock operation detail:", e);
+        return res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+module.exports = router;

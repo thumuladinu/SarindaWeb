@@ -16,9 +16,14 @@ const createNotification = async (type, referenceId, title, message) => {
         }
 
         // 3. Send Web Push
-        const pushUrl = type === 'TRANSFER_REQUEST'
-            ? `/notifications?tab=1&id=${referenceId}`
-            : `/notifications?tab=2&id=${referenceId}`;
+        let pushUrl = '/notifications';
+        if (type === 'TRANSFER_REQUEST') {
+            pushUrl = `/notifications?tab=1&id=${referenceId}`;
+        } else if (type === 'STOCK_OP' || type === 'RETURN') {
+            pushUrl = `/stock-operations?opId=${referenceId}`;
+        } else {
+            pushUrl = `/notifications?tab=2&id=${referenceId}`;
+        }
 
         await sendPushToAll({
             title,

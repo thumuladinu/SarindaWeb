@@ -211,7 +211,17 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
         [opTimestamp, approvedBy, approvedByName, clearanceType, transferId]
     );
 
-    return { success: true, message: 'Request approved and processed' };
+    // --- Trigger Notification ---
+    try {
+        const { createNotification } = require('./notificationService');
+        const notifTitle = 'Stock Transfer';
+        const notifMessage = `${notifTitle}: ${opCode} for ${request.main_item_name} from Store ${sourceStoreId} to Store ${targetStoreId} By ${approvedByName}`;
+        await createNotification('STOCK_OP', opId, notifTitle, notifMessage);
+    } catch (notifErr) {
+        console.error('[Transfer] Notification error:', notifErr);
+    }
+
+    return { success: true, message: 'Request approved and processed', opId, opCode };
 };
 
 // Create Transfer Request (Store 2 -> Store 1)

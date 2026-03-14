@@ -91,6 +91,7 @@ export default function ReportItemProfit() {
             const avgBuy = item.boughtQty > 0 ? (item.boughtAmount / item.boughtQty) : (item.masterBuyPrice || 0);
             const netProfit = (item.soldAmount || 0) - (item.boughtAmount || 0);
             const salesProfit = (avgSale - avgBuy) * (item.soldQty || 0);
+            const isFallbackBuy = item.boughtQty === 0;
 
             return [
                 `${item.code || ''} - ${item.name || ''}`,
@@ -98,7 +99,7 @@ export default function ReportItemProfit() {
                 `${Number(item.boughtAmount || 0).toFixed(2)}\n(${Number(item.boughtQty || 0).toFixed(2)}kg)`,
                 Number(netProfit).toFixed(2),
                 Number(avgSale).toFixed(2),
-                Number(avgBuy).toFixed(2),
+                isFallbackBuy ? `${Number(avgBuy).toFixed(2)}\n(Todays Price)` : Number(avgBuy).toFixed(2),
                 `${Number(salesProfit).toFixed(2)}\n(${Number(item.soldQty || 0).toFixed(2)}kg)`
             ];
         });
@@ -199,10 +200,16 @@ export default function ReportItemProfit() {
             title: 'Avg Buy/kg',
             key: 'avgBuy',
             align: 'right',
-            width: 75,
+            width: 85,
             render: (_, r) => {
-                const avg = r.boughtQty > 0 ? (r.boughtAmount / r.boughtQty) : (r.masterBuyPrice || 0);
-                return <span className="text-[11px]">Rs.{avg.toFixed(2)}</span>;
+                const isFallback = r.boughtQty === 0;
+                const avg = isFallback ? (r.masterBuyPrice || 0) : (r.boughtAmount / r.boughtQty);
+                return (
+                    <div className="flex flex-col items-end leading-tight">
+                        <span className={`text-[11px] ${isFallback ? 'text-orange-500 font-medium' : ''}`}>Rs.{avg.toFixed(2)}</span>
+                        {isFallback && <span className="text-[8px] text-orange-400 leading-none">Todays Price</span>}
+                    </div>
+                );
             }
         },
         {
@@ -269,7 +276,12 @@ export default function ReportItemProfit() {
                     </div>
                     <div className="bg-gray-50/50 dark:bg-black/20 rounded-lg p-2">
                         <span className="text-[9px] text-gray-400 uppercase block">Avg Buy</span>
-                        <span className="text-gray-700 dark:text-gray-300 font-semibold text-xs">Rs.{avgBuy.toFixed(2)}</span>
+                        <div className="flex flex-col">
+                            <span className={`font-semibold text-xs ${item.boughtQty === 0 ? 'text-orange-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                                Rs.{avgBuy.toFixed(2)}
+                            </span>
+                            {item.boughtQty === 0 && <span className="text-[8px] text-orange-400 leading-none">Todays Price</span>}
+                        </div>
                     </div>
                 </div>
 

@@ -18,6 +18,8 @@ export default function TransactionFilters({ filters, setFilters }) {
     const [localMax, setLocalMax] = useState(filters.maxAmount);
     const [items, setItems] = useState([]);
     const [itemsLoading, setItemsLoading] = useState(false);
+    const [terminals, setTerminals] = useState([]);
+    const [terminalsLoading, setTerminalsLoading] = useState(false);
 
     // Fetch items for filter
     useEffect(() => {
@@ -40,6 +42,24 @@ export default function TransactionFilters({ filters, setFilters }) {
             }
         };
         fetchItems();
+    }, []);
+
+    // Fetch terminals for filter
+    useEffect(() => {
+        const fetchTerminals = async () => {
+            setTerminalsLoading(true);
+            try {
+                const response = await axios.post('/api/getUniqueTerminals');
+                if (response.data.success) {
+                    setTerminals(response.data.terminals || []);
+                }
+            } catch (error) {
+                console.error("Error fetching terminals for filter:", error);
+            } finally {
+                setTerminalsLoading(false);
+            }
+        };
+        fetchTerminals();
     }, []);
 
     // Sync local state if parent filters change externally (e.g. clear)
@@ -116,7 +136,7 @@ export default function TransactionFilters({ filters, setFilters }) {
                             className="text-gray-400 hover:text-red-500"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setFilters({ code: '', store: null, type: null, item: null, minAmount: '', maxAmount: '', dateRange: null });
+                                setFilters({ code: '', store: null, type: null, item: null, minAmount: '', maxAmount: '', dateRange: null, terminal: null });
                             }}
                         >
                             Clear
@@ -235,6 +255,24 @@ export default function TransactionFilters({ filters, setFilters }) {
                                     prefix="Rs."
                                 />
                             </div>
+                        </div>
+
+                        {/* Terminal Select */}
+                        <div className="form-group">
+                            <label className="text-xs font-medium text-gray-500 mb-1 block">Terminal</label>
+                            <Select
+                                placeholder="All Terminals"
+                                className="w-full h-10 rounded-xl"
+                                popupClassName="glass-dropdown"
+                                allowClear
+                                loading={terminalsLoading}
+                                value={filters.terminal}
+                                onChange={(val) => handleChange('terminal', val)}
+                            >
+                                {terminals.map(t => (
+                                    <Option key={t} value={t}>{t}</Option>
+                                ))}
+                            </Select>
                         </div>
                     </div>
                 </div>

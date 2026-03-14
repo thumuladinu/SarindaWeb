@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { App, Spin, Button, Tag, Empty, Tabs, Badge, Popconfirm, message, Select } from 'antd';
-import { BellOutlined, SwapOutlined, CheckOutlined, CloseOutlined, UndoOutlined } from '@ant-design/icons';
-import { useLocation } from 'react-router-dom';
+import { BellOutlined, SwapOutlined, CheckOutlined, CloseOutlined, UndoOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import Cookies from 'js-cookie';
@@ -10,6 +10,7 @@ import { io } from 'socket.io-client';
 export default function Notifications() {
     const { message: antdMessage } = App.useApp();
     const location = useLocation();
+    const navigate = useNavigate();
 
     // URL Params for Deep Linking
     const queryParams = new URLSearchParams(location.search);
@@ -69,12 +70,27 @@ export default function Notifications() {
         }
     };
 
-    const markAsRead = async () => {
+    const markAllAsRead = async () => {
         try {
             await axios.post('/api/notifications/mark-read');
             window.dispatchEvent(new CustomEvent('notifications-read'));
+            antdMessage.success('All system alerts marked as read');
         } catch (error) {
             console.error('Failed to mark notifications as read:', error);
+        }
+    };
+
+    const handleNotificationClick = async (alert) => {
+        try {
+            if (!alert.is_read) {
+                await axios.post(`/api/notifications/mark-read-single/${alert.id}`);
+                window.dispatchEvent(new CustomEvent('notifications-read'));
+            }
+            if (alert.type === 'STOCK_OP' || alert.type === 'RETURN') {
+                navigate(`/stock-operations?opId=${alert.reference_id}`);
+            }
+        } catch (error) {
+            console.error('Error handling notification click:', error);
         }
     };
 
@@ -82,8 +98,7 @@ export default function Notifications() {
         setLoading(true);
         await Promise.all([
             fetchNotifications(),
-            fetchPendingTransfers(),
-            markAsRead()
+            fetchPendingTransfers()
         ]);
         setLoading(false);
     };
@@ -96,7 +111,6 @@ export default function Notifications() {
         socket.on('new_notification', (data) => {
             fetchNotifications();
             fetchPendingTransfers();
-            markAsRead();
         });
 
         const handleReadEvent = () => fetchNotifications();
@@ -192,7 +206,8 @@ export default function Notifications() {
         }
     };
 
-    const systemAlerts = notifications.filter(n => n.type === 'RETURN' || n.type === 'SYSTEM');
+    const systemAlerts = notifications.filter(n => ['RETURN', 'SYSTEM', 'STOCK_OP'].includes(n.type));
+    const unreadSystemCount = systemAlerts.filter(n => !n.is_read).length;
 
     const tabItems = [
         {
@@ -284,9 +299,17 @@ export default function Notifications() {
         },
         {
             key: '2',
-            label: <span className="font-semibold px-2 md:px-4 text-sm md:text-base tracking-wide whitespace-nowrap"><BellOutlined className="mr-1 md:mr-2" /> Alerts & System {systemAlerts.length > 0 && <Badge count={systemAlerts.length} style={{ backgroundColor: '#f97316', marginLeft: 8 }} />}</span>,
+            label: <span className="font-semibold px-2 md:px-4 text-sm md:text-base tracking-wide whitespace-nowrap"><BellOutlined className="mr-1 md:mr-2" /> Alerts & System {unreadSystemCount > 0 && <Badge count={unreadSystemCount} style={{ backgroundColor: '#f97316', marginLeft: 8 }} />}</span>,
             children: (
                 <div className="glass-card p-3 md:p-6 rounded-2xl md:rounded-3xl mt-4 border border-white/5 relative overflow-hidden min-h-[400px]">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-bold text-gray-200">System Alerts</h3>
+                        {unreadSystemCount > 0 && (
+                            <Button size="small" type="link" onClick={markAllAsRead} className="text-orange-400 hover:text-orange-300">
+                                Mark all as read
+                            </Button>
+                        )}
+                    </div>
                     {loading ? (
                         <div className="flex justify-center items-center py-20">
                             <Spin size="large" />
@@ -298,12 +321,20 @@ export default function Notifications() {
                     ) : (
                         <div className="space-y-3">
                             {systemAlerts.map(alert => (
-                                <div id={`system-${alert.id}`} key={alert.id} className={`bg-white/5 hover:bg-white/10 transition-colors backdrop-blur-md rounded-2xl p-3 md:p-4 border flex flex-col sm:flex-row gap-3 md:gap-4 items-start sm:items-center ${urlId == alert.id ? 'border-orange-500 ring-2 ring-orange-500/50' : 'border-white/5'}`}>
-                                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-orange-500/20 flex-shrink-0 flex items-center justify-center text-orange-400 shadow-inner ring-1 ring-orange-500/30">
-                                        {alert.type === 'RETURN' ? <UndoOutlined className="text-sm md:text-base" /> : <BellOutlined className="text-sm md:text-base" />}
+                                <div
+                                    id={`system-${alert.id}`}
+                                    key={alert.id}
+                                    onClick={() => handleNotificationClick(alert)}
+                                    className={`bg-white/5 hover:bg-white/10 transition-colors backdrop-blur-md rounded-2xl p-3 md:p-4 border flex flex-col sm:flex-row gap-3 md:gap-4 items-start sm:items-center cursor-pointer relative ${urlId == alert.id ? 'border-orange-500 ring-2 ring-orange-500/50' : 'border-white/5'} ${!alert.is_read ? 'border-l-4 border-l-orange-500' : ''}`}
+                                >
+                                    <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex-shrink-0 flex items-center justify-center shadow-inner ring-1 ${alert.type === 'RETURN' ? 'bg-red-500/20 text-red-400 ring-red-500/30' : alert.type === 'STOCK_OP' ? 'bg-emerald-500/20 text-emerald-400 ring-emerald-500/30' : 'bg-orange-500/20 text-orange-400 ring-orange-500/30'}`}>
+                                        {alert.type === 'RETURN' ? <UndoOutlined className="text-sm md:text-base" /> : alert.type === 'STOCK_OP' ? <InfoCircleOutlined className="text-sm md:text-base" /> : <BellOutlined className="text-sm md:text-base" />}
                                     </div>
                                     <div className="flex-1">
-                                        <div className="font-bold text-gray-200 text-sm md:text-lg mb-0.5 md:mb-1">{alert.title}</div>
+                                        <div className="flex items-center gap-2 mb-0.5 md:mb-1">
+                                            <div className="font-bold text-gray-200 text-sm md:text-lg">{alert.title}</div>
+                                            {!alert.is_read && <Badge status="processing" color="orange" />}
+                                        </div>
                                         <div className="text-gray-400 text-xs md:text-sm leading-relaxed">{alert.message}</div>
                                     </div>
                                     <div className="text-[10px] md:text-xs text-gray-500 font-mono opacity-50 whitespace-nowrap pt-1 sm:pt-0">

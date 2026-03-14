@@ -23,8 +23,10 @@ import {
     UserOutlined,
     UndoOutlined,
     FilterOutlined,
-    ClearOutlined
+    ClearOutlined,
+    InfoCircleOutlined
 } from '@ant-design/icons';
+import { useLocation } from 'react-router-dom';
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -44,6 +46,9 @@ const OPERATION_TYPES = [
 ];
 
 export default function StockOperations() {
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const urlOpId = queryParams.get('opId');
     // Auth & Context
     const userStr = Cookies.get('rememberedUser');
     const user = userStr ? JSON.parse(userStr) : null;
@@ -127,7 +132,28 @@ export default function StockOperations() {
         fetchProducts();
         fetchCustomers(); // Fetch customers
         fetchDestinations(); // Fetch destinations
+
+        if (urlOpId) {
+            handleDeepLink(urlOpId);
+        }
     }, []); // Only fetch once on mount, filtering handles the rest or manual refresh
+
+    const handleDeepLink = async (opId) => {
+        setHistoryLoading(true);
+        try {
+            const response = await axios.get(`/api/stock-ops/details/${opId}`);
+            if (response.data.success) {
+                openHistoryDetail(response.data.result);
+            } else {
+                message.error('Could not find operation details');
+            }
+        } catch (error) {
+            console.error('Deep link error:', error);
+            message.error('Failed to load operation details');
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
 
     const firstHistoryUpdate = React.useRef(true);
 

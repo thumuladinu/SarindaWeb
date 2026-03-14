@@ -62,4 +62,16 @@ router.post('/api/notifications/mark-read', async (req, res) => {
     }
 });
 
+// Mark single notification as read
+router.post('/api/notifications/mark-read-single/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await pool.promise().query('UPDATE notifications SET is_read = TRUE WHERE id = ?', [id]);
+        res.json({ success: true, message: 'Notification marked as read' });
+    } catch (error) {
+        console.error('Error marking single notification as read:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
 module.exports = router;

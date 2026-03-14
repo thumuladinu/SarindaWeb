@@ -35,11 +35,11 @@ export default function Header() {
         // Socket.IO for real-time notification badge updates
         const socket = io('/', { path: '/socket.io' });
         socket.on('new_notification', (data) => {
-            setUnreadCount(prev => prev + 1);
+            fetchUnreadCount();
         });
 
         // Listen for internal app event when notifications are read
-        const handleReadEvent = () => setUnreadCount(0);
+        const handleReadEvent = () => fetchUnreadCount();
         window.addEventListener('notifications-read', handleReadEvent);
 
         return () => {
