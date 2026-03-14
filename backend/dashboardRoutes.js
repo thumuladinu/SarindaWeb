@@ -433,6 +433,49 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
         const floatsQuery = `SELECT USER_ID, SUM(OPENING_AMOUNT) as OPENING_AMOUNT FROM cash_floats WHERE DATE = ? GROUP BY USER_ID`;
         const floats = await pool.query(floatsQuery, [queryDate]);
 
+        // --- NEW: Calculate Today Average Profit Card Logic ---
+        console.log("Step 3.1: Fetching Today Sales per Item for Profit Card...");
+        const todayItemSalesQuery = `
+            SELECT 
+                sti.ITEM_ID,
+                si.BUYING_PRICE as master_buy_price,
+                SUM(sti.QUANTITY) as sold_qty,
+                SUM(sti.TOTAL) as sold_amount
+            FROM store_transactions_items sti
+            JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
+            JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
+            WHERE t.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
+            AND t.TYPE = 'Selling'
+            AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) = ?
+            GROUP BY sti.ITEM_ID, si.BUYING_PRICE
+        `;
+        const todayItemSales = await pool.query(todayItemSalesQuery, [queryDate]);
+
+        console.log("Step 3.2: Fetching Last 30 Days Average Buying Prices...");
+        const avgBuyPriceQuery = `
+            SELECT 
+                ITEM_ID,
+                SUM(TOTAL) / SUM(QUANTITY) as avg_buy_price
+            FROM store_transactions_items sti
+            JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
+            WHERE t.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1
+            AND t.TYPE = 'Buying'
+            AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) BETWEEN DATE_SUB(?, INTERVAL 30 DAY) AND ?
+            GROUP BY ITEM_ID
+        `;
+        // Use queryDate as anchor for "last 30 days"
+        const avgBuyPrices = await pool.query(avgBuyPriceQuery, [queryDate, queryDate]);
+        const avgBuyMap = {};
+        avgBuyPrices.forEach(row => { avgBuyMap[row.ITEM_ID] = parseFloat(row.avg_buy_price || 0); });
+
+        let todayAvgProfitSum = 0;
+        todayItemSales.forEach(sale => {
+            const avgBuy = avgBuyMap[sale.ITEM_ID] || parseFloat(sale.master_buy_price || 0);
+            const profit = parseFloat(sale.sold_amount || 0) - (parseFloat(sale.sold_qty || 0) * avgBuy);
+            todayAvgProfitSum += profit;
+        });
+        // --- End of new logic ---
+
         // 4. Get Transactions Grouped by User
         console.log("Step 4: Fetching User Transactions...");
         const userTransQuery = `
@@ -507,7 +550,8 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             sales: parseFloat(stats?.sales || 0),
             buying: parseFloat(stats?.buying || 0),
             expenses: parseFloat(stats?.expenses || 0),
-            profit: parseFloat(stats?.sales || 0) - parseFloat(stats?.buying || 0) - parseFloat(stats?.expenses || 0)
+            profit: parseFloat(stats?.sales || 0) - parseFloat(stats?.buying || 0) - parseFloat(stats?.expenses || 0),
+            avgProfit: todayAvgProfitSum - parseFloat(stats?.expenses || 0)
         };
 
         // Process User Stats

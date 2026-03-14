@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Card, Spin, App, Tag, Table } from 'antd';
-import { ReloadOutlined, ArrowUpOutlined, ArrowDownOutlined, UserOutlined, WalletOutlined, SwapOutlined } from '@ant-design/icons';
+import { ReloadOutlined, ArrowUpOutlined, ArrowDownOutlined, UserOutlined, WalletOutlined, SwapOutlined, RiseOutlined } from '@ant-design/icons';
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import TerminalMonitor from '../components/TerminalMonitor';
@@ -11,7 +11,7 @@ export default function Dashboard() {
     const { message } = App.useApp();
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState({
-        global: { sales: 0, buying: 0, expenses: 0, profit: 0 },
+        global: { sales: 0, buying: 0, expenses: 0, profit: 0, avgProfit: 0 },
         users: [],
         stockMovement: []
     });
@@ -50,8 +50,8 @@ export default function Dashboard() {
         window.location.href = '/';
     };
 
-    const StatCard = ({ title, value, icon, color, subValue, type }) => (
-        <div className="glass-card p-6 rounded-2xl border border-white/20 dark:border-white/5 relative overflow-hidden group hover:scale-[1.02] transition-all duration-300">
+    const StatCard = ({ title, value, icon, color, subValue, type, className = "" }) => (
+        <div className={`glass-card p-6 rounded-2xl border border-white/20 dark:border-white/5 relative overflow-hidden group hover:scale-[1.02] transition-all duration-300 ${className}`}>
             <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity ${color}`}>
                 {icon}
             </div>
@@ -127,6 +127,14 @@ export default function Dashboard() {
 
             {/* Global Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-4 gap-4 mb-8">
+                <StatCard
+                    title="Today Average Profit"
+                    value={formatCurrency(data.global.avgProfit || 0)}
+                    icon={<RiseOutlined style={{ fontSize: '48px' }} />}
+                    color="text-emerald-500"
+                    type={data.global.avgProfit >= 0 ? 'success' : 'danger'}
+                    className="xl:col-span-4 bg-gradient-to-r from-emerald-500/10 to-transparent"
+                />
                 <StatCard
                     title="Today's Sales"
                     value={formatCurrency(data.global.sales)}
