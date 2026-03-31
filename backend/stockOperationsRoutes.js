@@ -2291,13 +2291,13 @@ router.post('/api/stock-ops/history-paginated', async (req, res) => {
 
         // Date Filter
         if (startDate) {
-            txWhereClauses.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= ?`);
+            txWhereClauses.push(`DATE(COALESCE(st.STOCK_DATE, ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')})) >= ?`);
             txParams.push(startDate);
             opsWhereClauses.push(`DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) >= ?`);
             opsParams.push(startDate);
         }
         if (endDate) {
-            txWhereClauses.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?`);
+            txWhereClauses.push(`DATE(COALESCE(st.STOCK_DATE, ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')})) <= ?`);
             txParams.push(endDate);
             opsWhereClauses.push(`DATE(${OP_SL_TIME_SQL('so.CREATED_DATE')}) <= ?`);
             opsParams.push(endDate);
@@ -2397,7 +2397,7 @@ router.post('/api/stock-ops/history-paginated', async (req, res) => {
         const txSelect = `
             SELECT 
                 st.TRANSACTION_ID as ID,
-                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as SORT_DATE,
+                COALESCE(st.STOCK_DATE, ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as SORT_DATE,
                 'transaction' as SOURCE
             FROM store_transactions st
             JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
@@ -2461,7 +2461,7 @@ router.post('/api/stock-ops/history-paginated', async (req, res) => {
             const txDetailQuery = `
                 SELECT 
                     st.TRANSACTION_ID, st.CODE, st.TYPE, st.STORE_NO, st.COMMENTS,
-                    ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
+                    COALESCE(st.STOCK_DATE, ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as CREATED_DATE,
                     st.CREATED_BY, sti.ITEM_ID, sti.QUANTITY as ITEM_QTY,
                     i.NAME as ITEM_NAME, i.CODE as ITEM_CODE, u.NAME as CREATED_BY_NAME,
                     'transaction' as SOURCE_TYPE
