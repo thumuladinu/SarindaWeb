@@ -2491,7 +2491,7 @@ router.post('/api/reports/transactions', async (req, res) => {
         let params = [];
 
         if (startDate && endDate) {
-            baseWhere += " AND DATE(CONVERT_TZ(st.EDITED_DATE, '+00:00', '+05:30')) BETWEEN ? AND ?";
+            baseWhere += ` AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) BETWEEN ? AND ?`;
             params.push(startDate, endDate);
         }
 
@@ -2517,7 +2517,7 @@ router.post('/api/reports/transactions', async (req, res) => {
             // 2. Details (Joined with items to get breakdown)
             const rawDetails = await pool.query(`
                 SELECT 
-                    st.TRANSACTION_ID, st.CODE, st.TYPE, CONVERT_TZ(st.EDITED_DATE, '+00:00', '+05:30') as CREATED_DATE, st.SUB_TOTAL as ORIGINAL_TOTAL,
+                    st.TRANSACTION_ID, st.CODE, st.TYPE, ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE, st.SUB_TOTAL as ORIGINAL_TOTAL,
                     sc.NAME as C_NAME, 
                     sti.ITEM_ID, sti.QUANTITY, sti.PRICE, sti.TOTAL as ITEM_TOTAL,
                     si.NAME as ITEM_NAME, si.CODE as ITEM_CODE
@@ -2526,7 +2526,7 @@ router.post('/api/reports/transactions', async (req, res) => {
                 JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
                 LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID 
                 WHERE ${baseWhere} AND sti.ITEM_ID IN (?) AND sti.IS_ACTIVE = 1
-                ORDER BY st.EDITED_DATE DESC
+                ORDER BY st.CREATED_DATE DESC
             `, [...params, itemIds]);
 
             // Group by TRANSACTION_ID in JS
@@ -2574,11 +2574,11 @@ router.post('/api/reports/transactions', async (req, res) => {
             `, params);
 
             detailsRows = await pool.query(`
-                SELECT st.*, CONVERT_TZ(st.EDITED_DATE, '+00:00', '+05:30') as CREATED_DATE, sc.NAME as C_NAME 
+                SELECT st.*, ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE, sc.NAME as C_NAME 
                 FROM store_transactions st
                 LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID 
                 WHERE ${whereClause}
-                ORDER BY st.EDITED_DATE DESC
+                ORDER BY st.CREATED_DATE DESC
             `, params);
         }
 
@@ -2618,7 +2618,7 @@ router.post('/api/reports/items', async (req, res) => {
         let params = [];
 
         if (startDate && endDate) {
-            whereClause += " AND DATE(CONVERT_TZ(t.EDITED_DATE, '+00:00', '+05:30')) BETWEEN ? AND ?";
+            whereClause += ` AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) BETWEEN ? AND ?`;
             params.push(startDate, endDate);
         }
         if (storeNo) {
@@ -2725,7 +2725,7 @@ router.post('/api/reports/stockMovement', async (req, res) => {
                 t.IS_ACTIVE = 1 
                 AND t.TYPE IN ('Buying', 'Opening', 'AdjIn', 'TransferIn', 'StockTake', 'Selling', 'AdjOut', 'StockClear', 'TransferOut', 'Wastage')
                 AND sti.IS_ACTIVE = 1
-                AND DATE(CONVERT_TZ(t.EDITED_DATE, '+00:00', '+05:30')) BETWEEN ? AND ?
+                AND DATE(${STOCK_CALC_TIME_SQL('t.CREATED_DATE', 't.CODE', 't.WEIGHT_CODE', 't.STOCK_DATE')}) BETWEEN ? AND ?
         `;
 
         if (storeNo && storeNo !== 'all') {
@@ -2841,7 +2841,7 @@ router.post('/api/reports/averages', async (req, res) => {
         let params = [];
 
         if (startDate && endDate) {
-            whereClause += " AND DATE(CONVERT_TZ(t.EDITED_DATE, '+00:00', '+05:30')) BETWEEN ? AND ?";
+            whereClause += ` AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) BETWEEN ? AND ?`;
             params.push(startDate, endDate);
         }
         if (storeNo) {
