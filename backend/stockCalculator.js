@@ -17,6 +17,23 @@ const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
     END
 `;
 
+const STOCK_CALC_TIME_SQL = (createdDateField = 'st.CREATED_DATE', codeField = 'st.CODE', weightCodeField = 'st.WEIGHT_CODE', stockDateField = 'st.STOCK_DATE') => `
+    CASE 
+        WHEN ${weightCodeField} IS NOT NULL THEN ${stockDateField}
+        WHEN ${codeField} IS NULL 
+             OR ${codeField} LIKE 'ADJ-%' 
+             OR ${codeField} LIKE 'STOCKOP-%' 
+             OR ${codeField} LIKE 'SLO-%'
+             OR ${codeField} LIKE 'WEB-%'
+             OR ${codeField} LIKE '%-WEB-%'
+             OR ${codeField} LIKE '%-SLO-%'
+             OR ${codeField} LIKE 'RETURN-EXP-%'
+             OR ${codeField} LIKE 'TX-%'
+        THEN CONVERT_TZ(${createdDateField}, '+00:00', '+05:30')
+        ELSE ${createdDateField}
+    END
+`;
+
 const calculateCurrentStock = async (pool, itemId, storeNo, upToTimestamp = null) => {
     console.log(`[stockCalculator] Calculating stock for Item ${itemId} Store ${storeNo} at ${upToTimestamp}`);
     // UNIFIED STOCK CALCULATION QUERY
@@ -31,7 +48,7 @@ const calculateCurrentStock = async (pool, itemId, storeNo, upToTimestamp = null
         const queryParams = [itemId, storeNo];
 
         if (upToTimestamp) {
-            timeCondition = `AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?`;
+            timeCondition = `AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?`;
             queryParams.push(upToTimestamp);
         }
 

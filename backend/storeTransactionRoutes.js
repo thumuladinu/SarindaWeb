@@ -34,6 +34,23 @@ const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
     END
 `;
 
+const STOCK_CALC_TIME_SQL = (createdDateField = 'st.CREATED_DATE', codeField = 'st.CODE', weightCodeField = 'st.WEIGHT_CODE', stockDateField = 'st.STOCK_DATE') => `
+    CASE 
+        WHEN ${weightCodeField} IS NOT NULL THEN ${stockDateField}
+        WHEN ${codeField} IS NULL 
+             OR ${codeField} LIKE 'ADJ-%' 
+             OR ${codeField} LIKE 'STOCKOP-%' 
+             OR ${codeField} LIKE 'SLO-%'
+             OR ${codeField} LIKE 'WEB-%'
+             OR ${codeField} LIKE '%-WEB-%'
+             OR ${codeField} LIKE '%-SLO-%'
+             OR ${codeField} LIKE 'RETURN-EXP-%'
+             OR ${codeField} LIKE 'TX-%'
+        THEN CONVERT_TZ(${createdDateField}, '+00:00', '+05:30')
+        ELSE ${createdDateField}
+    END
+`;
+
 // SQL Helper for Stock Operations (Always server-created UTC)
 const OP_SL_TIME_SQL = (field = 'so.CREATED_DATE') => `CONVERT_TZ(${field}, '+00:00', '+05:30')`;
 
@@ -173,7 +190,7 @@ router.post('/api/getDailyBalance', async (req, res) => {
             WHERE IS_ACTIVE = 1 
               AND TYPE = 'Selling' 
               AND CREATED_BY = ? 
-              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) = ?
+              AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
         `, [USER_ID, DATE]);
 
         // 3. Get Total BUYING (Cash Out)
@@ -185,7 +202,7 @@ router.post('/api/getDailyBalance', async (req, res) => {
             WHERE IS_ACTIVE = 1 
               AND TYPE = 'Buying' 
               AND CREATED_BY = ? 
-              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) = ?
+              AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
         `, [USER_ID, DATE]);
 
         // 4. Get Total EXPENSES (Cash Out)
@@ -197,7 +214,7 @@ router.post('/api/getDailyBalance', async (req, res) => {
             WHERE IS_ACTIVE = 1 
               AND TYPE = 'Expenses' 
               AND CREATED_BY = ? 
-              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) = ?
+              AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
         `, [USER_ID, DATE]);
 
         const sales = parseFloat((salesRows && salesRows[0]?.total) || 0);
@@ -331,11 +348,11 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
             queryParams.push(parseFloat(maxAmount));
         }
         if (startDate) {
-            whereConditions.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= ?`);
+            whereConditions.push(`DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) >= ?`);
             queryParams.push(startDate);
         }
         if (endDate) {
-            whereConditions.push(`DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?`);
+            whereConditions.push(`DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) <= ?`);
             queryParams.push(endDate);
         }
         if (terminal) {
@@ -371,7 +388,7 @@ router.post('/api/getAllTransactionsCashBook', async (req, res) => {
         const mainQuery = `
             SELECT 
                 st.*,
-                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
+                ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} as CREATED_DATE,
                 sc.NAME as C_NAME
             FROM store_transactions st
             LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID
@@ -472,7 +489,7 @@ router.get('/api/getTransactionDetails/:id', async (req, res) => {
 
         // Get transaction basic info with customer
         const transaction = await pool.query(`
-            SELECT st.*, ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE, sc.NAME as C_NAME 
+            SELECT st.*, ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} as CREATED_DATE, sc.NAME as C_NAME 
             FROM store_transactions st 
             LEFT JOIN store_customers sc ON st.CUSTOMER = sc.CUSTOMER_ID 
             WHERE st.TRANSACTION_ID = ?
@@ -504,7 +521,7 @@ router.post('/api/getAllTransactionsCashBookByUser', async (req, res) => {
 
         // Query to fetch active transactions today and yersterday (exclude weight measurements and inventory adjustments)
         const queryResult = await pool.query(
-            `SELECT *, ${SL_TIME_SQL('CREATED_DATE', 'CODE')} as CREATED_DATE FROM store_transactions st WHERE IS_ACTIVE = 1 AND CODE IS NOT NULL AND TYPE != 'WeightMeasure' AND TYPE NOT IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'Adjustment') AND DATE(${SL_TIME_SQL('CREATED_DATE', 'CODE')}) >= CURDATE() - INTERVAL 1 DAY AND STORE_NO = ?`,
+            `SELECT *, ${STOCK_CALC_TIME_SQL('CREATED_DATE', 'CODE', 'WEIGHT_CODE', 'STOCK_DATE')} as CREATED_DATE FROM store_transactions st WHERE IS_ACTIVE = 1 AND CODE IS NOT NULL AND TYPE != 'WeightMeasure' AND TYPE NOT IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'Adjustment') AND DATE(${STOCK_CALC_TIME_SQL('CREATED_DATE', 'CODE', 'WEIGHT_CODE', 'STOCK_DATE')}) >= CURDATE() - INTERVAL 1 DAY AND STORE_NO = ?`,
             [req.body.STORE_NO]
         );
 
@@ -2024,7 +2041,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 st.TYPE,
                 st.STORE_NO,
                 st.COMMENTS,
-                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
+                ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} as CREATED_DATE,
                 st.CREATED_BY,
                 sti.ITEM_ID,
                 sti.QUANTITY as ITEM_QTY,
@@ -2039,8 +2056,8 @@ router.post('/api/getInventoryHistory', async (req, res) => {
             WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
               AND st.TYPE IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'StockClear')
               AND (st.COMMENTS IS NULL OR (st.COMMENTS NOT LIKE '[OP-%' AND st.COMMENTS NOT LIKE '[S%-%-CLR-%'))
-              ${req.body.startDate ? `AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= '${req.body.startDate}'` : ''}
-              ${req.body.endDate ? `AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= '${req.body.endDate}'` : ''}
+              ${req.body.startDate ? `AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) >= '${req.body.startDate}'` : ''}
+              ${req.body.endDate ? `AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) <= '${req.body.endDate}'` : ''}
         `;
 
         const transactionRows = await pool.query(transactionQuery);

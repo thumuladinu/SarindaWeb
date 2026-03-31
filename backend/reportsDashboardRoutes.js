@@ -58,6 +58,21 @@ const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
     END
 `;
 
+const STOCK_CALC_TIME_SQL = (createdDateField = 'st.CREATED_DATE', codeField = 'st.CODE', weightCodeField = 'st.WEIGHT_CODE', stockDateField = 'st.STOCK_DATE') => `
+    CASE 
+        WHEN ${weightCodeField} IS NOT NULL THEN DATE_FORMAT(${stockDateField}, '%Y-%m-%d %H:%i:%s')
+        WHEN ${codeField} IS NULL 
+             OR ${codeField} LIKE 'ADJ-%' 
+             OR ${codeField} LIKE 'STOCKOP-%' 
+             OR ${codeField} LIKE 'SLO-%'
+             OR ${codeField} LIKE 'WEB-%'
+             OR ${codeField} LIKE '%-WEB-%'
+             OR ${codeField} LIKE '%-SLO-%'
+        THEN DATE_FORMAT(CONVERT_TZ(${createdDateField}, '+00:00', '+05:30'), '%Y-%m-%d %H:%i:%s')
+        ELSE DATE_FORMAT(${createdDateField}, '%Y-%m-%d %H:%i:%s')
+    END
+`;
+
 // SQL Helper for Stock Operations (Always server-created UTC)
 const OP_SL_TIME_SQL = (field = 'sso.CREATED_DATE') => `DATE_FORMAT(CONVERT_TZ(${field}, '+00:00', '+05:30'), '%Y-%m-%d %H:%i:%s')`;
 
@@ -126,7 +141,7 @@ router.get('/api/reports-dashboard/clearances/:itemId', async (req, res) => {
         // Also find "natural zero" points via running stock
         const runningStockQuery = `
             SELECT 
-                DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as tx_date,
+                DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) as tx_date,
                 SUM(CASE 
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
                     WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
@@ -137,7 +152,7 @@ router.get('/api/reports-dashboard/clearances/:itemId', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-            GROUP BY DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')})
+            GROUP BY DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')})
             ORDER BY tx_date ASC
         `;
 
@@ -218,7 +233,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             if (!opRow) return null;
             // Find latest linked transaction
             const [latestTx] = await pool.query(
-                `SELECT MAX(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as max_date 
+                `SELECT MAX(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) as max_date 
                  FROM store_transactions st 
                  WHERE st.COMMENTS LIKE ? AND st.IS_ACTIVE = 1`,
                 [`%[${opRow.OP_CODE}]%`]
@@ -260,7 +275,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                   AND st.STORE_NO = ?
                   AND st.IS_ACTIVE = 1
                   AND sti.IS_ACTIVE = 1
-                  AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+                  AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?
             `, [itemId, storeNo, startBoundary]);
             initialStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
         }
@@ -277,7 +292,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 st.CODE as TX_CODE,
                 st.TYPE,
                 st.STORE_NO,
-                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
+                ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} as CREATED_DATE,
                 st.COMMENTS,
                 st.SUB_TOTAL,
                 sti.QUANTITY,
@@ -288,8 +303,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} > ?
-              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+              AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} > ?
+              AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?
               AND st.COMMENTS NOT LIKE '%[OP-%'  -- Exclude operation-linked transactions
               AND st.COMMENTS NOT LIKE '%[S2-%'   -- Exclude store operation codes
               AND st.COMMENTS NOT LIKE '%[S1-%'
@@ -678,8 +693,8 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                     JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
                     WHERE sti.ITEM_ID = ? AND st.TYPE = 'Selling'
                       AND st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1
-                      AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} >= ? 
-                      AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+                      AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} >= ? 
+                      AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?
                       AND st.COMMENTS NOT LIKE '%[OP-%'
                       AND st.COMMENTS NOT LIKE '%[S2-%'
                       AND st.COMMENTS NOT LIKE '%[S1-%'
@@ -816,7 +831,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                   AND st.STORE_NO = ?
                   AND st.IS_ACTIVE = 1
                   AND sti.IS_ACTIVE = 1
-                  AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+                  AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?
             `, [itemId, storeNo, endBoundary]);
             finalStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
         }
@@ -827,7 +842,7 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // Exclude operation-linked transactions to avoid double-counting
         const dailyQuery = `
             SELECT 
-                DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as tx_date,
+                DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) as tx_date,
                 st.TYPE,
                 st.STORE_NO,
                 SUM(sti.QUANTITY) as total_qty,
@@ -837,13 +852,13 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} > ?
-              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+              AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} > ?
+              AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?
               AND st.COMMENTS NOT LIKE '%[OP-%'  -- Exclude operation-linked transactions
               AND st.COMMENTS NOT LIKE '%[S2-%'   -- Exclude store operation codes
               AND st.COMMENTS NOT LIKE '%[S1-%'
               AND st.COMMENTS NOT LIKE '%[WEB-%'
-            GROUP BY DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}), st.TYPE, st.STORE_NO
+            GROUP BY DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}), st.TYPE, st.STORE_NO
             ORDER BY tx_date ASC
         `;
         const dailyRows = await pool.query(dailyQuery, [itemId, startBoundary, endBoundary]);
@@ -1251,7 +1266,7 @@ router.post('/api/graphs/item-data', async (req, res) => {
         // 1. Get running stock up to endDate
         const runningStockQuery = `
             SELECT 
-                DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as tx_date,
+                DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) as tx_date,
                 st.STORE_NO,
                 SUM(CASE 
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
@@ -1263,8 +1278,8 @@ router.post('/api/graphs/item-data', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?
-            GROUP BY DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}), st.STORE_NO
+              AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) <= ?
+            GROUP BY DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}), st.STORE_NO
             ORDER BY tx_date ASC
         `;
         const dailyStockChanges = await pool.query(runningStockQuery, [itemId, endDate]);
@@ -1272,7 +1287,7 @@ router.post('/api/graphs/item-data', async (req, res) => {
         // ... (Price transactions query remains same) ...
         const txQuery = `
             SELECT 
-                DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) as tx_date,
+                DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) as tx_date,
                 st.TYPE,
                 sti.QUANTITY,
                 sti.TOTAL
@@ -1286,8 +1301,8 @@ router.post('/api/graphs/item-data', async (req, res) => {
               AND st.COMMENTS NOT LIKE '%[S2-%'
               AND st.COMMENTS NOT LIKE '%[S1-%'
               AND st.COMMENTS NOT LIKE '%[WEB-%'
-              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= ?
-              AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= ?
+              AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) >= ?
+              AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) <= ?
         `;
         const transactions = await pool.query(txQuery, [itemId, startDate, endDate]);
 
@@ -1537,7 +1552,7 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                   AND st.STORE_NO = ?
                   AND st.IS_ACTIVE = 1
                   AND sti.IS_ACTIVE = 1
-                  AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+                  AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?
             `, [itemId, storeNo, startDatetime]);
             initialStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
         }
@@ -1557,7 +1572,7 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                   AND st.STORE_NO = ?
                   AND st.IS_ACTIVE = 1
                   AND sti.IS_ACTIVE = 1
-                  AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+                  AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?
             `, [itemId, storeNo, endDatetime]);
             finalStockByStore[storeNo] = parseFloat(result?.stock_level) || 0;
         }
@@ -1568,7 +1583,7 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         // -------------------------------------------------------
         const txEventsQuery = `
             SELECT
-                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as event_time,
+                ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} as event_time,
                 st.TYPE as event_type,
                 'transaction' as event_source,
                 st.STORE_NO,
@@ -1581,8 +1596,8 @@ router.post('/api/graphs/stock-events', async (req, res) => {
             WHERE sti.ITEM_ID = ?
               AND st.IS_ACTIVE = 1
               AND sti.IS_ACTIVE = 1
-              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} > ?
-              AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?
+              AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} > ?
+              AND ${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')} <= ?
             ORDER BY event_time ASC
         `;
         const txEvents = await pool.query(txEventsQuery, [itemId, startDatetime, endDatetime]);

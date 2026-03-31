@@ -28,6 +28,23 @@ const SL_TIME_SQL = (field = 'st.CREATED_DATE', codeField = 'st.CODE') => `
     END
 `;
 
+const STOCK_CALC_TIME_SQL = (createdDateField = 'st.CREATED_DATE', codeField = 'st.CODE', weightCodeField = 'st.WEIGHT_CODE', stockDateField = 'st.STOCK_DATE') => `
+    CASE 
+        WHEN ${weightCodeField} IS NOT NULL THEN ${stockDateField}
+        WHEN ${codeField} IS NULL 
+             OR ${codeField} LIKE 'ADJ-%' 
+             OR ${codeField} LIKE 'STOCKOP-%' 
+             OR ${codeField} LIKE 'SLO-%'
+             OR ${codeField} LIKE 'WEB-%'
+             OR ${codeField} LIKE '%-WEB-%'
+             OR ${codeField} LIKE '%-SLO-%'
+             OR ${codeField} LIKE 'RETURN-EXP-%'
+             OR ${codeField} LIKE 'TX-%'
+        THEN CONVERT_TZ(${createdDateField}, '+00:00', '+05:30')
+        ELSE ${createdDateField}
+    END
+`;
+
 const OP_SL_TIME_SQL = (field = 'so.CREATED_DATE') => `CONVERT_TZ(${field}, '+00:00', '+05:30')`;
 
 // Now you can use pool.query with async/await
@@ -502,7 +519,7 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             WHERE t.IS_ACTIVE = 1 
             AND sti.IS_ACTIVE = 1
             AND t.TYPE IN ('Selling', 'Buying')
-            AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) = ?
+            AND DATE(${STOCK_CALC_TIME_SQL('t.CREATED_DATE', 't.CODE', 't.WEIGHT_CODE', 't.STOCK_DATE')}) = ?
             GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE, t.STORE_NO
         `;
         const stockMovementRows = await pool.query(stockMovementQuery, [queryDate]);
