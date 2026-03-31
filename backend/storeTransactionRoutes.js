@@ -2024,7 +2024,7 @@ router.post('/api/getInventoryHistory', async (req, res) => {
                 st.TYPE,
                 st.STORE_NO,
                 st.COMMENTS,
-                st.STOCK_DATE as CREATED_DATE,
+                ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} as CREATED_DATE,
                 st.CREATED_BY,
                 sti.ITEM_ID,
                 sti.QUANTITY as ITEM_QTY,
@@ -2039,8 +2039,8 @@ router.post('/api/getInventoryHistory', async (req, res) => {
             WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
               AND st.TYPE IN ('AdjIn', 'AdjOut', 'Opening', 'StockTake', 'StockClear')
               AND (st.COMMENTS IS NULL OR (st.COMMENTS NOT LIKE '[OP-%' AND st.COMMENTS NOT LIKE '[S%-%-CLR-%'))
-              ${req.body.startDate ? `AND DATE(st.STOCK_DATE) >= '${req.body.startDate}'` : ''}
-              ${req.body.endDate ? `AND DATE(st.STOCK_DATE) <= '${req.body.endDate}'` : ''}
+              ${req.body.startDate ? `AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) >= '${req.body.startDate}'` : ''}
+              ${req.body.endDate ? `AND DATE(${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')}) <= '${req.body.endDate}'` : ''}
         `;
 
         const transactionRows = await pool.query(transactionQuery);

@@ -31,7 +31,7 @@ const calculateCurrentStock = async (pool, itemId, storeNo, upToTimestamp = null
         const queryParams = [itemId, storeNo];
 
         if (upToTimestamp) {
-            timeCondition = `AND st.STOCK_DATE <= ?`;
+            timeCondition = `AND ${SL_TIME_SQL('st.CREATED_DATE', 'st.CODE')} <= ?`;
             queryParams.push(upToTimestamp);
         }
 

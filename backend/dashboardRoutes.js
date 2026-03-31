@@ -446,7 +446,7 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
             WHERE t.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1 
             AND t.TYPE = 'Selling'
-            AND DATE(t.STOCK_DATE) = ?
+            AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) = ?
             GROUP BY sti.ITEM_ID, si.BUYING_PRICE
         `;
         const todayItemSales = await pool.query(todayItemSalesQuery, [queryDate]);
@@ -460,7 +460,7 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             JOIN store_transactions t ON sti.TRANSACTION_ID = t.TRANSACTION_ID
             WHERE t.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1
             AND t.TYPE = 'Buying'
-            AND DATE(t.STOCK_DATE) BETWEEN DATE_SUB(?, INTERVAL 30 DAY) AND ?
+            AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) BETWEEN DATE_SUB(?, INTERVAL 30 DAY) AND ?
             GROUP BY ITEM_ID
         `;
         // Use queryDate as anchor for "last 30 days"
@@ -502,7 +502,7 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             WHERE t.IS_ACTIVE = 1 
             AND sti.IS_ACTIVE = 1
             AND t.TYPE IN ('Selling', 'Buying')
-            AND DATE(t.STOCK_DATE) = ?
+            AND DATE(${SL_TIME_SQL('t.CREATED_DATE', 't.CODE')}) = ?
             GROUP BY si.ITEM_ID, si.CODE, si.NAME, t.TYPE, t.STORE_NO
         `;
         const stockMovementRows = await pool.query(stockMovementQuery, [queryDate]);
