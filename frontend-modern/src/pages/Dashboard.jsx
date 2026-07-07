@@ -4,11 +4,21 @@ import { ReloadOutlined, ArrowUpOutlined, ArrowDownOutlined, UserOutlined, Walle
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import TerminalMonitor from '../components/TerminalMonitor';
+import { useStores } from '../contexts/StoresContext';
+
+// Reads a per-store quantity from the new dynamic shape with a fallback
+// to legacy buyQtyS1/sellQtyS1/buyQtyS2/sellQtyS2 fields for older backends.
+const readStoreQty = (item, sideObjKey, legacyPrefix, storeNo) => {
+    const dyn = item?.[sideObjKey];
+    if (dyn && dyn[String(storeNo)] !== undefined) return Number(dyn[String(storeNo)]) || 0;
+    return Number(item?.[`${legacyPrefix}${storeNo}`]) || 0;
+};
 
 const { Meta } = Card;
 
 export default function Dashboard() {
     const { message } = App.useApp();
+    const { stores, getHex } = useStores();
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState({
         global: { sales: 0, buying: 0, expenses: 0, profit: 0, avgProfit: 0 },
@@ -78,20 +88,25 @@ export default function Dashboard() {
                 </div>
             </div>
             <div className="text-[10px] space-y-1">
-                <div className="flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 rounded px-2 py-1">
-                    <span className="text-gray-500">S1</span>
-                    <div className="flex gap-2">
-                        <span className="text-red-500">B:{Number(item.buyQtyS1).toFixed(1)}</span>
-                        <span className="text-emerald-600">S:{Number(item.sellQtyS1).toFixed(1)}</span>
-                    </div>
-                </div>
-                <div className="flex justify-between items-center bg-purple-50 dark:bg-purple-900/20 rounded px-2 py-1">
-                    <span className="text-gray-500">S2</span>
-                    <div className="flex gap-2">
-                        <span className="text-red-500">B:{Number(item.buyQtyS2).toFixed(1)}</span>
-                        <span className="text-emerald-600">S:{Number(item.sellQtyS2).toFixed(1)}</span>
-                    </div>
-                </div>
+                {stores.map(s => {
+                    const buy = readStoreQty(item, 'buyByStore', 'buyQtyS', s.STORE_NO);
+                    const sell = readStoreQty(item, 'sellByStore', 'sellQtyS', s.STORE_NO);
+                    return (
+                        <div
+                            key={s.STORE_NO}
+                            className="flex justify-between items-center rounded px-2 py-1"
+                            style={{ background: getHex(s.STORE_NO) + '15' }}
+                        >
+                            <span className="text-gray-500">
+                                {s.IS_WEIGHING_STATION ? '⚖️ S' + s.STORE_NO : 'S' + s.STORE_NO}
+                            </span>
+                            <div className="flex gap-2">
+                                <span className="text-red-500">B:{buy.toFixed(1)}</span>
+                                <span className="text-emerald-600">S:{sell.toFixed(1)}</span>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
@@ -184,34 +199,32 @@ export default function Dashboard() {
                             columns={[
                                 { title: 'Code', dataIndex: 'code', width: 80 },
                                 { title: 'Item', dataIndex: 'name', ellipsis: true },
-                                {
-                                    title: 'S1 Buy',
-                                    dataIndex: 'buyQtyS1',
-                                    width: 70,
-                                    align: 'right',
-                                    render: v => <span className="text-red-500">{Number(v).toFixed(1)}</span>
-                                },
-                                {
-                                    title: 'S1 Sell',
-                                    dataIndex: 'sellQtyS1',
-                                    width: 70,
-                                    align: 'right',
-                                    render: v => <span className="text-emerald-600">{Number(v).toFixed(1)}</span>
-                                },
-                                {
-                                    title: 'S2 Buy',
-                                    dataIndex: 'buyQtyS2',
-                                    width: 70,
-                                    align: 'right',
-                                    render: v => <span className="text-red-500">{Number(v).toFixed(1)}</span>
-                                },
-                                {
-                                    title: 'S2 Sell',
-                                    dataIndex: 'sellQtyS2',
-                                    width: 70,
-                                    align: 'right',
-                                    render: v => <span className="text-emerald-600">{Number(v).toFixed(1)}</span>
-                                },
+                                // Buy / Sell columns are generated per active store so newly
+                                // added stores (Store 3+ and dynamic ones) appear automatically.
+                                ...stores.flatMap(s => [
+                                    {
+                                        title: `S${s.STORE_NO} Buy`,
+                                        key: `buy_${s.STORE_NO}`,
+                                        width: 70,
+                                        align: 'right',
+                                        render: (_, row) => (
+                                            <span className="text-red-500">
+                                                {readStoreQty(row, 'buyByStore', 'buyQtyS', s.STORE_NO).toFixed(1)}
+                                            </span>
+                                        ),
+                                    },
+                                    {
+                                        title: `S${s.STORE_NO} Sell`,
+                                        key: `sell_${s.STORE_NO}`,
+                                        width: 70,
+                                        align: 'right',
+                                        render: (_, row) => (
+                                            <span className="text-emerald-600">
+                                                {readStoreQty(row, 'sellByStore', 'sellQtyS', s.STORE_NO).toFixed(1)}
+                                            </span>
+                                        ),
+                                    },
+                                ]),
                                 {
                                     title: 'Net',
                                     dataIndex: 'netChange',

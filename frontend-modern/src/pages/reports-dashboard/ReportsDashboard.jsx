@@ -22,6 +22,7 @@ import dayjs from 'dayjs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { registerSinhalaFont } from '../../fonts/sinhalaFont';
+import { useStores } from '../../contexts/StoresContext';
 
 const { Option } = Select;
 const { Panel } = Collapse;
@@ -174,6 +175,7 @@ const OP_TYPE_COLORS = { 1: 'blue', 2: 'geekblue', 3: 'orange', 4: 'gold', 5: 'p
 // MAIN COMPONENT
 // =====================================================
 export default function ReportsDashboard() {
+    const { stores, getName, getAntTag } = useStores();
     const [items, setItems] = useState([]);
     const [selectedItemId, setSelectedItemId] = useState(null);
     const selectedStore = 'all';
@@ -439,6 +441,7 @@ export default function ReportsDashboard() {
 // ANALYSIS RESULTS COMPONENT
 // =====================================================
 function AnalysisResults({ data, showSections, toggleSection }) {
+    const { stores, getName, getAntTag } = useStores();
     const { item, period, initialStock, finalStock, storeAggregates, aggregates, chartData, financials, conversions, stockOperations, transfers, operationWastage, manualAdjustments = [], netManualAdjustment = 0 } = data;
 
     // Derived Variables (accessed by multiple sections & PDF)
@@ -606,11 +609,11 @@ function AnalysisResults({ data, showSections, toggleSection }) {
 
         autoTable(doc, {
             startY: currentY,
-            margin: { left: 14, right: 150 }, // Half width
-            head: [['Phase', 'Store 1 (kg)', 'Store 2 (kg)', 'Combined (kg)']],
+            margin: { left: 14, right: 150 },
+            head: [['Phase', ...stores.map(s => `${getName(s.STORE_NO)} (kg)`), 'Combined (kg)']],
             body: [
-                ['Initial Stock', initialStock.store1.toFixed(2), initialStock.store2.toFixed(2), initialStock.total.toFixed(2)],
-                ['Final Stock', finalStock.store1.toFixed(2), finalStock.store2.toFixed(2), finalStock.total.toFixed(2)]
+                ['Initial Stock', ...stores.map(s => ((initialStock.byStore || {})[String(s.STORE_NO)] ?? initialStock[`store${s.STORE_NO}`] ?? 0).toFixed(2)), initialStock.total.toFixed(2)],
+                ['Final Stock',   ...stores.map(s => ((finalStock.byStore   || {})[String(s.STORE_NO)] ?? finalStock[`store${s.STORE_NO}`]   ?? 0).toFixed(2)), finalStock.total.toFixed(2)]
             ],
             theme: 'grid',
             headStyles: { fillColor: [249, 115, 22], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
@@ -628,15 +631,19 @@ function AnalysisResults({ data, showSections, toggleSection }) {
         autoTable(doc, {
             startY: rightY,
             margin: { left: 155 },
-            head: [['Type', 'Store 1', 'Store 2', 'Total']],
-            body: [
-                ['Buying (kg)', storeAggregates.store1.buying.qty.toFixed(2), storeAggregates.store2.buying.qty.toFixed(2), aggregates.buying.qty.toFixed(2)],
-                ['Selling (kg)', storeAggregates.store1.selling.qty.toFixed(2), storeAggregates.store2.selling.qty.toFixed(2), aggregates.selling.qty.toFixed(2)],
-                ['Adj In (kg)', storeAggregates.store1.adjIn.qty.toFixed(2), storeAggregates.store2.adjIn.qty.toFixed(2), aggregates.adjIn.qty.toFixed(2)],
-                ['Adj Out (kg)', storeAggregates.store1.adjOut.qty.toFixed(2), storeAggregates.store2.adjOut.qty.toFixed(2), aggregates.adjOut.qty.toFixed(2)],
-                ['Revenue (Rs)', storeAggregates.store1.selling.amount.toFixed(0), storeAggregates.store2.selling.amount.toFixed(0), aggregates.selling.amount.toFixed(0)],
-                ['Cost (Rs)', storeAggregates.store1.buying.amount.toFixed(0), storeAggregates.store2.buying.amount.toFixed(0), aggregates.buying.amount.toFixed(0)]
-            ],
+            head: [['Type', ...stores.map(s => getName(s.STORE_NO)), 'Total']],
+            body: (() => {
+                const sa = storeAggregates.byStore || {};
+                const getField = (n, field, sub) => (sa[String(n)] ? (sa[String(n)][field]?.[sub] ?? 0) : (storeAggregates[`store${n}`]?.[field]?.[sub] ?? 0));
+                return [
+                    ['Buying (kg)',  ...stores.map(s => getField(s.STORE_NO, 'buying', 'qty').toFixed(2)),   aggregates.buying.qty.toFixed(2)],
+                    ['Selling (kg)', ...stores.map(s => getField(s.STORE_NO, 'selling', 'qty').toFixed(2)), aggregates.selling.qty.toFixed(2)],
+                    ['Adj In (kg)',  ...stores.map(s => getField(s.STORE_NO, 'adjIn', 'qty').toFixed(2)),    aggregates.adjIn.qty.toFixed(2)],
+                    ['Adj Out (kg)', ...stores.map(s => getField(s.STORE_NO, 'adjOut', 'qty').toFixed(2)),  aggregates.adjOut.qty.toFixed(2)],
+                    ['Revenue (Rs)', ...stores.map(s => getField(s.STORE_NO, 'selling', 'amount').toFixed(0)), aggregates.selling.amount.toFixed(0)],
+                    ['Cost (Rs)',    ...stores.map(s => getField(s.STORE_NO, 'buying', 'amount').toFixed(0)), aggregates.buying.amount.toFixed(0)],
+                ];
+            })(),
             theme: 'grid',
             headStyles: { fillColor: [14, 165, 233], font: 'helvetica', fontStyle: 'bold', fontSize: 8 },
             styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1 }
@@ -1079,8 +1086,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                         Initial Stock <span className="font-normal text-gray-500">— after first clearance</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <StoreStockBox storeNo={1} stock={initialStock.store1} label="Store 1" color="blue" />
-                        <StoreStockBox storeNo={2} stock={initialStock.store2} label="Store 2" color="purple" />
+                        {stores.map(s => <StoreStockBox key={s.STORE_NO} storeNo={s.STORE_NO} stock={(initialStock.byStore || {})[String(s.STORE_NO)] ?? initialStock[`store${s.STORE_NO}`] ?? 0} label={getName(s.STORE_NO)} color={getAntTag(s.STORE_NO)} />)}
                         <div className="flex flex-col items-center p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
                             <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center mb-1">
                                 <span className="text-sm font-bold text-emerald-400">Σ</span>
@@ -1102,8 +1108,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                         Final Stock <span className="font-normal text-gray-500">— after final clearance</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <StoreStockBox storeNo={1} stock={finalStock.store1} label="Store 1" color="blue" />
-                        <StoreStockBox storeNo={2} stock={finalStock.store2} label="Store 2" color="purple" />
+                        {stores.map(s => <StoreStockBox key={s.STORE_NO} storeNo={s.STORE_NO} stock={(finalStock.byStore || {})[String(s.STORE_NO)] ?? finalStock[`store${s.STORE_NO}`] ?? 0} label={getName(s.STORE_NO)} color={getAntTag(s.STORE_NO)} />)}
                         <div className="flex flex-col items-center p-3 rounded-xl bg-orange-500/5 border border-orange-500/20">
                             <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center mb-1">
                                 <span className="text-sm font-bold text-orange-400">Σ</span>
@@ -1277,7 +1282,7 @@ function AnalysisResults({ data, showSections, toggleSection }) {
                                 {/* Transfer store 2 items */}
                                 {op.store2Items && op.store2Items.length > 0 && (
                                     <div className="mt-2 pt-2 border-t border-white/5">
-                                        <div className="text-[10px] text-gray-500 uppercase mb-1">To Store 2:</div>
+                                        <div className="text-[10px] text-gray-500 uppercase mb-1">To {getName(op.storeNo === 1 ? 2 : op.targetStore || 2)}:</div>
                                         {op.store2Items.map((s2, si) => (
                                             <div key={si} className="flex justify-between items-center px-2 py-1 bg-purple-900/10 rounded mb-0.5">
                                                 <span className="text-xs text-gray-300">{s2.itemName}</span>

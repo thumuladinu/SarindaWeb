@@ -165,6 +165,37 @@ pool.query = util.promisify(pool.query);
     }
 })();
 
+// Database Migration: Add STORE_VISIBILITY column for per-store item visibility
+(async () => {
+    try {
+        await pool.query("ALTER TABLE store_items ADD COLUMN STORE_VISIBILITY JSON DEFAULT NULL AFTER SHOW_IN_WEIGHING");
+        // Backfill: SHOW_IN_WEIGHING=0 → hidden from store 2; visible everywhere else by default
+        await pool.query(`
+            UPDATE store_items
+            SET STORE_VISIBILITY = JSON_OBJECT('1', 1, '2', IF(SHOW_IN_WEIGHING = 0, 0, 1))
+            WHERE STORE_VISIBILITY IS NULL
+        `);
+        console.log("[Migration] Added STORE_VISIBILITY column to store_items and backfilled from SHOW_IN_WEIGHING.");
+    } catch (err) {
+        if (err.code !== 'ER_DUP_FIELDNAME') {
+            console.log("[Migration] STORE_VISIBILITY check:", err.message);
+        }
+    }
+})();
+
+// Database Migration: Add STORE_PRICES column for per-store price overrides
+(async () => {
+    try {
+        await pool.query("ALTER TABLE store_items ADD COLUMN STORE_PRICES JSON DEFAULT NULL AFTER STORE_VISIBILITY");
+        // No backfill: NULL means "use global BUYING_PRICE / SELLING_PRICE" — backward compatible.
+        console.log("[Migration] Added STORE_PRICES column to store_items.");
+    } catch (err) {
+        if (err.code !== 'ER_DUP_FIELDNAME') {
+            console.log("[Migration] STORE_PRICES check:", err.message);
+        }
+    }
+})();
+
 // Sync items from POS to Web App
 // NOTE: STOCK column does not exist in store_items table - stock is managed locally on POS
 // This endpoint handles both item updates AND soft deletes (IS_ACTIVE = 0)
@@ -178,6 +209,8 @@ router.post('/api/syncItemTableWithLocal', async (req, res) => {
         let updated = 0;
         let skipped = 0;
         let created = 0;
+
+        const VIRTUAL_CODES_SYNC = new Set(['CONTAINER', 'RETURN', 'TARE', 'DEDUCTION']);
 
         for (const rawItem of items) {
             // Normalize properties
@@ -194,6 +227,7 @@ router.post('/api/syncItemTableWithLocal', async (req, res) => {
             };
 
             if (!item.CODE) continue;
+            if (VIRTUAL_CODES_SYNC.has(item.CODE)) continue;
 
             // Format dates
             const incomingEditedDate = new Date(item.EDITED_DATE);
@@ -318,7 +352,7 @@ router.post('/api/items/merge-sync', async (req, res) => {
         // 1. Get ALL items from Web DB (now deduplicated), including inactive
         // IMPORTANT: We sync ALL items (IS_ACTIVE 0 and 1) so both Web and POS always have the same list.
         // IS_ACTIVE changes are treated the same as any other field change - latest EDITED_DATE wins.
-        const webItems = await pool.query("SELECT ITEM_ID, CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE FROM store_items WHERE CODE IS NOT NULL AND CODE != ''");
+        const webItems = await pool.query("SELECT ITEM_ID, CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE, STORE_VISIBILITY, STORE_PRICES FROM store_items WHERE CODE IS NOT NULL AND CODE != ''");
         const webItemMap = {};
         webItems.forEach(item => { webItemMap[item.CODE] = item; });
         console.log('[MergeSync] Web DB has', webItems.length, 'valid items (all active states)');
@@ -335,7 +369,9 @@ router.post('/api/items/merge-sync', async (req, res) => {
             EDITED_DATE: item.EDITED_DATE || item.editedDate || null
         }));
 
-        const validLocalItems = normalizedLocalItems.filter(item => item.CODE !== '');
+        // CONTAINER, RETURN, TARE, DEDUCTION are virtual POS-only items — never sync to server
+        const VIRTUAL_CODES = new Set(['CONTAINER', 'RETURN', 'TARE', 'DEDUCTION']);
+        const validLocalItems = normalizedLocalItems.filter(item => item.CODE !== '' && !VIRTUAL_CODES.has(item.CODE));
         const localDedupMap = {};
 
         for (const item of validLocalItems) {
@@ -407,7 +443,9 @@ router.post('/api/items/merge-sync', async (req, res) => {
                             BUYING_PRICE: webItem.BUYING_PRICE,
                             SELLING_PRICE: webItem.SELLING_PRICE,
                             IS_ACTIVE: webItem.IS_ACTIVE,
-                            EDITED_DATE: webItem.EDITED_DATE
+                            EDITED_DATE: webItem.EDITED_DATE,
+                            STORE_VISIBILITY: webItem.STORE_VISIBILITY || null,
+                            STORE_PRICES: webItem.STORE_PRICES || null
                         });
                     }
                     // If dates are equal, no action needed
@@ -446,7 +484,9 @@ router.post('/api/items/merge-sync', async (req, res) => {
                     BUYING_PRICE: webItem.BUYING_PRICE,
                     SELLING_PRICE: webItem.SELLING_PRICE,
                     IS_ACTIVE: webItem.IS_ACTIVE,
-                    EDITED_DATE: webItem.EDITED_DATE
+                    EDITED_DATE: webItem.EDITED_DATE,
+                    STORE_VISIBILITY: webItem.STORE_VISIBILITY || null,
+                    STORE_PRICES: webItem.STORE_PRICES || null
                 });
             }
         }
@@ -498,6 +538,12 @@ function toMySQLDateTime(isoStr) {
 
         if (isNaN(date.getTime())) {
             date = new Date();
+        }
+
+        // Guard: epoch / near-zero dates are below MySQL TIMESTAMP minimum ('1970-01-01 00:00:01' UTC).
+        // Virtual POS items (CONTAINER, RETURN, TARE) default to new Date(0) — clamp to a safe floor.
+        if (date.getTime() <= 1000) {
+            date = new Date('2000-01-01T00:00:00.000Z');
         }
 
         // Return YYYY-MM-DD HH:mm:ss in Asia/Colombo
@@ -736,30 +782,52 @@ router.get('/api/items/all', async (req, res) => {
 // For Store 2 (Weighing Station), also filter by SHOW_IN_WEIGHING=1
 router.get('/api/items/store/:storeNo', async (req, res) => {
     try {
-        const storeNo = req.params.storeNo;
+        const storeNo = parseInt(req.params.storeNo, 10);
+        if (isNaN(storeNo) || storeNo < 1) {
+            return res.status(400).json({ success: false, message: 'Invalid storeNo' });
+        }
+        const storeKey = String(storeNo);
 
         // CLEANUP: Automatically delete "Virtual" items from DB if they exist
         // These are handled by POS logic and should not be in the database
         await pool.query("DELETE FROM store_items WHERE CODE IN ('RETURN', 'CONTAINER', 'TARE')");
 
-        // For Store 2 (Weighing Station), only show items with SHOW_IN_WEIGHING=1
-        let query = 'SELECT * FROM store_items WHERE IS_ACTIVE = 1';
-        if (storeNo === '2') {
-            query += ' AND (SHOW_IN_WEIGHING = 1 OR SHOW_IN_WEIGHING IS NULL)';
-        }
-        query += ' ORDER BY NAME';
+        // Per-store visibility: return items that are globally active AND visible for this store.
+        // STORE_VISIBILITY is a JSON object keyed by storeNo string. A missing key means visible (default 1).
+        // Use COALESCE so a NULL extract (key absent OR whole column NULL) collapses to 1 (visible).
+        const query = `
+            SELECT * FROM store_items
+            WHERE IS_ACTIVE = 1
+              AND CODE NOT IN ('CONTAINER', 'RETURN', 'TARE')
+              AND COALESCE(JSON_EXTRACT(STORE_VISIBILITY, ?), 1) <> 0
+            ORDER BY NAME
+        `;
+        const jsonPath = `$."${storeKey}"`;
 
-        const queryResult = await pool.query(query);
+        const queryResult = await pool.query(query, [jsonPath]);
 
         if (Array.isArray(queryResult)) {
-            // Transform STOCK JSON to include storeNo-specific stock for backward compatibility
             const data = queryResult.map(item => {
-                const stock = typeof item.STOCK === 'string' ? JSON.parse(item.STOCK) : (item.STOCK || {});
+                const stock = typeof item.STOCK === 'string' ? JSON.parse(item.STOCK || '{}') : (item.STOCK || {});
+                const stockByStore = {};
+                Object.keys(stock).forEach(k => { stockByStore[k] = parseFloat(stock[k] || 0); });
+
+                // Apply per-store price override if set; fall back to global price
+                let storePrices = {};
+                try {
+                    const sp = item.STORE_PRICES;
+                    if (sp) storePrices = typeof sp === 'string' ? JSON.parse(sp) : sp;
+                } catch (_) {}
+                const storePrice = storePrices[storeKey];
+
                 return {
                     ...item,
+                    BUYING_PRICE: (storePrice && storePrice.buying != null) ? storePrice.buying : item.BUYING_PRICE,
+                    SELLING_PRICE: (storePrice && storePrice.selling != null) ? storePrice.selling : item.SELLING_PRICE,
+                    STORE_PRICES: storePrices,
+                    STOCK_BY_STORE: stockByStore,
                     STOCK_STORE1: parseFloat(stock['1'] || 0),
                     STOCK_STORE2: parseFloat(stock['2'] || 0),
-                    // For POS compatibility, provide STOCK as the current store's stock
                     STOCK: parseFloat(stock[storeNo] || 0)
                 };
             });
@@ -1221,9 +1289,13 @@ router.get('/api/transactions/recent/:storeNo', async (req, res) => {
             queryParams.unshift(typeFilter);
         }
 
-        // Fetch recent transactions (Selling, Buying, Expenses)
+        // Fetch recent transactions (Selling, Buying, Expenses) — strictly the
+        // requesting store. The previous `OR t.STORE_NO = 2` clause silently mixed
+        // weighing-station transactions into every other store's BillsPage, which is
+        // wrong for Store 3+ (and any future store that doesn't share the weighing
+        // station). Weighing-station integration is per-store and should be opt-in.
         const transactions = await pool.query(`
-            SELECT 
+            SELECT
                 t.TRANSACTION_ID as id,
                 t.CODE as code,
                 t.TYPE as type,
@@ -1242,9 +1314,9 @@ router.get('/api/transactions/recent/:storeNo', async (req, res) => {
                 t.IS_ACTIVE as isActive,
                 t.BILL_DATA as billData
             FROM store_transactions t
-            WHERE t.IS_ACTIVE = 1 
+            WHERE t.IS_ACTIVE = 1
               AND ${typeCondition}
-              AND (t.STORE_NO = ? OR t.STORE_NO = 2)
+              AND t.STORE_NO = ?
             ORDER BY t.CREATED_DATE DESC
             LIMIT ?
         `, [...queryParams, parseInt(limit)]);

@@ -5,12 +5,17 @@ import { SearchOutlined, LineChartOutlined, StockOutlined, BarChartOutlined, Dow
 import axios from 'axios';
 import dayjs from 'dayjs';
 import html2canvas from 'html2canvas';
+import { useStores } from '../../contexts/StoresContext';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
+// Weighing station is always shown in emerald/green so it's visually distinct
+const WEIGHING_HEX = '#10b981';
+
 export default function Graphs() {
     const { message } = App.useApp();
+    const { stores, getName, getHex } = useStores();
     const [items, setItems] = useState([]);
     const [loadingParams, setLoadingParams] = useState(false);
 
@@ -568,14 +573,15 @@ export default function Graphs() {
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={graphData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
                                     <defs>
-                                        <linearGradient id="colorS1" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
-                                        </linearGradient>
-                                        <linearGradient id="colorS2" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                                        </linearGradient>
+                                        {stores.map(s => {
+                                            const hex = s.IS_WEIGHING_STATION ? WEIGHING_HEX : getHex(s.STORE_NO);
+                                            return (
+                                                <linearGradient key={s.STORE_NO} id={`colorStore${s.STORE_NO}`} x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor={hex} stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor={hex} stopOpacity={0} />
+                                                </linearGradient>
+                                            );
+                                        })}
                                         <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
                                             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
@@ -596,28 +602,33 @@ export default function Graphs() {
                                         )}
                                     />
 
-                                    <Area
-                                        hide={hiddenSeries.includes('stockS1')}
-                                        type="monotone"
-                                        dataKey="stockS1"
-                                        name="Store 1 Stock"
-                                        stroke="#14b8a6"
-                                        strokeWidth={2}
-                                        fillOpacity={1}
-                                        fill="url(#colorS1)"
-                                        animationDuration={1500}
-                                    />
-                                    <Area
-                                        hide={hiddenSeries.includes('stockS2')}
-                                        type="monotone"
-                                        dataKey="stockS2"
-                                        name="Store 2 Stock"
-                                        stroke="#8b5cf6"
-                                        strokeWidth={2}
-                                        fillOpacity={1}
-                                        fill="url(#colorS2)"
-                                        animationDuration={1500}
-                                    />
+                                    {stores.map(s => {
+                                        const hex = s.IS_WEIGHING_STATION ? WEIGHING_HEX : getHex(s.STORE_NO);
+                                        const key = `store_${s.STORE_NO}`;
+                                        return (
+                                            <Area
+                                                key={s.STORE_NO}
+                                                hide={hiddenSeries.includes(key)}
+                                                type="monotone"
+                                                dataKey={d => {
+                                                    const v = (d.stockByStore || {})[String(s.STORE_NO)];
+                                                    if (v !== undefined) return v;
+                                                    // Legacy fallback ONLY for storeNo 1 and 2; Store 3+ defaults to 0
+                                                    // (older backend builds don't emit stockByStore — falling back to
+                                                    // stockS2 for Store 3 would duplicate Store 2's series).
+                                                    if (s.STORE_NO === 1) return d.stockS1 ?? 0;
+                                                    if (s.STORE_NO === 2) return d.stockS2 ?? 0;
+                                                    return 0;
+                                                }}
+                                                name={`${getName(s.STORE_NO)} Stock`}
+                                                stroke={hex}
+                                                strokeWidth={2}
+                                                fillOpacity={1}
+                                                fill={`url(#colorStore${s.STORE_NO})`}
+                                                animationDuration={1500}
+                                            />
+                                        );
+                                    })}
                                     <Area
                                         hide={hiddenSeries.includes('stock')}
                                         type="monotone"
@@ -774,14 +785,15 @@ export default function Graphs() {
                             <div style={{ height: '400px', width: '100%' }}>
                                 <AreaChart width={1520} height={400} data={graphData} margin={{ top: 10, right: 30, left: 10, bottom: 60 }}>
                                     <defs>
-                                        <linearGradient id="colorS1Exp" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
-                                        </linearGradient>
-                                        <linearGradient id="colorS2Exp" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                                        </linearGradient>
+                                        {stores.map(s => {
+                                            const hex = s.IS_WEIGHING_STATION ? WEIGHING_HEX : getHex(s.STORE_NO);
+                                            return (
+                                                <linearGradient key={s.STORE_NO} id={`colorStore${s.STORE_NO}Exp`} x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor={hex} stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor={hex} stopOpacity={0} />
+                                                </linearGradient>
+                                            );
+                                        })}
                                         <linearGradient id="colorTotalExp" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
                                             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
@@ -791,8 +803,19 @@ export default function Graphs() {
                                     <XAxis dataKey="label" stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickMargin={15} ticks={exportTicks} tickFormatter={(val) => dayjs(val).format('MMM DD')} />
                                     <YAxis stroke="#9ca3af" fontSize={14} tickLine={false} axisLine={false} tickFormatter={(value) => `${value} kg`} width={80} />
                                     <Legend verticalAlign="bottom" height={40} iconSize={0} wrapperStyle={{ paddingTop: '40px', fontSize: '16px', fontWeight: 600 }} cursor="default" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} />
-                                    {!hiddenSeries.includes('stockS1') && <Area type="monotone" dataKey="stockS1" name="Store 1 Stock" stroke="#14b8a6" strokeWidth={2} fillOpacity={1} fill="url(#colorS1Exp)" isAnimationActive={false} />}
-                                    {!hiddenSeries.includes('stockS2') && <Area type="monotone" dataKey="stockS2" name="Store 2 Stock" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorS2Exp)" isAnimationActive={false} />}
+                                    {stores.map(s => {
+                                        const hex = s.IS_WEIGHING_STATION ? WEIGHING_HEX : getHex(s.STORE_NO);
+                                        const key = `store_${s.STORE_NO}`;
+                                        return !hiddenSeries.includes(key) && (
+                                            <Area key={s.STORE_NO} type="monotone" dataKey={d => {
+                                                const v = (d.stockByStore || {})[String(s.STORE_NO)];
+                                                if (v !== undefined) return v;
+                                                if (s.STORE_NO === 1) return d.stockS1 ?? 0;
+                                                if (s.STORE_NO === 2) return d.stockS2 ?? 0;
+                                                return 0;
+                                            }} name={`${getName(s.STORE_NO)} Stock`} stroke={hex} strokeWidth={2} fillOpacity={1} fill={`url(#colorStore${s.STORE_NO}Exp)`} isAnimationActive={false} />
+                                        );
+                                    })}
                                     {!hiddenSeries.includes('stock') && <Area type="monotone" dataKey="stock" name="Total Stock" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorTotalExp)" isAnimationActive={false} />}
                                 </AreaChart>
                             </div>

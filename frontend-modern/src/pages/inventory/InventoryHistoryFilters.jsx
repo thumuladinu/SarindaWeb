@@ -2,11 +2,13 @@ import React from 'react';
 import { Input, Select, DatePicker, Button } from 'antd';
 import { SearchOutlined, FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import MobileDateRange from '../../components/common/MobileDateRange';
+import { useStores } from '../../contexts/StoresContext';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 export default function InventoryHistoryFilters({ filters, setFilters, collapsed, setCollapsed, itemOptions, typeOptions }) {
+    const { stores } = useStores();
 
     const handleChange = (key, value) => {
         setFilters(prev => ({ ...prev, [key]: value }));
@@ -66,8 +68,7 @@ export default function InventoryHistoryFilters({ filters, setFilters, collapsed
                             onChange={(val) => handleChange('store', val)}
                         >
                             <Option value="all">All Stores</Option>
-                            <Option value="1">Store 1</Option>
-                            <Option value="2">Store 2</Option>
+                            {stores.map(s => <Option key={s.STORE_NO} value={String(s.STORE_NO)}>S{s.STORE_NO} — {s.NAME}</Option>)}
                         </Select>
                     </div>
 

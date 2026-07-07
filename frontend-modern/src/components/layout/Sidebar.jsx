@@ -17,6 +17,7 @@ import {
     AreaChartOutlined,
     DatabaseOutlined,
     ClockCircleOutlined,
+    HomeOutlined,
     MenuOutlined,
     DownOutlined,
     UpOutlined
@@ -26,7 +27,7 @@ import logo from "../../assets/images/logo.png";
 
 const NAV_ITEMS = [
     { label: 'Dashboard', path: '/dashboard', icon: <AppstoreOutlined /> },
-    { label: 'Store Manager', path: '/', icon: <ShopOutlined /> }, // New Store Manager link pointing to dashboard
+    { label: 'Stores', path: '/stores', icon: <HomeOutlined /> },
     { label: 'Transactions', path: '/transactions', icon: <TransactionOutlined /> },
     { label: 'Balance', path: '/balance', icon: <WalletOutlined /> },
     { label: 'Items', path: '/items', icon: <ShopOutlined /> },

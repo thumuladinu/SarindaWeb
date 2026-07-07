@@ -183,7 +183,7 @@ export default function Transactions() {
             const payload = {
                 CODE: expenseCode,
                 TYPE: 'Expenses',
-                STORE_NO: 1, // Default store
+                STORE_NO: filters?.store || null,
                 SUB_TOTAL: values.SUB_TOTAL,
                 AMOUNT_SETTLED: values.SUB_TOTAL,
                 DUE_AMOUNT: 0,

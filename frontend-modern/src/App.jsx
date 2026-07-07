@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { StoresProvider } from './contexts/StoresContext';
 import MainLayout from './components/layout/MainLayout';
 import Login from './pages/login/Login';
 import Dashboard from './pages/Dashboard';
@@ -21,6 +22,7 @@ import StockEvents from './pages/stock-events/StockEvents';
 import Notifications from './pages/notifications/Notifications';
 import DevCache from './pages/DevCache';
 import TimeTracker from './pages/time-tracker/TimeTracker';
+import Stores from './pages/stores/Stores';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
@@ -42,6 +44,7 @@ const PublicRoute = ({ children }) => {
 
 function App() {
     return (
+        <StoresProvider>
         <Routes>
             <Route path="/" element={<PublicRoute><Login /></PublicRoute>} />
 
@@ -54,6 +57,7 @@ function App() {
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/customers" element={<Customers />} />
                 <Route path="/users" element={<Users />} />
+                <Route path="/stores" element={<Stores />} />
                 <Route path="/weighting" element={<Weighting />} />
                 <Route path="/trips" element={<Trips />} />
                 <Route path="/stock-operations" element={<StockOperations />} />
@@ -69,6 +73,7 @@ function App() {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </StoresProvider>
     );
 }
 

@@ -73,6 +73,14 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
     const targetStoreId = request.store_to_id || 2;
     const currentStockSource = await getCurrentStock(request.main_item_id, sourceStoreId);
 
+    // For FULL clearance with no conversion, main_item_qty was saved as 0 in the
+    // request row (the actual amount is the live source stock). Fall back to the
+    // live source stock so the target AdjIn carries the real arrival quantity.
+    // Without this fix, source loses the stock but target gets AdjIn(0).
+    const arrivalQty = (clearanceType === 'FULL' && !(request.has_conversion && conversions.length > 0))
+        ? currentStockSource
+        : mainQty;
+
     // Determine Quantities and OpType
 
     let removeQtyS1 = 0;
@@ -160,7 +168,7 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
             `INSERT INTO store_stock_operation_items
         (OP_ID, ITEM_ID, ITEM_CODE, ITEM_NAME, ORIGINAL_STOCK, CLEARED_QUANTITY, REMAINING_STOCK, IS_ACTIVE, STORE_NO)
             VALUES(?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-            [opId, request.main_item_id, request.main_item_code, request.main_item_name, destStockBefore, -mainQty, destStockBefore + mainQty, targetStoreId]
+            [opId, request.main_item_id, request.main_item_code, request.main_item_name, destStockBefore, -arrivalQty, destStockBefore + arrivalQty, targetStoreId]
         );
     }
 
@@ -199,8 +207,10 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
             await createTransaction(targetStoreId, 'AdjIn', c.dest_item_id, c.dest_qty, opId, `[${opCode}][TransferIn] From Req ${request.local_id}(Conv)`);
         }
     } else {
-        // No conversion, just move main item
-        await createTransaction(targetStoreId, 'AdjIn', request.main_item_id, mainQty, opId, `[${opCode}][TransferIn] From Req ${request.local_id}`);
+        // No conversion, just move main item.
+        // For FULL transfers, arrivalQty = currentStockSource (the real cleared amount).
+        // For PARTIAL, arrivalQty === mainQty.
+        await createTransaction(targetStoreId, 'AdjIn', request.main_item_id, arrivalQty, opId, `[${opCode}][TransferIn] From Req ${request.local_id}`);
     }
 
     // --- UPDATE REQUEST STATUS ---
@@ -298,9 +308,13 @@ router.post('/request', async (req, res) => {
 // Get Pending Requests (For Store 1 Notification)
 router.get('/pending', async (req, res) => {
     try {
-        const requests = await query(
-            `SELECT * FROM store_stock_transfers WHERE status = 'PENDING' ORDER BY request_date DESC LIMIT 25`
-        );
+        // Optional ?forStore=N — filter to transfers involving this store (source or destination)
+        const forStore = req.query.forStore ? parseInt(req.query.forStore, 10) : null;
+        const sql = forStore
+            ? `SELECT * FROM store_stock_transfers WHERE status = 'PENDING' AND (store_from_id = ? OR store_to_id = ?) ORDER BY request_date DESC LIMIT 25`
+            : `SELECT * FROM store_stock_transfers WHERE status = 'PENDING' ORDER BY request_date DESC LIMIT 25`;
+        const params = forStore ? [forStore, forStore] : [];
+        const requests = await query(sql, params);
 
         // Fetch conversions for each request
         for (let r of requests) {

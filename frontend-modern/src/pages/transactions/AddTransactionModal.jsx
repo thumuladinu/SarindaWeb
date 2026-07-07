@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useStores } from '../../contexts/StoresContext';
 import {
     Modal, Button, Select, InputNumber, Input, App, Spin, Divider, Tag
 } from 'antd';
@@ -13,8 +14,12 @@ const { TextArea } = Input;
 // Items that should never appear in transaction selectors
 const EXCLUDED_ITEM_CODES = ['CONTAINER', 'RETURN'];
 
+// Colour map: same 6 presets from StoresContext
+const COLOR_ACTIVE = { blue:'bg-blue-500', violet:'bg-purple-500', emerald:'bg-emerald-500', amber:'bg-amber-500', rose:'bg-rose-500', cyan:'bg-cyan-500' };
+
 const AddTransactionModal = ({ open, onClose, onSuccess }) => {
     const { message } = App.useApp();
+    const { stores, getColorKey } = useStores();
 
     const [loading, setLoading] = useState(false);
     const [itemsData, setItemsData] = useState([]);
@@ -43,7 +48,7 @@ const AddTransactionModal = ({ open, onClose, onSuccess }) => {
     }, [storeNo, open]);
 
     const resetForm = () => {
-        setStoreNo(1);
+        setStoreNo(stores[0]?.STORE_NO || 1);
         setMode('Selling');
         setTxItems([]);
         setComments('');
@@ -300,13 +305,13 @@ const AddTransactionModal = ({ open, onClose, onSuccess }) => {
                         <ToggleGroup
                             label="Store"
                             value={storeNo}
-                            onChange={(v) => {
-                                setStoreNo(v);
-                            }}
-                            options={[
-                                { value: 1, label: 'Store 1', icon: '🏪', activeClass: 'bg-blue-500' },
-                                { value: 2, label: 'Store 2', icon: '🏬', activeClass: 'bg-purple-500' }
-                            ]}
+                            onChange={(v) => setStoreNo(v)}
+                            options={stores.map(s => ({
+                                value: s.STORE_NO,
+                                label: s.NAME,
+                                icon: s.IS_WEIGHING_STATION ? '⚖️' : '🏪',
+                                activeClass: COLOR_ACTIVE[getColorKey(s.STORE_NO)] || 'bg-blue-500'
+                            }))}
                         />
                         <ToggleGroup
                             label="Transaction Mode"

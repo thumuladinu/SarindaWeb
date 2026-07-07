@@ -10,6 +10,7 @@ import {
     AreaChartOutlined, CheckCircleOutlined, WarningOutlined,
     SearchOutlined, CalendarOutlined
 } from '@ant-design/icons';
+import { useStores } from '../../contexts/StoresContext';
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -42,6 +43,8 @@ const CustomTooltipEvents = ({ active, payload }) => {
     if (!active || !payload?.length) return null;
     const d = payload[0]?.payload;
     if (!d) return null;
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { stores, getName } = useStores();
     const color = EVENT_TYPE_COLORS[d.event_type] || '#9ca3af';
     const isSnapshot = d.event_source === 'snapshot';
     const deltaSign = (d.delta ?? 0) >= 0 ? '+' : '';
@@ -81,7 +84,12 @@ const CustomTooltipEvents = ({ active, payload }) => {
                 const aggregated = {};
                 if (d.tx_breakdown) {
                     d.tx_breakdown.forEach(tx => {
-                        const txDelta = tx.delta_s1 + tx.delta_s2;
+                        // Sum across all stores. Prefer the dynamic deltaByStore map
+                        // (handles Store 3+) and fall back to legacy s1/s2 fields.
+                        const dbs = tx.deltaByStore;
+                        const txDelta = dbs
+                            ? Object.values(dbs).reduce((a, b) => a + (Number(b) || 0), 0)
+                            : (Number(tx.delta_s1) || 0) + (Number(tx.delta_s2) || 0);
                         if (!aggregated[tx.type]) aggregated[tx.type] = 0;
                         aggregated[tx.type] += txDelta;
                     });
@@ -113,16 +121,19 @@ const CustomTooltipEvents = ({ active, payload }) => {
                 <div className="grid grid-cols-3 gap-1 text-gray-500 font-semibold pb-1 border-b border-white/5">
                     <span></span><span className="text-center">Before</span><span className="text-center">After</span>
                 </div>
-                <div className="grid grid-cols-3 gap-1 items-center">
-                    <span className="text-teal-400 font-semibold">Store 1</span>
-                    <span className="text-center text-gray-300">{d.prev_s1 !== undefined && d.prev_s1 !== null ? Number(d.prev_s1).toFixed(3) : '—'}</span>
-                    <span className="text-center text-white font-bold">{d.s1?.toFixed(3)}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1 items-center">
-                    <span className="text-violet-400 font-semibold">Store 2</span>
-                    <span className="text-center text-gray-300">{d.prev_s2 !== undefined && d.prev_s2 !== null ? Number(d.prev_s2).toFixed(3) : '—'}</span>
-                    <span className="text-center text-white font-bold">{d.s2?.toFixed(3)}</span>
-                </div>
+                {stores.map(s => {
+                    const byStore = d.byStore || {};
+                    const prevByStore = d.prevByStore || {};
+                    const curr = byStore[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? d.s1 : s.STORE_NO === 2 ? d.s2 : null);
+                    const prev = prevByStore[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? d.prev_s1 : s.STORE_NO === 2 ? d.prev_s2 : null);
+                    return (
+                        <div key={s.STORE_NO} className="grid grid-cols-3 gap-1 items-center">
+                            <span className="font-semibold text-gray-300">{getName(s.STORE_NO)}</span>
+                            <span className="text-center text-gray-300">{prev !== undefined && prev !== null ? Number(prev).toFixed(3) : '—'}</span>
+                            <span className="text-center text-white font-bold">{curr?.toFixed(3) ?? '—'}</span>
+                        </div>
+                    );
+                })}
                 <div className="grid grid-cols-3 gap-1 items-center border-t border-white/5 pt-1">
                     <span className="text-blue-400 font-semibold">Total</span>
                     <span className="text-center text-gray-300">{d.prev_total !== undefined && d.prev_total !== null ? Number(d.prev_total).toFixed(3) : '—'}</span>
@@ -136,10 +147,22 @@ const CustomTooltipEvents = ({ active, payload }) => {
 // ─── Summary Table ────────────────────────────────────────────────────────────
 const SummaryTable = ({ summary, isMobile }) => {
     if (!summary) return null;
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { stores, getName } = useStores();
     const { opening, closing, byType, validation } = summary;
 
-    const totalS1 = byType.reduce((a, r) => a + r.s1, 0);
-    const totalS2 = byType.reduce((a, r) => a + r.s2, 0);
+    // Per-store totals across all event types (covers Store 3+ via byStore map,
+    // with legacy s1/s2 fallback for older backend responses).
+    const totalByStore = {};
+    stores.forEach(s => {
+        const key = String(s.STORE_NO);
+        totalByStore[key] = byType.reduce((a, r) => {
+            const v = (r.byStore || {})[key] ?? (s.STORE_NO === 1 ? r.s1 : s.STORE_NO === 2 ? r.s2 : 0) ?? 0;
+            return a + v;
+        }, 0);
+    });
+    const totalS1 = totalByStore['1'] || 0;
+    const totalS2 = totalByStore['2'] || 0;
     const totalNet = byType.reduce((a, r) => a + r.net, 0);
 
     const fmtKg = (v) => (v === undefined || v === null) ? '—' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(3)} kg`;
@@ -158,17 +181,15 @@ const SummaryTable = ({ summary, isMobile }) => {
                 <div className="glass-card p-4 rounded-2xl border border-white/5 bg-white/5">
                     <p className="text-[11px] uppercase font-bold text-gray-500 tracking-wider mb-1">Opening Stock</p>
                     <p className="text-xl font-bold text-white">{Number(opening.total).toFixed(3)} <span className="text-sm font-normal text-gray-400">kg</span></p>
-                    <div className="flex gap-3 mt-1 text-xs text-gray-500">
-                        <span className="text-teal-400">S1: {Number(opening.s1).toFixed(3)}</span>
-                        <span className="text-violet-400">S2: {Number(opening.s2).toFixed(3)}</span>
+                    <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-500">
+                        {stores.map(s => { const v = (opening.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? opening.s1 : s.STORE_NO === 2 ? opening.s2 : 0) ?? 0; return <span key={s.STORE_NO}>S{s.STORE_NO}: {Number(v).toFixed(3)}</span>; })}
                     </div>
                 </div>
                 <div className="glass-card p-4 rounded-2xl border border-white/5 bg-white/5">
                     <p className="text-[11px] uppercase font-bold text-gray-500 tracking-wider mb-1">Closing Stock</p>
                     <p className="text-xl font-bold text-white">{Number(closing.total).toFixed(3)} <span className="text-sm font-normal text-gray-400">kg</span></p>
-                    <div className="flex gap-3 mt-1 text-xs text-gray-500">
-                        <span className="text-teal-400">S1: {Number(closing.s1).toFixed(3)}</span>
-                        <span className="text-violet-400">S2: {Number(closing.s2).toFixed(3)}</span>
+                    <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-500">
+                        {stores.map(s => { const v = (closing.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? closing.s1 : s.STORE_NO === 2 ? closing.s2 : 0) ?? 0; return <span key={s.STORE_NO}>{getName(s.STORE_NO)}: {Number(v).toFixed(3)}</span>; })}
                     </div>
                 </div>
                 <div className={`glass-card p-4 rounded-2xl border bg-white/5 col-span-2 md:col-span-1 ${validation.valid ? 'border-emerald-500/30' : 'border-red-500/30'}`}>
@@ -210,15 +231,16 @@ const SummaryTable = ({ summary, isMobile }) => {
                                     </div>
                                     <div className={`font-mono font-bold ${col}`}>{fmtKg(row.net)}</div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                                    <div className="flex flex-col">
-                                        <span className="text-gray-500 uppercase">Store 1</span>
-                                        <span className={row.s1 >= 0 ? 'text-emerald-400' : 'text-red-400'}>{fmtKg(row.s1)}</span>
-                                    </div>
-                                    <div className="flex flex-col text-right">
-                                        <span className="text-gray-500 uppercase">Store 2</span>
-                                        <span className={row.s2 >= 0 ? 'text-emerald-400' : 'text-red-400'}>{fmtKg(row.s2)}</span>
-                                    </div>
+                                <div className={`grid gap-2 text-[10px] font-mono`} style={{ gridTemplateColumns: `repeat(${stores.length}, 1fr)` }}>
+                                    {stores.map((s, si) => {
+                                        const v = (row.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? row.s1 : s.STORE_NO === 2 ? row.s2 : 0) ?? 0;
+                                        return (
+                                            <div key={s.STORE_NO} className={`flex flex-col ${si > 0 ? 'text-right' : ''}`}>
+                                                <span className="text-gray-500 uppercase">{getName(s.STORE_NO)}</span>
+                                                <span className={v >= 0 ? 'text-emerald-400' : 'text-red-400'}>{fmtKg(v)}</span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         );
@@ -226,8 +248,15 @@ const SummaryTable = ({ summary, isMobile }) => {
                     <div className="bg-white/10 rounded-xl p-4 border border-white/10 shadow-lg mt-4">
                         <p className="text-[10px] uppercase font-bold text-gray-500 mb-2">Total Movement Summary</p>
                         <div className="space-y-1.5">
-                            <div className="flex justify-between text-xs"><span className="text-teal-400 font-medium text-xs">Total S1</span><span className={`font-mono font-bold ${totalS1 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalS1)}</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-violet-400 font-medium text-xs">Total S2</span><span className={`font-mono font-bold ${totalS2 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalS2)}</span></div>
+                            {stores.map(s => {
+                                const v = totalByStore[String(s.STORE_NO)] || 0;
+                                return (
+                                    <div key={s.STORE_NO} className="flex justify-between text-xs">
+                                        <span className="text-gray-300 font-medium text-xs">Total {getName(s.STORE_NO)}</span>
+                                        <span className={`font-mono font-bold ${v >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(v)}</span>
+                                    </div>
+                                );
+                            })}
                             <div className="flex justify-between text-sm border-t border-white/10 pt-1.5 mt-1.5"><span className="text-white font-bold">Grand Net</span><span className={`font-mono font-bold ${totalNet >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalNet)}</span></div>
                         </div>
                     </div>
@@ -238,8 +267,7 @@ const SummaryTable = ({ summary, isMobile }) => {
                         <thead>
                             <tr className="text-gray-500 uppercase text-[10px] tracking-wider border-b border-white/5">
                                 <th className="text-left px-5 py-3 font-semibold">Event Type</th>
-                                <th className="text-right px-5 py-3 font-semibold">Store 1</th>
-                                <th className="text-right px-5 py-3 font-semibold">Store 2</th>
+                                {stores.map(s => <th key={s.STORE_NO} className="text-right px-5 py-3 font-semibold">{getName(s.STORE_NO)}</th>)}
                                 <th className="text-right px-5 py-3 font-semibold">Net</th>
                             </tr>
                         </thead>
@@ -255,12 +283,10 @@ const SummaryTable = ({ summary, isMobile }) => {
                                                 <span className="text-gray-200 font-medium">{row.type}</span>
                                             </div>
                                         </td>
-                                        <td className={`text-right px-5 py-3 font-mono font-bold ${row.s1 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                            {fmtKg(row.s1)}
-                                        </td>
-                                        <td className={`text-right px-5 py-3 font-mono font-bold ${row.s2 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                            {fmtKg(row.s2)}
-                                        </td>
+                                        {stores.map(s => {
+                                            const v = (row.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? row.s1 : s.STORE_NO === 2 ? row.s2 : 0) ?? 0;
+                                            return <td key={s.STORE_NO} className={`text-right px-5 py-3 font-mono font-bold ${v >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(v)}</td>;
+                                        })}
                                         <td className={`text-right px-5 py-3 font-mono font-bold ${col}`}>
                                             {fmtKg(row.net)}
                                         </td>
@@ -271,8 +297,10 @@ const SummaryTable = ({ summary, isMobile }) => {
                         <tfoot>
                             <tr className="border-t border-white/10 bg-white/5">
                                 <td className="px-5 py-3 text-white font-bold text-xs uppercase tracking-wider">Total Movement</td>
-                                <td className={`text-right px-5 py-3 font-mono font-bold ${totalS1 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalS1)}</td>
-                                <td className={`text-right px-5 py-3 font-mono font-bold ${totalS2 >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalS2)}</td>
+                                {stores.map(s => {
+                                    const v = byType.reduce((a, r) => a + ((r.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? r.s1 : s.STORE_NO === 2 ? r.s2 : 0) ?? 0), 0);
+                                    return <td key={s.STORE_NO} className={`text-right px-5 py-3 font-mono font-bold ${v >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(v)}</td>;
+                                })}
                                 <td className={`text-right px-5 py-3 font-mono font-bold ${totalNet >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtKg(totalNet)}</td>
                             </tr>
                         </tfoot>
@@ -292,38 +320,36 @@ const SummaryTable = ({ summary, isMobile }) => {
                 <div className="font-mono text-[11px] space-y-4 md:space-y-1.5 text-gray-400">
                     <div className="flex flex-col md:flex-row md:justify-between md:gap-4 bg-black/20 md:bg-transparent p-2 md:p-0 rounded-lg md:rounded-none">
                         <span className="text-[10px] md:text-[11px] uppercase md:normal-case font-bold md:font-normal text-gray-500 md:text-gray-400 mb-1 md:mb-0">Opening stock (at start of period)</span>
-                        <div className="flex justify-between md:justify-end gap-3 w-full md:w-auto">
-                            <span className="text-white font-bold">S1={fmtVal(opening.s1)}</span>
-                            <span className="text-white font-bold">S2={fmtVal(opening.s2)}</span>
+                        <div className="flex flex-wrap justify-end gap-3 w-full md:w-auto">
+                            {stores.map(s => {
+                                const v = (opening.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? opening.s1 : s.STORE_NO === 2 ? opening.s2 : 0);
+                                return <span key={s.STORE_NO} className="text-white font-bold">S{s.STORE_NO}={fmtVal(v)}</span>;
+                            })}
                         </div>
                     </div>
                     <div className="flex flex-col md:flex-row md:justify-between md:gap-4 bg-black/20 md:bg-transparent p-2 md:p-0 rounded-lg md:rounded-none">
                         <span className="text-[10px] md:text-[11px] uppercase md:normal-case font-bold md:font-normal text-gray-500 md:text-gray-400 mb-1 md:mb-0">+ Net events in period (sum of all deltas)</span>
-                        <div className={`flex justify-between md:justify-end gap-3 w-full md:w-auto font-bold ${summary.deltaSum.total >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            <span>S1={fmtKg(summary.deltaSum.s1)}</span>
-                            <span>S2={fmtKg(summary.deltaSum.s2)}</span>
+                        <div className={`flex flex-wrap justify-end gap-2 w-full md:w-auto font-bold ${summary.deltaSum.total >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {stores.map(s => { const v = (summary.deltaSum.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? summary.deltaSum.s1 : s.STORE_NO === 2 ? summary.deltaSum.s2 : 0) ?? 0; return <span key={s.STORE_NO}>S{s.STORE_NO}={fmtKg(v)}</span>; })}
                         </div>
                     </div>
                     <div className="flex flex-col md:flex-row md:justify-between md:gap-4 border-t border-white/10 pt-1.5 bg-blue-500/5 md:bg-transparent p-2 md:p-0 rounded-lg md:rounded-none">
                         <span className="text-[10px] md:text-[11px] uppercase md:normal-case font-bold md:font-normal text-blue-400/70 md:text-gray-400 mb-1 md:mb-0">= Expected closing stock</span>
-                        <div className="flex justify-between md:justify-end gap-3 w-full md:w-auto text-blue-400 font-bold">
-                            <span>S1={fmtVal(validation.expected.s1)}</span>
-                            <span>S2={fmtVal(validation.expected.s2)}</span>
+                        <div className="flex flex-wrap justify-end gap-2 w-full md:w-auto text-blue-400 font-bold">
+                            {stores.map(s => { const v = (validation.expected.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? validation.expected.s1 : s.STORE_NO === 2 ? validation.expected.s2 : 0) ?? 0; return <span key={s.STORE_NO}>S{s.STORE_NO}={fmtVal(v)}</span>; })}
                         </div>
                     </div>
                     <div className="flex flex-col md:flex-row md:justify-between md:gap-4 bg-black/20 md:bg-transparent p-2 md:p-0 rounded-lg md:rounded-none">
                         <span className="text-[10px] md:text-[11px] uppercase md:normal-case font-bold md:font-normal text-gray-500 md:text-gray-400 mb-1 md:mb-0">Actual closing stock (from DB)</span>
-                        <div className="flex justify-between md:justify-end gap-3 w-full md:w-auto text-white font-bold">
-                            <span>S1={fmtVal(validation.actual.s1)}</span>
-                            <span>S2={fmtVal(validation.actual.s2)}</span>
+                        <div className="flex flex-wrap justify-end gap-2 w-full md:w-auto text-white font-bold">
+                            {stores.map(s => { const v = (validation.actual.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? validation.actual.s1 : s.STORE_NO === 2 ? validation.actual.s2 : 0) ?? 0; return <span key={s.STORE_NO}>S{s.STORE_NO}={fmtVal(v)}</span>; })}
                         </div>
                     </div>
                     <div className={`flex flex-col md:flex-row md:justify-between md:gap-4 border-t border-white/10 pt-1.5 p-2 md:p-0 ${validation.valid ? 'text-emerald-400' : 'text-red-400 bg-red-500/10 rounded-lg'}`}>
                         <span className="font-bold mb-2 md:mb-0">{validation.valid ? '✓ Balanced — no discrepancy' : '✗ Discrepancy'}</span>
                         {!validation.valid && (
-                            <div className="flex justify-between md:justify-end gap-3 w-full md:w-auto font-bold">
-                                <span>S1 Δ={fmtKg(validation.discrepancy.s1)}</span>
-                                <span>S2 Δ={fmtKg(validation.discrepancy.s2)}</span>
+                            <div className="flex flex-wrap justify-end gap-2 w-full md:w-auto font-bold">
+                                {stores.map(s => { const v = (validation.discrepancy.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? validation.discrepancy.s1 : s.STORE_NO === 2 ? validation.discrepancy.s2 : 0) ?? 0; return <span key={s.STORE_NO}>S{s.STORE_NO} Δ={fmtKg(v)}</span>; })}
                             </div>
                         )}
                     </div>
@@ -349,6 +375,7 @@ const SummaryTable = ({ summary, isMobile }) => {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function StockEvents() {
+    const { stores, getName, getHex } = useStores();
     const [items, setItems] = useState([]);
     const [loadingItems, setLoadingItems] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
@@ -659,38 +686,30 @@ export default function StockEvents() {
                                                 </span>
                                             )}
                                         />
-                                        <Line
-                                            hide={hiddenSeries.includes('s1')}
-                                            type="stepAfter"
-                                            dataKey="s1"
-                                            name="Store 1 Stock"
-                                            stroke="#14b8a6"
-                                            strokeWidth={2}
-                                            dot={(props) => {
-                                                const d = props.payload;
-                                                if (!d || d.event_source === 'snapshot' || (d.delta_s1 === 0 && d.storeNo !== 1)) return null;
-                                                return <circle key={props.key} cx={props.cx} cy={props.cy} r={3.5} fill="#14b8a6" stroke="#0d1f1f" strokeWidth={1.5} />;
-                                            }}
-                                            activeDot={{ r: 6, stroke: '#14b8a6', strokeWidth: 2, fill: '#fff' }}
-                                            connectNulls
-                                            legendType="circle"
-                                        />
-                                        <Line
-                                            hide={hiddenSeries.includes('s2')}
-                                            type="stepAfter"
-                                            dataKey="s2"
-                                            name="Store 2 Stock"
-                                            stroke="#8b5cf6"
-                                            strokeWidth={2}
-                                            dot={(props) => {
-                                                const d = props.payload;
-                                                if (!d || d.event_source === 'snapshot' || (d.delta_s2 === 0 && d.storeNo !== 2)) return null;
-                                                return <circle key={props.key} cx={props.cx} cy={props.cy} r={3.5} fill="#8b5cf6" stroke="#1a0a2e" strokeWidth={1.5} />;
-                                            }}
-                                            activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 2, fill: '#fff' }}
-                                            connectNulls
-                                            legendType="circle"
-                                        />
+                                        {stores.map(s => {
+                                            const hex = s.IS_WEIGHING_STATION ? '#10b981' : getHex(s.STORE_NO);
+                                            const seriesKey = `store_${s.STORE_NO}`;
+                                            return (
+                                                <Line
+                                                    key={s.STORE_NO}
+                                                    hide={hiddenSeries.includes(seriesKey)}
+                                                    type="stepAfter"
+                                                    dataKey={d => (d.byStore || {})[String(s.STORE_NO)] ?? (s.STORE_NO === 1 ? d.s1 : s.STORE_NO === 2 ? d.s2 : 0) ?? 0}
+                                                    name={`${getName(s.STORE_NO)} Stock`}
+                                                    stroke={hex}
+                                                    strokeWidth={2}
+                                                    dot={(props) => {
+                                                        const pd = props.payload;
+                                                        const delta = (pd?.deltaByStore || {})[String(s.STORE_NO)] ?? 0;
+                                                        if (!pd || pd.event_source === 'snapshot' || (delta === 0 && pd.storeNo !== s.STORE_NO)) return null;
+                                                        return <circle key={props.key} cx={props.cx} cy={props.cy} r={3.5} fill={hex} stroke="#0d1f1f" strokeWidth={1.5} />;
+                                                    }}
+                                                    activeDot={{ r: 6, stroke: hex, strokeWidth: 2, fill: '#fff' }}
+                                                    connectNulls
+                                                    legendType="circle"
+                                                />
+                                            );
+                                        })}
                                         <Line
                                             hide={hiddenSeries.includes('total')}
                                             type="stepAfter"

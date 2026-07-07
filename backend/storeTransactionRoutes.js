@@ -1979,47 +1979,49 @@ router.post('/api/getAllItemStocksRealTime', async (req, res) => {
         }
 
         // Process rows to build the result map
-        // Map<ItemID, { CODE, NAME, "1": val, "2": val, total: val }>
+        // Map<ItemID, { CODE, NAME, byStore:{storeNo:stock}, total }>
         const stockMap = {};
 
         rows.forEach(row => {
             const itemId = row.ITEM_ID;
-            const storeNo = row.STORE_NO;
+            const storeNo = String(row.STORE_NO);
             const type = row.TYPE;
             const qty = parseFloat(row.total_qty || 0);
 
             if (!stockMap[itemId]) {
-                stockMap[itemId] = { CODE: row.CODE, NAME: row.NAME, SELLING_PRICE: row.SELLING_PRICE, 1: 0, 2: 0 };
+                stockMap[itemId] = { CODE: row.CODE, NAME: row.NAME, SELLING_PRICE: row.SELLING_PRICE, byStore: {} };
             }
 
-            // If no transactions yet, storeNo/type will be NULL, skip adjustment
-            if (!type || !storeNo) return;
+            if (!type || !storeNo || storeNo === 'null') return;
+
+            if (!stockMap[itemId].byStore[storeNo]) stockMap[itemId].byStore[storeNo] = 0;
 
             let change = 0;
-            if (['Buying', 'Opening', 'AdjIn', 'TransferIn', 'StockTake'].includes(type)) { // Added TransferIn, StockTake
+            if (['Buying', 'Opening', 'AdjIn', 'TransferIn', 'StockTake'].includes(type)) {
                 change = qty;
-            } else if (['Selling', 'AdjOut', 'StockClear', 'TransferOut', 'Wastage'].includes(type)) { // Added TransferOut, Wastage
+            } else if (['Selling', 'AdjOut', 'StockClear', 'TransferOut', 'Wastage'].includes(type)) {
                 change = -qty;
             }
-
-            // Fallback for Store No if needed (though query groups by it)
-            if (storeNo === '1' || storeNo === 1) {
-                stockMap[itemId][1] += change;
-            } else if (storeNo === '2' || storeNo === 2) {
-                stockMap[itemId][2] += change;
-            }
+            stockMap[itemId].byStore[storeNo] += change;
         });
 
-        // Convert Map to Array format matching frontend expectation
-        const result = Object.keys(stockMap).map(id => ({
-            ITEM_ID: parseInt(id),
-            CODE: stockMap[id].CODE,
-            NAME: stockMap[id].NAME,
-            SELLING_PRICE: stockMap[id].SELLING_PRICE,
-            STOCK_S1: stockMap[id][1],
-            STOCK_S2: stockMap[id][2],
-            TOTAL_STOCK: stockMap[id][1] + stockMap[id][2]
-        }));
+        // Build result: STOCK_BY_STORE is canonical; STOCK_S1/STOCK_S2 kept as deprecated mirrors
+        const result = Object.keys(stockMap).map(id => {
+            const entry = stockMap[id];
+            const byStore = entry.byStore;
+            const total = Object.values(byStore).reduce((s, v) => s + v, 0);
+            return {
+                ITEM_ID: parseInt(id),
+                CODE: entry.CODE,
+                NAME: entry.NAME,
+                SELLING_PRICE: entry.SELLING_PRICE,
+                STOCK_BY_STORE: byStore,
+                TOTAL_STOCK: total,
+                // Deprecated mirrors — remove after all frontends updated
+                STOCK_S1: byStore['1'] || 0,
+                STOCK_S2: byStore['2'] || 0,
+            };
+        });
 
         return res.json({ success: true, result });
 
@@ -2739,38 +2741,46 @@ router.post('/api/reports/stockMovement', async (req, res) => {
 
         const rows = await pool.query(sql, params);
 
-        // Process in JS to pivot categories per store
-        const reportMap = {};
+        // Discover every store number present in the result rows so Store 3+ are
+        // included automatically — no hardcoding needed.
+        const TX_TYPES = ['Buying', 'Selling', 'Opening', 'Wastage', 'AdjIn', 'AdjOut',
+                          'StockTake', 'StockClear', 'TransferIn', 'TransferOut'];
+        const allStores = new Set();
+        rows.forEach(row => allStores.add(String(row.STORE_NO)));
 
+        // Build a zero-filled bucket for one store number.
+        const storeSlot = (sNo) => {
+            const slot = {};
+            TX_TYPES.forEach(t => { slot[`S${sNo}_${t}`] = 0; });
+            return slot;
+        };
+
+        const reportMap = {};
         rows.forEach(row => {
             if (!reportMap[row.ITEM_ID]) {
-                reportMap[row.ITEM_ID] = {
-                    id: row.ITEM_ID,
-                    code: row.CODE,
-                    name: row.NAME,
-                    unit: 'KG',
-                    // Store 1 breakdown
-                    S1_Buying: 0, S1_Selling: 0, S1_Opening: 0, S1_Wastage: 0,
-                    S1_AdjIn: 0, S1_AdjOut: 0, S1_StockTake: 0, S1_StockClear: 0,
-                    S1_TransferIn: 0, S1_TransferOut: 0,
-                    // Store 2 breakdown
-                    S2_Buying: 0, S2_Selling: 0, S2_Opening: 0, S2_Wastage: 0,
-                    S2_AdjIn: 0, S2_AdjOut: 0, S2_StockTake: 0, S2_StockClear: 0,
-                    S2_TransferIn: 0, S2_TransferOut: 0,
-                };
+                const base = { id: row.ITEM_ID, code: row.CODE, name: row.NAME, unit: 'KG' };
+                // Pre-fill a slot for every store seen so far
+                allStores.forEach(sNo => Object.assign(base, storeSlot(sNo)));
+                reportMap[row.ITEM_ID] = base;
             }
             const item = reportMap[row.ITEM_ID];
             const qty = parseFloat(row.total_qty || 0);
-            const store = String(row.STORE_NO);
-            const type = row.TYPE;
+            const sNo = String(row.STORE_NO);
+            const key = `S${sNo}_${row.TYPE}`;
+            // Ensure the slot exists even if this store wasn't seen when the item was initialised
+            if (item[key] === undefined) item[key] = 0;
+            item[key] += qty;
+        });
 
-            // Map TYPE to specific key
-            if (store === '1' || store === '2') {
-                const key = `S${store}_${type}`;
-                if (item[key] !== undefined) {
-                    item[key] += qty;
-                }
-            }
+        // Ensure every item has slots for every store (handles items with partial store coverage)
+        const allStoresArr = Array.from(allStores);
+        Object.values(reportMap).forEach(item => {
+            allStoresArr.forEach(sNo => {
+                TX_TYPES.forEach(t => {
+                    const key = `S${sNo}_${t}`;
+                    if (item[key] === undefined) item[key] = 0;
+                });
+            });
         });
 
         let results = Object.values(reportMap);
@@ -2781,43 +2791,32 @@ router.post('/api/reports/stockMovement', async (req, res) => {
             results = results.filter(r => allowedIds.has(r.id));
         }
 
-        // Calculate Totals and Nets
+        // Calculate Totals and Nets across ALL discovered stores.
+        const calcNet = (r, sNo) => {
+            const p = `S${sNo}`;
+            const i = (r[`${p}_Buying`] || 0) + (r[`${p}_Opening`] || 0) + (r[`${p}_AdjIn`] || 0) +
+                      (r[`${p}_TransferIn`] || 0) + (r[`${p}_StockTake`] || 0);
+            const o = (r[`${p}_Selling`] || 0) + (r[`${p}_AdjOut`] || 0) + (r[`${p}_StockClear`] || 0) +
+                      (r[`${p}_TransferOut`] || 0) + (r[`${p}_Wastage`] || 0);
+            return i - o;
+        };
+
         results = results.map(r => {
-            // Helper to sum S1 and S2 for a type
-            const sumType = (type) => (r[`S1_${type}`] || 0) + (r[`S2_${type}`] || 0);
+            // Total columns sum across every store
+            const sumType = (type) => allStoresArr.reduce((acc, sNo) => acc + (r[`S${sNo}_${type}`] || 0), 0);
+            const totals = {};
+            TX_TYPES.forEach(t => { totals[`Total_${t}`] = sumType(t); });
 
-            const totals = {
-                Total_Buying: sumType('Buying'),
-                Total_Selling: sumType('Selling'),
-                Total_Opening: sumType('Opening'),
-                Total_Wastage: sumType('Wastage'),
-                Total_AdjIn: sumType('AdjIn'),
-                Total_AdjOut: sumType('AdjOut'),
-                Total_StockTake: sumType('StockTake'),
-                Total_StockClear: sumType('StockClear'),
-                Total_TransferIn: sumType('TransferIn'),
-                Total_TransferOut: sumType('TransferOut')
-            };
+            // Per-store net fields (netS1, netS2, netS3, …)
+            const nets = {};
+            let netChange = 0;
+            allStoresArr.forEach(sNo => {
+                const n = calcNet(r, sNo);
+                nets[`netS${sNo}`] = n;
+                netChange += n;
+            });
 
-            // Calculate Net Change per Store
-            // In: Buying, Opening, AdjIn, TransferIn, StockTake
-            // Out: Selling, AdjOut, StockClear, TransferOut, Wastage
-            const calcNet = (prefix) => {
-                const i = (r[`${prefix}_Buying`] || 0) + (r[`${prefix}_Opening`] || 0) + (r[`${prefix}_AdjIn`] || 0) + (r[`${prefix}_TransferIn`] || 0) + (r[`${prefix}_StockTake`] || 0);
-                const o = (r[`${prefix}_Selling`] || 0) + (r[`${prefix}_AdjOut`] || 0) + (r[`${prefix}_StockClear`] || 0) + (r[`${prefix}_TransferOut`] || 0) + (r[`${prefix}_Wastage`] || 0);
-                return i - o;
-            };
-
-            const netS1 = calcNet('S1');
-            const netS2 = calcNet('S2');
-
-            return {
-                ...r,
-                ...totals,
-                netS1,
-                netS2,
-                netChange: netS1 + netS2
-            };
+            return { ...r, ...totals, ...nets, netChange };
         });
 
         // Sort by net change (biggest decrease first)

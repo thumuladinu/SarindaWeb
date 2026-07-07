@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import Cookies from 'js-cookie';
 
 import InventoryHistoryFilters from './InventoryHistoryFilters';
+import { useStores } from '../../contexts/StoresContext';
 
 
 
@@ -16,6 +17,7 @@ const { TabPane } = Tabs;
 
 export default function Inventory() {
     const { message } = App.useApp();
+    const { stores, getName, getAntTag } = useStores();
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('1');
 
@@ -345,12 +347,19 @@ export default function Inventory() {
     // Current User Logic
     const currentUser = JSON.parse(Cookies.get('rememberedUser') || '{}');
 
-    // Desktop Columns - Stock Status
+    // Desktop Columns - Stock Status (dynamic per store)
     const stockColumns = [
         { title: 'Code', dataIndex: 'CODE', key: 'CODE', render: (code) => <span className="font-mono font-medium">{code}</span> },
         { title: 'Name', dataIndex: 'NAME', key: 'NAME' },
-        { title: 'Store 1', dataIndex: 'STOCK_S1', key: 'STOCK_S1', align: 'center', render: (val) => <Tag color={val > 0 ? 'blue' : val < 0 ? 'red' : 'default'} className="font-bold">{Number(val).toFixed(1)} Kg</Tag> },
-        { title: 'Store 2', dataIndex: 'STOCK_S2', key: 'STOCK_S2', align: 'center', render: (val) => <Tag color={val > 0 ? 'purple' : val < 0 ? 'red' : 'default'} className="font-bold">{Number(val).toFixed(1)} Kg</Tag> },
+        ...stores.map(s => ({
+            title: <Tag color={getAntTag(s.STORE_NO)}>{getName(s.STORE_NO)}</Tag>,
+            key: `stock_s${s.STORE_NO}`,
+            align: 'center',
+            render: (_, record) => {
+                const val = Number((record.STOCK_BY_STORE || {})[String(s.STORE_NO)] ?? record[`STOCK_S${s.STORE_NO}`] ?? 0);
+                return <Tag color={val > 0 ? getAntTag(s.STORE_NO) : val < 0 ? 'red' : 'default'} className="font-bold">{val.toFixed(1)} Kg</Tag>;
+            }
+        })),
         { title: 'Total', dataIndex: 'TOTAL_STOCK', key: 'TOTAL', align: 'center', render: (val) => <span className="font-bold">{Number(val).toFixed(1)} Kg</span> },
         {
             title: 'Action',
@@ -506,14 +515,15 @@ export default function Inventory() {
 
                             <div className="flex justify-between items-end border-t border-gray-200 dark:border-white/5 pt-3">
                                 <div className="flex flex-col gap-1">
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Store 1</span>
-                                        <span className={`text-sm font-bold ${item.STOCK_S1 > 0 ? 'text-blue-500' : item.STOCK_S1 < 0 ? 'text-red-500' : 'dark:text-gray-300'}`}>{Number(item.STOCK_S1).toFixed(1)} Kg</span>
-                                    </div>
-                                    <div className="flex flex-col mt-1">
-                                        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Store 2</span>
-                                        <span className={`text-sm font-bold ${item.STOCK_S2 > 0 ? 'text-purple-500' : item.STOCK_S2 < 0 ? 'text-red-500' : 'dark:text-gray-300'}`}>{Number(item.STOCK_S2).toFixed(1)} Kg</span>
-                                    </div>
+                                    {stores.map(s => {
+                                        const val = Number((item.STOCK_BY_STORE || {})[String(s.STORE_NO)] ?? item[`STOCK_S${s.STORE_NO}`] ?? 0);
+                                        return (
+                                            <div key={s.STORE_NO} className="flex flex-col">
+                                                <span className="text-[10px] text-gray-400 uppercase tracking-wider">{getName(s.STORE_NO)}</span>
+                                                <span className={`text-sm font-bold ${val > 0 ? `text-${getAntTag(s.STORE_NO)}-500` : val < 0 ? 'text-red-500' : 'dark:text-gray-300'}`}>{val.toFixed(1)} Kg</span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                                 <div className="flex flex-col items-end">
                                     <span className="text-xs text-gray-500">Total Stock</span>
@@ -662,7 +672,7 @@ export default function Inventory() {
                                     {/* Partial Clear Button */}
                                     <Popconfirm
                                         title="Partial Clear"
-                                        description={<span>Deduct <b>only the requested quantity</b> from Store 1 stock and add to Store 2?</span>}
+                                        description={<span>Deduct <b>only the requested quantity</b> from {getName(req.store_from_id || 1)} and add to {getName(req.store_to_id || 2)}?</span>}
                                         onConfirm={() => handleApproveTransfer(req.id, 'PARTIAL')}
                                         okText="Yes, Partial Clear" cancelText="Cancel"
                                     >
@@ -678,7 +688,7 @@ export default function Inventory() {
                                     {/* Full Clear Button */}
                                     <Popconfirm
                                         title="Full Clear"
-                                        description={<span>Clear <b>ALL stock</b> of this item from Store 1? (Wastage will be calculated)</span>}
+                                        description={<span>Clear <b>ALL stock</b> of this item from {getName(req.store_from_id || 1)}? (Wastage will be calculated)</span>}
                                         onConfirm={() => handleApproveTransfer(req.id, 'FULL')}
                                         okText="Yes, Full Clear" cancelText="Cancel"
                                         okButtonProps={{ className: 'bg-green-600 hover:bg-green-500' }}
@@ -710,13 +720,15 @@ export default function Inventory() {
                 footer={adjustmentType === 'StockReturn' ? null : undefined}
             >
                 {selectedItem && (
-                    <Form form={form} layout="vertical" onFinish={handleAdjustmentSubmit} initialValues={{ STORE_NO: '1', ACTION_TYPE: 'AdjIn', QUANTITY: 0, DATE: dayjs() }}>
+                    <Form form={form} layout="vertical" onFinish={handleAdjustmentSubmit} initialValues={{ STORE_NO: String(stores[0]?.STORE_NO || '1'), ACTION_TYPE: 'AdjIn', QUANTITY: 0, DATE: dayjs() }}>
                         <div className="p-4 bg-gray-50 dark:bg-white/5 rounded-xl mb-6">
                             <h4 className="font-bold text-gray-800 dark:text-gray-200">{selectedItem.NAME}</h4>
                             <p className="text-xs text-gray-500">{selectedItem.CODE}</p>
-                            <div className="flex gap-4 mt-2 text-sm">
-                                <span>Store 1: <b>{Number(selectedItem.STOCK_S1 || 0).toFixed(1)} Kg</b></span>
-                                <span>Store 2: <b>{Number(selectedItem.STOCK_S2 || 0).toFixed(1)} Kg</b></span>
+                            <div className="flex flex-wrap gap-3 mt-2 text-sm">
+                                {stores.map(s => {
+                                    const val = Number((selectedItem.STOCK_BY_STORE || {})[String(s.STORE_NO)] ?? selectedItem[`STOCK_S${s.STORE_NO}`] ?? 0);
+                                    return <span key={s.STORE_NO}><Tag color={getAntTag(s.STORE_NO)}>{getName(s.STORE_NO)}</Tag> <b>{val.toFixed(1)} Kg</b></span>;
+                                })}
                             </div>
                         </div>
 
@@ -725,9 +737,12 @@ export default function Inventory() {
                         </Form.Item>
 
                         <Form.Item name="STORE_NO" label="Store" rules={[{ required: true }]}>
-                            <Radio.Group className="w-full grid grid-cols-2 gap-2">
-                                <Radio.Button value="1" className="text-center">Store 1</Radio.Button>
-                                <Radio.Button value="2" className="text-center">Store 2</Radio.Button>
+                            <Radio.Group className={`w-full grid gap-2`} style={{ gridTemplateColumns: `repeat(${Math.min(stores.length, 3)}, minmax(0,1fr))` }}>
+                                {stores.map(s => (
+                                    <Radio.Button key={s.STORE_NO} value={String(s.STORE_NO)} className="text-center">
+                                        {getName(s.STORE_NO)}
+                                    </Radio.Button>
+                                ))}
                             </Radio.Group>
                         </Form.Item>
 
@@ -915,7 +930,7 @@ export default function Inventory() {
                                                 <div className="flex items-center justify-between mb-6">
                                                     <div className="flex flex-col items-center">
                                                         <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center border-2 border-white dark:border-gray-700 shadow-sm z-10">
-                                                            <span className="text-lg font-bold text-red-600 dark:text-red-400">S1</span>
+                                                            <span className="text-lg font-bold text-red-600 dark:text-red-400">S{viewRecord.breakdown.sourceStore || viewRecord.STORE_NO}</span>
                                                         </div>
                                                         <span className="text-xs font-bold text-gray-500 mt-1">Source</span>
                                                     </div>
@@ -929,7 +944,7 @@ export default function Inventory() {
 
                                                     <div className="flex flex-col items-center">
                                                         <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center border-2 border-white dark:border-gray-700 shadow-sm z-10">
-                                                            <span className="text-lg font-bold text-green-600 dark:text-green-400">S2</span>
+                                                            <span className="text-lg font-bold text-green-600 dark:text-green-400">S{viewRecord.breakdown.targetStore}</span>
                                                         </div>
                                                         <span className="text-xs font-bold text-gray-500 mt-1">Dest</span>
                                                     </div>
@@ -938,7 +953,7 @@ export default function Inventory() {
                                                 {/* Source Detail */}
                                                 <div className="mb-4 p-3 bg-white/60 dark:bg-black/20 rounded-lg">
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-sm font-bold text-gray-700 dark:text-gray-300">From Store 1: {viewRecord.breakdown.source.itemName}</span>
+                                                        <span className="text-sm font-bold text-gray-700 dark:text-gray-300">From {getName(viewRecord.breakdown.sourceStore || viewRecord.STORE_NO)}: {viewRecord.breakdown.source.itemName}</span>
                                                         <span className="text-xs text-red-500 font-mono">-{Number(viewRecord.breakdown.source.adjustmentQty).toFixed(1)} Kg</span>
                                                     </div>
                                                     <div className="text-xs text-gray-500 flex justify-between">
@@ -958,7 +973,7 @@ export default function Inventory() {
 
                                                 {/* Destinations Detail with Before/After Stock */}
                                                 <div className="p-3 bg-white/60 dark:bg-black/20 rounded-lg">
-                                                    <div className="text-xs text-gray-500 mb-2 uppercase">To Store 2</div>
+                                                    <div className="text-xs text-gray-500 mb-2 uppercase">To {getName(viewRecord.breakdown.targetStore)}</div>
                                                     {viewRecord.breakdown.store2Items && viewRecord.breakdown.store2Items.length > 0 ? (
                                                         viewRecord.breakdown.store2Items.map((item, idx) => (
                                                             <div key={idx} className="flex justify-between items-center mb-2 p-2 bg-green-50 dark:bg-green-900/20 rounded">

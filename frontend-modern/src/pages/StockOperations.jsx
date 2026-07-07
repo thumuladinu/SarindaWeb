@@ -32,6 +32,7 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import './StockOperations.css';
 import InventoryHistoryFilters from './inventory/InventoryHistoryFilters';
+import { useStores } from '../contexts/StoresContext';
 
 // Operation type definitions
 const OPERATION_TYPES = [
@@ -41,8 +42,7 @@ const OPERATION_TYPES = [
     { id: 4, name: 'Partial Clear + Sales Bill', shortName: 'Half + Bill', icon: '📝', color: '#17a2b8' },
     { id: 9, name: 'Item Conversion', shortName: 'Convert', icon: '🔄', color: '#007bff' },
     { id: 11, name: 'Stock Return', shortName: 'Return', icon: '↩️', color: '#20c997' },
-    { id: 12, name: 'Stock Transfer (Store 1 -> Store 2)', shortName: 'S1 -> S2', icon: '📥', color: '#6f42c1' },
-    { id: 13, name: 'Stock Transfer (Store 2 -> Store 1)', shortName: 'S2 -> S1', icon: '📤', color: '#6f42c1' }
+    { id: 12, name: 'Stock Transfer', shortName: 'Transfer', icon: '🔀', color: '#6f42c1' }
 ];
 
 export default function StockOperations() {
@@ -55,8 +55,19 @@ export default function StockOperations() {
     const currentUser = user; // For permission checks matching Inventory page logic
 
     // View State
+    const { stores, getName, getHex } = useStores();
+
+    // Helper: get stock for a store from item — uses STOCK_BY_STORE first, falls back to STOCK_S{n}
+    const getItemStock = (item, storeNo) => {
+        if (!item) return 0;
+        const by = item.STOCK_BY_STORE;
+        if (by && by[String(storeNo)] !== undefined) return parseFloat(by[String(storeNo)]) || 0;
+        return parseFloat(item[`STOCK_S${storeNo}`]) || 0;
+    };
     const [step, setStep] = useState(1); // 1 = Op Type, 2 = Store, 3 = Form
-    const [selectedStore, setSelectedStore] = useState(1); // 1 = Store 1, 2 = Store 2
+    const [selectedStore, setSelectedStore] = useState(null); // set from stores list on load
+    const [transferFrom, setTransferFrom] = useState(null);
+    const [transferTo, setTransferTo] = useState(null);
     const [showOpModal, setShowOpModal] = useState(false); // Controls the main operation entry modal
 
     // Data State
@@ -177,10 +188,9 @@ export default function StockOperations() {
         updateStockPreview();
     }, [selectedItem, selectedOpType, mainQuantity, sellQuantity, conversions, selectedStore, transferType, returnQty, conversionType]);
 
-    // Auto-set Transfer Target
+    // When selected store changes: clear return state; DON'T auto-set transferTargetStore
+    // (that is now explicitly set by the step 2 from/to picker for op 12)
     useEffect(() => {
-        setTransferTargetStore(selectedStore === 1 ? 2 : 1);
-        // Clear return selection if store changes to avoid cross-store return confusion
         setSelectedReturnOp(null);
         setReturnableOps([]);
     }, [selectedStore]);
@@ -324,7 +334,7 @@ export default function StockOperations() {
 
         setComments(`Return for ${op.OP_CODE}`);
 
-        const currentStock = selectedStore === 1 ? (latestProd?.STOCK_S1 || 0) : (latestProd?.STOCK_S2 || 0);
+        const currentStock = getItemStock(latestProd, selectedStore);
         setPreviewStock({
             current: currentStock,
             projected: currentStock + (parseFloat(autoQty) || 0),
@@ -337,9 +347,7 @@ export default function StockOperations() {
     const filteredHistory = history;
 
     const updateStockPreview = async () => {
-        const currentStock = selectedStore === 1
-            ? (parseFloat(selectedItem?.STOCK_S1) || 0)
-            : (parseFloat(selectedItem?.STOCK_S2) || 0);
+        const currentStock = getItemStock(selectedItem, selectedStore);
 
         if (!selectedItem || !selectedItem.ITEM_ID || selectedItem === null) {
             setPreviewStock({ current: 0, projected: 0, diff: 0, wastage: null });
@@ -437,8 +445,8 @@ export default function StockOperations() {
         // Transfer specialized preview (Op 12/13)
         let transferPreview = null;
         if ([12, 13].includes(selectedOpType)) {
-            const sourceCurrent = selectedStore === 1 ? (parseFloat(selectedItem?.STOCK_S1) || 0) : (parseFloat(selectedItem?.STOCK_S2) || 0);
-            const targetCurrent = transferTargetStore === 1 ? (parseFloat(selectedItem?.STOCK_S1) || 0) : (parseFloat(selectedItem?.STOCK_S2) || 0);
+            const sourceCurrent = getItemStock(selectedItem, selectedStore);
+            const targetCurrent = getItemStock(selectedItem, transferTargetStore);
 
             const sourceDeduction = deduction; // calculated above as currentStock if FULL, else convTotal or qty
             const sourceProjected = transferType === 'FULL' ? 0 : (sourceCurrent - sourceDeduction);
@@ -478,7 +486,7 @@ export default function StockOperations() {
 
             // For Transfer (Op 12/13), destination stock is ALWAYS from the TARGET store
             const targetStoreNum = [12, 13].includes(selectedOpType) ? transferTargetStore : selectedStore;
-            const destCurrent = targetStoreNum === 1 ? (destItem.STOCK_S1 || 0) : (destItem.STOCK_S2 || 0);
+            const destCurrent = getItemStock(destItem, targetStoreNum);
             const added = parseFloat(c.val) || 0;
             // Dest stock increases
             const destProjected = destCurrent + added;
@@ -515,7 +523,7 @@ export default function StockOperations() {
         setSearchTerm('');
 
         // Auto-set Quantities based on Op Type
-        const currentStock = parseFloat(selectedStore === 1 ? item.STOCK_S1 : item.STOCK_S2) || 0;
+        const currentStock = getItemStock(item, selectedStore);
 
         // For "Full" operations, default main/sell qty to current stock
         if ([1, 3, 9, 12, 13].includes(selectedOpType)) {
@@ -577,7 +585,7 @@ export default function StockOperations() {
     const generateWebOpCode = () => {
         const dateStr = dayjs().format('YYMMDD');
         const storeStr = `S${selectedStore}`;
-        const terminalStr = selectedStore === 1 ? 'POS' : 'WEIGH';
+        const terminalStr = 'WEB';
         const randomNum = Math.floor(Math.random() * 999) + 1;
         const counterStr = String(randomNum).padStart(3, '0');
         // Format: WEB-S1-260218-CLR-POS-001
@@ -719,7 +727,7 @@ export default function StockOperations() {
                     storeTo: transferTargetStore,
                     createdBy: user?.USER_ID,
                     createdByName: user?.NAME,
-                    comments: comments || `Direct Web Transfer (S${selectedStore} -> S${transferTargetStore})`,
+                    comments: comments || `Direct Web Transfer (${getName(selectedStore)} → ${getName(transferTargetStore)})`,
                     conversions: conversionEnabled ? conversions.filter(c => c.destId).map(c => ({
                         DEST_ITEM_ID: c.destId,
                         DEST_ITEM_CODE: c.destCode,
@@ -1003,7 +1011,8 @@ export default function StockOperations() {
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0 mb-6 md:mb-8 border-b dark:border-white/10 pb-4 shrink-0">
                         <h3 className="text-xl md:text-2xl font-bold flex flex-wrap items-center gap-2 md:gap-3 text-gray-800 dark:text-white leading-tight">
                             {step === 1 && <><StockOutlined className="text-emerald-500" /> Select Operation Type</>}
-                            {step === 2 && <><ShopOutlined className="text-blue-500" /> Select Store</>}
+                            {step === 2 && selectedOpType === 12 && <><SwapOutlined className="text-violet-500" /> Select Transfer Route</>}
+                            {step === 2 && selectedOpType !== 12 && <><ShopOutlined className="text-blue-500" /> Select Store</>}
                             {step === 3 && (
                                 <>
                                     <StockOutlined className="text-purple-500" />
@@ -1028,10 +1037,7 @@ export default function StockOperations() {
                                     className="p-4 md:p-8 rounded-2xl md:rounded-3xl border border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 cursor-pointer flex flex-col items-center gap-3 md:gap-6 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl hover:scale-105 group"
                                     onClick={() => {
                                         handleOpTypeChange(op.id);
-                                        // Non-transfer ops go to store selection step
-                                        if (![12, 13].includes(op.id)) {
-                                            setStep(2);
-                                        }
+                                        setStep(2); // All ops go through step 2 (store or from/to)
                                     }}
                                 >
                                     <span className="text-4xl md:text-6xl group-hover:scale-110 transition-transform filter drop-shadow-lg">{op.icon}</span>
@@ -1058,33 +1064,85 @@ export default function StockOperations() {
                                 </Button>
                             </div>
 
-                            <div className="flex flex-col md:flex-row gap-6 md:gap-8 justify-center items-center flex-1 mt-12 pb-10">
-                                <button
-                                    className="flex-1 w-full max-w-sm p-6 md:p-10 rounded-2xl md:rounded-3xl bg-emerald-50 dark:bg-emerald-900/10 border-2 border-emerald-100 dark:border-emerald-800 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:shadow-2xl transition-all flex flex-col items-center gap-4 md:gap-6 group"
-                                    onClick={() => { setSelectedStore(1); setStep(3); }}
-                                >
-                                    <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <ShopOutlined className="text-4xl md:text-5xl text-emerald-600 dark:text-white" />
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-2xl md:text-3xl font-bold text-emerald-900 dark:text-emerald-100">Store 1</div>
-                                        <div className="text-sm md:text-base text-emerald-600 dark:text-emerald-400 mt-1 md:mt-2">Main POS Store</div>
-                                    </div>
-                                </button>
-                                <div className="text-gray-300 font-bold text-lg md:text-2xl">OR</div>
-                                <button
-                                    className="flex-1 w-full max-w-sm p-6 md:p-10 rounded-2xl md:rounded-3xl bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-100 dark:border-blue-800 hover:border-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:shadow-2xl transition-all flex flex-col items-center gap-4 md:gap-6 group"
-                                    onClick={() => { setSelectedStore(2); setStep(3); }}
-                                >
-                                    <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <ShopOutlined className="text-4xl md:text-5xl text-blue-600 dark:text-white" />
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-2xl md:text-3xl font-bold text-blue-900 dark:text-blue-100">Store 2</div>
-                                        <div className="text-sm md:text-base text-blue-600 dark:text-blue-400 mt-1 md:mt-2">Weighing Station</div>
-                                    </div>
-                                </button>
-                            </div>
+                            {/* Transfer op: from/to picker */}
+                            {selectedOpType === 12 ? (
+                                <div className="flex flex-col gap-8 flex-1 mt-8 pb-10 max-w-lg mx-auto w-full">
+                                    {(['from', 'to']).map((dir) => {
+                                        const isFrom = dir === 'from';
+                                        const current = isFrom ? transferFrom : transferTo;
+                                        const other = isFrom ? transferTo : transferFrom;
+                                        const label = isFrom ? 'From (Source)' : 'To (Destination)';
+                                        const setter = isFrom ? setTransferFrom : setTransferTo;
+                                        return (
+                                            <div key={dir}>
+                                                <p className="text-xs uppercase font-bold text-gray-500 tracking-wider mb-3">{label}</p>
+                                                <div className="flex flex-wrap gap-3">
+                                                    {stores.map(s => {
+                                                        const hex = getHex(s.STORE_NO);
+                                                        const selected = current === s.STORE_NO;
+                                                        const disabled = s.STORE_NO === other;
+                                                        return (
+                                                            <button
+                                                                key={s.STORE_NO}
+                                                                disabled={disabled}
+                                                                className={`flex-1 min-w-[130px] px-4 py-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${selected ? 'ring-2 ring-offset-2' : 'opacity-70 hover:opacity-100'} ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                                                style={{
+                                                                    borderColor: hex,
+                                                                    background: selected ? hex + '25' : 'transparent',
+                                                                    ringColor: hex,
+                                                                }}
+                                                                onClick={() => !disabled && setter(s.STORE_NO)}
+                                                            >
+                                                                <span className="text-2xl">{s.IS_WEIGHING_STATION ? '⚖️' : '🏪'}</span>
+                                                                <span className="font-bold text-sm" style={{ color: hex }}>{s.NAME}</span>
+                                                                <span className="text-xs text-gray-400">S{s.STORE_NO}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    <Button
+                                        type="primary"
+                                        size="large"
+                                        disabled={!transferFrom || !transferTo || transferFrom === transferTo}
+                                        onClick={() => {
+                                            setSelectedStore(transferFrom);
+                                            setTransferTargetStore(transferTo);
+                                            setStep(3);
+                                        }}
+                                        className="mt-2"
+                                    >
+                                        Confirm Route → S{transferFrom} → S{transferTo}
+                                    </Button>
+                                </div>
+                            ) : (
+                                /* Regular op: single store picker — all stores including weighing station */
+                                <div className="flex flex-wrap gap-4 justify-center items-center flex-1 mt-12 pb-10">
+                                    {stores.map((s) => (
+                                        <button
+                                            key={s.STORE_NO}
+                                            className="flex-1 min-w-[200px] max-w-sm p-6 md:p-10 rounded-2xl md:rounded-3xl border-2 hover:shadow-2xl transition-all flex flex-col items-center gap-4 md:gap-6 group"
+                                            style={{ borderColor: getHex(s.STORE_NO) + '40', background: getHex(s.STORE_NO) + '10' }}
+                                            onClick={() => { setSelectedStore(s.STORE_NO); setStep(3); }}
+                                        >
+                                            <div className="w-16 h-16 md:w-24 md:h-24 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"
+                                                style={{ background: getHex(s.STORE_NO) + '25' }}>
+                                                {s.IS_WEIGHING_STATION
+                                                    ? <span className="text-4xl md:text-5xl">⚖️</span>
+                                                    : <ShopOutlined className="text-4xl md:text-5xl" style={{ color: getHex(s.STORE_NO) }} />}
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-2xl md:text-3xl font-bold" style={{ color: getHex(s.STORE_NO) }}>{s.NAME}</div>
+                                                <div className="text-sm md:text-base text-gray-500 mt-1 md:mt-2">
+                                                    {s.IS_WEIGHING_STATION ? 'Weighing Station' : `S${s.STORE_NO}`}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -1095,7 +1153,7 @@ export default function StockOperations() {
                             <div className="flex gap-4 mb-6">
                                 <Button
                                     icon={<UndoOutlined />}
-                                    onClick={() => setStep([12, 13].includes(selectedOpType) ? 1 : 2)}
+                                    onClick={() => setStep(selectedOpType === 12 ? 1 : 2)}
                                     className="h-12 px-6 rounded-xl border-gray-300 hover:border-gray-400 hover:text-gray-600"
                                 >
                                     Back
@@ -1195,8 +1253,8 @@ export default function StockOperations() {
                                                                 <div className="text-xs text-gray-500 font-mono">{p.CODE}</div>
                                                             </div>
                                                             <div className="text-right text-xs">
-                                                                <Tag color={Number(selectedStore === 1 ? p.STOCK_S1 : p.STOCK_S2) > 0 ? 'success' : 'warning'}>
-                                                                    S{selectedStore}: {Number(selectedStore === 1 ? p.STOCK_S1 : p.STOCK_S2).toFixed(1)} Kg
+                                                                <Tag color={getItemStock(p, selectedStore) > 0 ? 'success' : 'warning'}>
+                                                                    S{selectedStore}: {getItemStock(p, selectedStore).toFixed(1)} Kg
                                                                 </Tag>
                                                             </div>
                                                         </div>
@@ -1797,7 +1855,7 @@ export default function StockOperations() {
                                                 <div className="flex items-center justify-between mb-6">
                                                     <div className="flex flex-col items-center">
                                                         <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center border-2 border-white dark:border-gray-700 shadow-sm z-10">
-                                                            <span className="text-lg font-bold text-red-600 dark:text-red-400">S{viewRecord.breakdown.sourceStore || viewRecord.STORE_NO || 1}</span>
+                                                            <span className="text-lg font-bold text-red-600 dark:text-red-400">S{viewRecord.breakdown.sourceStore || viewRecord.STORE_NO}</span>
                                                         </div>
                                                         <span className="text-xs font-bold text-gray-500 mt-1">Source</span>
                                                     </div>
@@ -1811,7 +1869,7 @@ export default function StockOperations() {
 
                                                     <div className="flex flex-col items-center">
                                                         <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center border-2 border-white dark:border-gray-700 shadow-sm z-10">
-                                                            <span className="text-lg font-bold text-green-600 dark:text-green-400">S{viewRecord.breakdown.targetStore || (viewRecord.STORE_NO === 1 ? 2 : 1)}</span>
+                                                            <span className="text-lg font-bold text-green-600 dark:text-green-400">S{viewRecord.breakdown.targetStore}</span>
                                                         </div>
                                                         <span className="text-xs font-bold text-gray-500 mt-1">Dest</span>
                                                     </div>
@@ -1820,7 +1878,7 @@ export default function StockOperations() {
                                                 {/* Source Detail */}
                                                 <div className="mb-4 p-3 bg-white/60 dark:bg-black/20 rounded-lg">
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-sm font-bold text-gray-700 dark:text-gray-300">From Store {viewRecord.breakdown.sourceStore || viewRecord.STORE_NO || 1}: {viewRecord.breakdown.source.itemName}</span>
+                                                        <span className="text-sm font-bold text-gray-700 dark:text-gray-300">From {getName(viewRecord.breakdown.sourceStore || viewRecord.STORE_NO)}: {viewRecord.breakdown.source.itemName}</span>
                                                         <span className="text-xs text-red-500 font-mono">-{Number(viewRecord.breakdown.source.adjustmentQty).toFixed(1)} Kg</span>
                                                     </div>
                                                     <div className="text-xs text-gray-500 flex justify-between">
@@ -1840,7 +1898,7 @@ export default function StockOperations() {
 
                                                 {/* Destinations Detail with Before/After Stock */}
                                                 <div className="p-3 bg-white/60 dark:bg-black/20 rounded-lg">
-                                                    <div className="text-xs text-gray-500 mb-2 uppercase">To Store {viewRecord.breakdown.targetStore || (viewRecord.STORE_NO === 1 ? 2 : 1)}</div>
+                                                    <div className="text-xs text-gray-500 mb-2 uppercase">To {getName(viewRecord.breakdown.targetStore)}</div>
                                                     {viewRecord.breakdown.store2Items && viewRecord.breakdown.store2Items.length > 0 ? (
                                                         viewRecord.breakdown.store2Items.map((item, idx) => (
                                                             <div key={idx} className="flex justify-between items-center mb-2 p-2 bg-green-50 dark:bg-green-900/20 rounded">

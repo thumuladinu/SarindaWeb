@@ -8,11 +8,13 @@ import autoTable from 'jspdf-autotable';
 import { registerSinhalaFont } from '../../fonts/sinhalaFont';
 import MobileDateRange from '../../components/common/MobileDateRange';
 import CollapsibleReportFilters from '../../components/common/CollapsibleReportFilters';
+import { useStores } from '../../contexts/StoresContext';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 export default function ReportStockMovement() {
+    const { stores, getName } = useStores();
     const [dateRange, setDateRange] = useState([dayjs().startOf('month'), dayjs().endOf('month')]);
     const [selectedItems, setSelectedItems] = useState([]);
     const [selectedStore, setSelectedStore] = useState('all');
@@ -103,8 +105,7 @@ export default function ReportStockMovement() {
                         Number(netVal).toFixed(2)
                     ]);
                 };
-                addRow('Store 1', 'S1', item.netS1);
-                addRow('Store 2', 'S2', item.netS2);
+                stores.forEach(s => addRow(getName(s.STORE_NO), `S${s.STORE_NO}`, item[`netS${s.STORE_NO}`] ?? 0));
                 addRow('Total', 'Total', item.netChange);
                 // Add row for spacing/divider visually in PDF
                 // Use a thin line or empty space
@@ -113,8 +114,8 @@ export default function ReportStockMovement() {
             });
         } else {
             tableHead = [['Code', 'Item', 'Buy', 'Sell', 'Adj In', 'Adj Out', 'Others', 'Net']];
-            const prefix = selectedStore === '1' ? 'S1' : 'S2';
-            const netKey = selectedStore === '1' ? 'netS1' : 'netS2';
+            const prefix = selectedStore !== 'all' ? `S${selectedStore}` : 'S1';
+            const netKey = selectedStore !== 'all' ? `netS${selectedStore}` : 'netS1';
 
             tableBody = [];
             data.forEach(item => {
@@ -258,13 +259,10 @@ export default function ReportStockMovement() {
             });
 
             if (selectedStore === 'all') {
-                rows.push(createRow('Store 1', 'S1', item.netS1));
-                rows.push(createRow('Store 2', 'S2', item.netS2));
+                stores.forEach(s => rows.push(createRow(getName(s.STORE_NO), `S${s.STORE_NO}`, item[`netS${s.STORE_NO}`] ?? 0)));
                 rows.push(createRow('Total', 'Total', item.netChange));
-            } else if (selectedStore === '1') {
-                rows.push(createRow('Store 1', 'S1', item.netS1));
-            } else if (selectedStore === '2') {
-                rows.push(createRow('Store 2', 'S2', item.netS2));
+            } else {
+                rows.push(createRow(getName(selectedStore), `S${selectedStore}`, item[`netS${selectedStore}`] ?? 0));
             }
         });
         return rows;
@@ -274,8 +272,7 @@ export default function ReportStockMovement() {
     const ItemCard = ({ item }) => {
         // Determine the net value to display based on selection
         let displayNet = item.netChange;
-        if (selectedStore === '1') displayNet = item.netS1;
-        else if (selectedStore === '2') displayNet = item.netS2;
+        if (selectedStore !== 'all') displayNet = item[`netS${selectedStore}`] ?? item.netChange;
 
         // Helper to show breakdown row
         const BreakdownRow = ({ label, prefix, color }) => {
@@ -316,24 +313,20 @@ export default function ReportStockMovement() {
 
                 {selectedStore === 'all' ? (
                     <>
-                        <BreakdownRow label="🏪 Store 1" prefix="S1_" color="bg-blue-50/50 dark:bg-blue-900/10" />
-                        <BreakdownRow label="🏪 Store 2" prefix="S2_" color="bg-purple-50/50 dark:bg-purple-900/10" />
+                        {stores.map(s => <BreakdownRow key={s.STORE_NO} label={`🏪 ${getName(s.STORE_NO)}`} prefix={`S${s.STORE_NO}_`} color="bg-blue-50/50 dark:bg-blue-900/10" />)}
                     </>
-                ) : (
-                    <div className="grid grid-cols-3 gap-2 text-xs bg-gray-50 dark:bg-black/20 rounded-lg p-2">
-                        <div className="flex flex-col"><span className="text-gray-400">Buy</span><span className="text-emerald-600">{Number(item[`${selectedStore === '1' ? 'S1' : 'S2'}_Buying`]).toFixed(1)}</span></div>
-                        <div className="flex flex-col"><span className="text-gray-400">Sell</span><span className="text-red-500">{Number(item[`${selectedStore === '1' ? 'S1' : 'S2'}_Selling`]).toFixed(1)}</span></div>
-                        <div className="flex flex-col">
-                            <span className="text-gray-400">Others</span>
-                            <span className="text-blue-500">
-                                {Number(((item[`${selectedStore === '1' ? 'S1' : 'S2'}_Opening`] || 0) + (item[`${selectedStore === '1' ? 'S1' : 'S2'}_TransferIn`] || 0) + (item[`${selectedStore === '1' ? 'S1' : 'S2'}_StockTake`] || 0)) -
-                                    ((item[`${selectedStore === '1' ? 'S1' : 'S2'}_Wastage`] || 0) + (item[`${selectedStore === '1' ? 'S1' : 'S2'}_TransferOut`] || 0) + (item[`${selectedStore === '1' ? 'S1' : 'S2'}_StockClear`] || 0))).toFixed(1)}
-                            </span>
-                        </div>
-                        <div className="flex flex-col"><span className="text-gray-400">Adj In</span><span className="text-blue-600">{Number(item[`${selectedStore === '1' ? 'S1' : 'S2'}_AdjIn`]).toFixed(1)}</span></div>
-                        <div className="flex flex-col"><span className="text-gray-400">Adj Out</span><span className="text-orange-500">{Number(item[`${selectedStore === '1' ? 'S1' : 'S2'}_AdjOut`]).toFixed(1)}</span></div>
-                    </div>
-                )}
+                ) : (() => {
+                        const px = `S${selectedStore}`;
+                        return (
+                            <div className="grid grid-cols-3 gap-2 text-xs bg-gray-50 dark:bg-black/20 rounded-lg p-2">
+                                <div className="flex flex-col"><span className="text-gray-400">Buy</span><span className="text-emerald-600">{Number(item[`${px}_Buying`]||0).toFixed(1)}</span></div>
+                                <div className="flex flex-col"><span className="text-gray-400">Sell</span><span className="text-red-500">{Number(item[`${px}_Selling`]||0).toFixed(1)}</span></div>
+                                <div className="flex flex-col"><span className="text-gray-400">Others</span><span className="text-blue-500">{Number(((item[`${px}_Opening`]||0)+(item[`${px}_TransferIn`]||0)+(item[`${px}_StockTake`]||0))-((item[`${px}_Wastage`]||0)+(item[`${px}_TransferOut`]||0)+(item[`${px}_StockClear`]||0))).toFixed(1)}</span></div>
+                                <div className="flex flex-col"><span className="text-gray-400">Adj In</span><span className="text-blue-600">{Number(item[`${px}_AdjIn`]||0).toFixed(1)}</span></div>
+                                <div className="flex flex-col"><span className="text-gray-400">Adj Out</span><span className="text-orange-500">{Number(item[`${px}_AdjOut`]||0).toFixed(1)}</span></div>
+                            </div>
+                        );
+                    })()}
             </div>
         );
     };
@@ -377,8 +370,7 @@ export default function ReportStockMovement() {
                         size="large"
                     >
                         <Option value="all">All Stores</Option>
-                        <Option value="1">Store 1</Option>
-                        <Option value="2">Store 2</Option>
+                        {stores.map(s => <Option key={s.STORE_NO} value={String(s.STORE_NO)}>S{s.STORE_NO} — {s.NAME}</Option>)}
                     </Select>
                 </div>
 

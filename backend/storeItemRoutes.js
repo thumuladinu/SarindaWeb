@@ -102,17 +102,45 @@ router.post('/api/addItem', async (req, res) => {
         const createdBy = req.body.CREATED_BY || null;
         const showInWeighing = req.body.SHOW_IN_WEIGHING !== undefined ? req.body.SHOW_IN_WEIGHING : 1;
 
+        // STORE_VISIBILITY: JSON keyed by storeNo {"1":1,"2":0,...}
+        // Accept from request, or derive from SHOW_IN_WEIGHING for back-compat.
+        let storeVisibility = null;
+        if (req.body.STORE_VISIBILITY) {
+            try {
+                storeVisibility = typeof req.body.STORE_VISIBILITY === 'string'
+                    ? req.body.STORE_VISIBILITY
+                    : JSON.stringify(req.body.STORE_VISIBILITY);
+            } catch (_) { storeVisibility = null; }
+        }
+        if (!storeVisibility) {
+            // Derive: visible in store 1 always; visible in store 2 = showInWeighing
+            storeVisibility = JSON.stringify({ '1': 1, '2': showInWeighing });
+        }
+
+        // STORE_PRICES: JSON keyed by storeNo {"1":{"buying":100,"selling":120},...}
+        // NULL means "use global price" for that store.
+        let storePrices = null;
+        if (req.body.STORE_PRICES) {
+            try {
+                storePrices = typeof req.body.STORE_PRICES === 'string'
+                    ? req.body.STORE_PRICES
+                    : JSON.stringify(req.body.STORE_PRICES);
+            } catch (_) { storePrices = null; }
+        }
+
         const upsertResult = await pool.query(`
-            INSERT INTO store_items (CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE, CREATED_BY, SHOW_IN_WEIGHING)
-            VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE 
+            INSERT INTO store_items (CODE, NAME, BUYING_PRICE, SELLING_PRICE, IS_ACTIVE, EDITED_DATE, CREATED_BY, SHOW_IN_WEIGHING, STORE_VISIBILITY, STORE_PRICES)
+            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
                 NAME = VALUES(NAME),
                 BUYING_PRICE = VALUES(BUYING_PRICE),
                 SELLING_PRICE = VALUES(SELLING_PRICE),
                 IS_ACTIVE = 1,
                 EDITED_DATE = VALUES(EDITED_DATE),
                 CREATED_BY = VALUES(CREATED_BY),
-                SHOW_IN_WEIGHING = VALUES(SHOW_IN_WEIGHING)
+                SHOW_IN_WEIGHING = VALUES(SHOW_IN_WEIGHING),
+                STORE_VISIBILITY = VALUES(STORE_VISIBILITY),
+                STORE_PRICES = VALUES(STORE_PRICES)
         `, [
             req.body.CODE,
             req.body.NAME,
@@ -120,7 +148,9 @@ router.post('/api/addItem', async (req, res) => {
             req.body.SELLING_PRICE,
             editedDate,
             createdBy,
-            showInWeighing
+            showInWeighing,
+            storeVisibility,
+            storePrices
         ]);
 
         // insertId is 0 if it was an update (duplicate key), otherwise it's the new ID
@@ -183,9 +213,26 @@ router.post('/api/addItem', async (req, res) => {
                 } catch (e) { console.error('Error parsing stock for ledger:', e); }
             }
 
-            // Emit Real-Time Event (Socket.io)
             if (global.io) {
-                global.io.emit('item:updated', { id: insertId, code: req.body.CODE, action: isReactivation ? 'reactivated' : 'added' });
+                let storeVisibility = null;
+                let storePrices = null;
+                try {
+                    const sv = req.body.STORE_VISIBILITY;
+                    storeVisibility = sv ? (typeof sv === 'string' ? JSON.parse(sv) : sv) : null;
+                } catch (_) {}
+                try {
+                    const sp = req.body.STORE_PRICES;
+                    storePrices = sp ? (typeof sp === 'string' ? JSON.parse(sp) : sp) : null;
+                } catch (_) {}
+                global.io.emit('item:updated', {
+                    id: insertId,
+                    code: req.body.CODE,
+                    action: isReactivation ? 'reactivated' : 'added',
+                    storeVisibility,
+                    storePrices,
+                    buyingPrice: req.body.BUYING_PRICE,
+                    sellingPrice: req.body.SELLING_PRICE,
+                });
             }
 
             return res.status(200).json({ success: true, message: isReactivation ? 'Item reactivated' : 'Item added successfully', insertId: insertId });
@@ -288,7 +335,8 @@ router.post('/api/updateItem', async (req, res) => {
         }
 
         // Sanitize: Only allow valid columns to be updated
-        const allowedFields = ['CODE', 'NAME', 'BUYING_PRICE', 'SELLING_PRICE', 'IS_ACTIVE', 'CREATED_BY', 'SHOW_IN_WEIGHING'];
+        // SHOW_IN_WEIGHING is always derived from STORE_VISIBILITY['2'] — never set directly
+        const allowedFields = ['CODE', 'NAME', 'BUYING_PRICE', 'SELLING_PRICE', 'IS_ACTIVE', 'CREATED_BY'];
         const setClauses = [];
         const values = [];
 
@@ -297,6 +345,36 @@ router.post('/api/updateItem', async (req, res) => {
                 setClauses.push(`${field} = ?`);
                 values.push(req.body[field] === '' ? null : req.body[field]);
             }
+        }
+
+        // Handle STORE_VISIBILITY + sync SHOW_IN_WEIGHING from visibility['2']
+        if (req.body.STORE_VISIBILITY !== undefined) {
+            try {
+                const sv = typeof req.body.STORE_VISIBILITY === 'string'
+                    ? req.body.STORE_VISIBILITY
+                    : JSON.stringify(req.body.STORE_VISIBILITY);
+                setClauses.push('STORE_VISIBILITY = ?');
+                values.push(sv);
+                const parsed = JSON.parse(sv);
+                const showW = parsed['2'] !== undefined ? (parsed['2'] ? 1 : 0) : 1;
+                setClauses.push('SHOW_IN_WEIGHING = ?');
+                values.push(showW);
+            } catch (_) { /* ignore malformed */ }
+        } else if (req.body.SHOW_IN_WEIGHING !== undefined) {
+            // Legacy path: STORE_VISIBILITY not provided, update SHOW_IN_WEIGHING directly
+            setClauses.push('SHOW_IN_WEIGHING = ?');
+            values.push(req.body.SHOW_IN_WEIGHING);
+        }
+
+        // Handle STORE_PRICES: JSON keyed by storeNo {"1":{"buying":100,"selling":120},...}
+        if (req.body.STORE_PRICES !== undefined) {
+            try {
+                const sp = typeof req.body.STORE_PRICES === 'string'
+                    ? req.body.STORE_PRICES
+                    : JSON.stringify(req.body.STORE_PRICES);
+                setClauses.push('STORE_PRICES = ?');
+                values.push(sp);
+            } catch (_) { /* ignore malformed */ }
         }
 
         // Always update EDITED_DATE with UTC time
@@ -316,13 +394,27 @@ router.post('/api/updateItem', async (req, res) => {
         const updateResult = await pool.query(sql, values);
 
         if (updateResult.affectedRows > 0) {
-            // Emit real-time event with all updated fields
             if (global.io) {
+                // Broadcast updated visibility + price maps so each POS can decide relevance
+                // before issuing its own pullProducts() re-fetch.
+                let storeVisibility = null;
+                let storePrices = null;
+                try {
+                    const sv = req.body.STORE_VISIBILITY;
+                    storeVisibility = sv ? (typeof sv === 'string' ? JSON.parse(sv) : sv) : null;
+                } catch (_) {}
+                try {
+                    const sp = req.body.STORE_PRICES;
+                    storePrices = sp ? (typeof sp === 'string' ? JSON.parse(sp) : sp) : null;
+                } catch (_) {}
                 global.io.emit('item:updated', {
-                    id: id,
+                    id,
                     code: req.body.CODE,
                     action: 'updated',
-                    showInWeighing: req.body.SHOW_IN_WEIGHING
+                    storeVisibility,
+                    storePrices,
+                    buyingPrice: req.body.BUYING_PRICE,
+                    sellingPrice: req.body.SELLING_PRICE,
                 });
             }
             return res.status(200).json({ success: true, message: 'Item updated successfully' });

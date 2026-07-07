@@ -524,7 +524,10 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
         `;
         const stockMovementRows = await pool.query(stockMovementQuery, [queryDate]);
 
-        // Process Stock Movement into item map
+        // Process Stock Movement into item map — dynamic per-store buckets.
+        // buyByStore / sellByStore are { [storeNo]: qty } and the legacy
+        // buyQtyS1 / sellQtyS1 / buyQtyS2 / sellQtyS2 / netS1 / netS2 fields are
+        // kept for backward compatibility with any consumer still reading them.
         const stockMap = {};
         stockMovementRows.forEach(row => {
             if (!stockMap[row.ITEM_ID]) {
@@ -532,8 +535,8 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
                     id: row.ITEM_ID,
                     code: row.CODE,
                     name: row.NAME,
-                    buyQtyS1: 0, sellQtyS1: 0,
-                    buyQtyS2: 0, sellQtyS2: 0
+                    buyByStore: {},
+                    sellByStore: {},
                 };
             }
             const item = stockMap[row.ITEM_ID];
@@ -541,23 +544,50 @@ router.post('/api/getDailyDashboardStats', async (req, res) => {
             const store = String(row.STORE_NO);
 
             if (row.TYPE === 'Buying') {
-                if (store === '1') item.buyQtyS1 += qty;
-                else if (store === '2') item.buyQtyS2 += qty;
+                item.buyByStore[store] = (item.buyByStore[store] || 0) + qty;
             } else if (row.TYPE === 'Selling') {
-                if (store === '1') item.sellQtyS1 += qty;
-                else if (store === '2') item.sellQtyS2 += qty;
+                item.sellByStore[store] = (item.sellByStore[store] || 0) + qty;
             }
         });
 
-        // Calculate totals and net changes
-        const stockMovement = Object.values(stockMap).map(r => ({
-            ...r,
-            buyQty: r.buyQtyS1 + r.buyQtyS2,
-            sellQty: r.sellQtyS1 + r.sellQtyS2,
-            netS1: r.buyQtyS1 - r.sellQtyS1,
-            netS2: r.buyQtyS2 - r.sellQtyS2,
-            netChange: (r.buyQtyS1 + r.buyQtyS2) - (r.sellQtyS1 + r.sellQtyS2)
-        })).sort((a, b) => b.sellQty - a.sellQty); // Sort by most sold
+        // Aggregate totals + net per store + legacy s1/s2 mirrors.
+        const stockMovement = Object.values(stockMap).map(r => {
+            const buyByStore = r.buyByStore;
+            const sellByStore = r.sellByStore;
+            const allStoreKeys = new Set([
+                ...Object.keys(buyByStore),
+                ...Object.keys(sellByStore),
+            ]);
+            const netByStore = {};
+            allStoreKeys.forEach(k => {
+                netByStore[k] = (buyByStore[k] || 0) - (sellByStore[k] || 0);
+            });
+            const buyQty = Object.values(buyByStore).reduce((a, b) => a + b, 0);
+            const sellQty = Object.values(sellByStore).reduce((a, b) => a + b, 0);
+            // Legacy mirror fields — emit `buyQtyS<n>` / `sellQtyS<n>` / `netS<n>` for
+            // every store present, not just S1/S2. This keeps any older consumer
+            // (PDF generators, legacy reports) reading mirror-style fields working
+            // for Store 3+ as well.
+            const legacyMirrors = {};
+            allStoreKeys.forEach(k => {
+                legacyMirrors[`buyQtyS${k}`]  = buyByStore[k]  || 0;
+                legacyMirrors[`sellQtyS${k}`] = sellByStore[k] || 0;
+                legacyMirrors[`netS${k}`]     = netByStore[k]  || 0;
+            });
+
+            return {
+                id: r.id,
+                code: r.code,
+                name: r.name,
+                buyByStore,
+                sellByStore,
+                netByStore,
+                buyQty,
+                sellQty,
+                netChange: buyQty - sellQty,
+                ...legacyMirrors,
+            };
+        }).sort((a, b) => b.sellQty - a.sellQty);
 
         console.log("All queries successful. Processing data...");
 

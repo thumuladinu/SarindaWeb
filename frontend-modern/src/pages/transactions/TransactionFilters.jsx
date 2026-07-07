@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Input, Select, DatePicker, Button, Collapse, Badge, theme } from 'antd';
+import { useStores } from '../../contexts/StoresContext';
 import { SearchOutlined, FilterOutlined, ClearOutlined, DownOutlined, UpOutlined, CaretRightOutlined } from '@ant-design/icons';
 import MobileDateRange from '../../components/common/MobileDateRange';
 import axios from 'axios';
@@ -10,6 +11,7 @@ const { Panel } = Collapse;
 
 export default function TransactionFilters({ filters, setFilters }) {
     const { token } = theme.useToken();
+    const { stores } = useStores();
     const [isCollapsed, setIsCollapsed] = useState(true);
 
     // Local state for debounced inputs
@@ -172,8 +174,11 @@ export default function TransactionFilters({ filters, setFilters }) {
                                 value={filters.store}
                                 onChange={(val) => handleChange('store', val)}
                             >
-                                <Option value="1">Store 1</Option>
-                                <Option value="2">Store 2</Option>
+                                {stores.map(s => (
+                                    <Option key={s.STORE_NO} value={String(s.STORE_NO)}>
+                                        S{s.STORE_NO} — {s.NAME}
+                                    </Option>
+                                ))}
                             </Select>
                         </div>
 

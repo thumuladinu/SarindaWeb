@@ -27,6 +27,19 @@ if (!pool.query[util.promisify.custom]) {
     pool.query = util.promisify(pool.query);
 }
 
+// Fetch active store numbers for use in stock aggregations.
+// Returns ascending list of integers: [1, 2, 3, ...]. Falls back to [1, 2] only if
+// the stores table doesn't exist yet (older installs without the auto-migration).
+async function getActiveStoreNos() {
+    try {
+        const rows = await pool.query('SELECT STORE_NO FROM stores WHERE IS_ACTIVE = 1 ORDER BY STORE_NO');
+        const list = (rows || []).map(r => Number(r.STORE_NO)).filter(n => Number.isInteger(n));
+        return list.length > 0 ? list : [1, 2];
+    } catch (_) {
+        return [1, 2];
+    }
+}
+
 // OP TYPE constants
 const OP_TYPE_LABELS = {
     1: 'Full Clear (Standard)',
@@ -260,11 +273,13 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // A. INITIAL STOCK (after first clearance)
         // ==========================================
         // Stock at the exact moment of initial clearance (including its transactions)
-        const initialStockByStore = { 1: 0, 2: 0 };
+        const activeStores = await getActiveStoreNos();
+        const initialStockByStore = {};
+        activeStores.forEach(n => { initialStockByStore[n] = 0; });
 
-        for (const storeNo of [1, 2]) {
+        for (const storeNo of activeStores) {
             const [result] = await pool.query(`
-                SELECT COALESCE(SUM(CASE 
+                SELECT COALESCE(SUM(CASE
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
                     WHEN st.TYPE IN ('AdjOut', 'Selling', 'StockClear', 'TransferOut', 'Wastage') THEN -sti.QUANTITY
                     ELSE 0
@@ -817,8 +832,9 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
         // ==========================================
         // F. FINAL STOCK (after final clearance)
         // ==========================================
-        const finalStockByStore = { 1: 0, 2: 0 };
-        for (const storeNo of [1, 2]) {
+        const finalStockByStore = {};
+        activeStores.forEach(n => { finalStockByStore[n] = 0; });
+        for (const storeNo of activeStores) {
             const [result] = await pool.query(`
                 SELECT COALESCE(SUM(CASE 
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
@@ -1113,25 +1129,31 @@ router.post('/api/reports-dashboard/analyze-period', async (req, res) => {
                 item: itemInfo,
                 period: { startDate, endDate },
 
-                // Per-store initial stock (after first clearance)
-                initialStock: {
-                    store1: parseFloat(initialStockByStore[1].toFixed(3)),
-                    store2: parseFloat(initialStockByStore[2].toFixed(3)),
-                    total: parseFloat((initialStockByStore[1] + initialStockByStore[2]).toFixed(3))
-                },
+                // Per-store initial stock — canonical byStore + deprecated mirrors
+                initialStock: (() => {
+                    const storeNos = Object.keys(initialStockByStore);
+                    const byStore = {};
+                    storeNos.forEach(n => { byStore[n] = parseFloat((initialStockByStore[n] || 0).toFixed(3)); });
+                    const total = storeNos.reduce((s, n) => s + (initialStockByStore[n] || 0), 0);
+                    return { byStore, total: parseFloat(total.toFixed(3)), store1: byStore['1'] || 0, store2: byStore['2'] || 0 };
+                })(),
 
-                // Per-store final stock (after final clearance)
-                finalStock: {
-                    store1: parseFloat(finalStockByStore[1].toFixed(3)),
-                    store2: parseFloat(finalStockByStore[2].toFixed(3)),
-                    total: parseFloat((finalStockByStore[1] + finalStockByStore[2]).toFixed(3))
-                },
+                // Per-store final stock — canonical byStore + deprecated mirrors
+                finalStock: (() => {
+                    const storeNos = Object.keys(finalStockByStore);
+                    const byStore = {};
+                    storeNos.forEach(n => { byStore[n] = parseFloat((finalStockByStore[n] || 0).toFixed(3)); });
+                    const total = storeNos.reduce((s, n) => s + (finalStockByStore[n] || 0), 0);
+                    return { byStore, total: parseFloat(total.toFixed(3)), store1: byStore['1'] || 0, store2: byStore['2'] || 0 };
+                })(),
 
-                // Per-store aggregates
-                storeAggregates: {
-                    store1: storeAggregates[1],
-                    store2: storeAggregates[2]
-                },
+                // Per-store aggregates — canonical byStore + deprecated mirrors
+                storeAggregates: (() => {
+                    const keys = Object.keys(storeAggregates);
+                    const byStore = {};
+                    keys.forEach(n => { byStore[n] = storeAggregates[n]; });
+                    return { byStore, store1: byStore['1'], store2: byStore['2'] };
+                })(),
 
                 // Combined aggregates (backward compat)
                 aggregates: totalAggregates,
@@ -1380,9 +1402,7 @@ router.post('/api/graphs/item-data', async (req, res) => {
         }
 
         // 4. Calculate daily running stock by store
-        const runningStockByDate = {}; // will store { date: { s1, s2, total } }
-        let currentS1 = 0;
-        let currentS2 = 0;
+        const runningStockByDate = {}; // { date: { byStore, total, s1, s2 } }
 
         // Group changes by date first to handle same-day changes in both stores
         const changesByDateAndStore = {};
@@ -1400,17 +1420,32 @@ router.post('/api/graphs/item-data', async (req, res) => {
         if (new Date(startDate) < trackDateObj) trackDateObj = new Date(startDate);
         const maxDateObj = new Date(endDate);
 
+        // Collect all store numbers seen in changes
+        const allStoreNos = new Set();
+        Object.values(changesByDateAndStore).forEach(storeChanges => {
+            Object.keys(storeChanges).forEach(n => allStoreNos.add(String(n)));
+        });
+        const runningByStore = {}; // { storeNo: currentStock }
+        allStoreNos.forEach(n => { runningByStore[n] = 0; });
+
         while (trackDateObj <= maxDateObj) {
             const dStr = toLocalYYYYMMDD(trackDateObj);
-            const changes = changesByDateAndStore[dStr] || { 1: 0, 2: 0 };
+            const changes = changesByDateAndStore[dStr] || {};
 
-            currentS1 += parseFloat(changes[1]) || 0;
-            currentS2 += parseFloat(changes[2]) || 0;
+            allStoreNos.forEach(n => {
+                runningByStore[n] = (runningByStore[n] || 0) + (parseFloat(changes[n]) || 0);
+            });
+
+            const byStore = {};
+            allStoreNos.forEach(n => { byStore[n] = runningByStore[n]; });
+            const total = Object.values(runningByStore).reduce((s, v) => s + v, 0);
 
             runningStockByDate[dStr] = {
-                s1: currentS1,
-                s2: currentS2,
-                total: currentS1 + currentS2
+                byStore,
+                total,
+                // deprecated mirrors
+                s1: runningByStore['1'] || 0,
+                s2: runningByStore['2'] || 0,
             };
             trackDateObj.setDate(trackDateObj.getDate() + 1);
         }
@@ -1450,12 +1485,21 @@ router.post('/api/graphs/item-data', async (req, res) => {
         const globalAvgProfitPerKg = globalAvgSellPrice - globalAvgBuyPrice;
 
         // 7. Compute final array
+        const currentTotal = Object.values(runningByStore).reduce((s, v) => s + v, 0);
         const result = buckets.map(b => {
-            let stockAtEndOfBucket = runningStockByDate[b.endDate] || { s1: currentS1, s2: currentS2, total: currentS1 + currentS2 };
+            let stockAtEndOfBucket = runningStockByDate[b.endDate] || { byStore: { ...runningByStore }, total: currentTotal, s1: runningByStore['1'] || 0, s2: runningByStore['2'] || 0 };
 
             // Profit Calculation (Smoothed logic requested by user)
             // Use global average profit per kg multiplied by current bucket's sold quantity
             const profitSoldAmt = globalAvgProfitPerKg * b.sellQty;
+
+            // Build a per-store rounded snapshot so the chart can draw a series per
+            // active store (Store 3+ included). Legacy stockS1 / stockS2 fields are
+            // kept as deprecated mirrors for older frontend builds.
+            const stockByStore = {};
+            Object.keys(stockAtEndOfBucket.byStore || {}).forEach(n => {
+                stockByStore[n] = parseFloat((stockAtEndOfBucket.byStore[n] || 0).toFixed(3));
+            });
 
             return {
                 label: b.label,
@@ -1466,8 +1510,9 @@ router.post('/api/graphs/item-data', async (req, res) => {
                 sellAmount: parseFloat(b.sellTotal.toFixed(2)),
                 buyAmount: parseFloat(b.buyTotal.toFixed(2)),
                 profitSoldAmt: parseFloat(profitSoldAmt.toFixed(2)),
-                stockS1: parseFloat(stockAtEndOfBucket.s1.toFixed(3)),
-                stockS2: parseFloat(stockAtEndOfBucket.s2.toFixed(3)),
+                stockByStore,
+                stockS1: parseFloat((stockAtEndOfBucket.s1 || 0).toFixed(3)),
+                stockS2: parseFloat((stockAtEndOfBucket.s2 || 0).toFixed(3)),
                 stock: parseFloat(stockAtEndOfBucket.total.toFixed(3))
             };
         });
@@ -1538,8 +1583,10 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         // -------------------------------------------------------
         // STEP 0: Opening stock — all transactions up to and including startDatetime
         // -------------------------------------------------------
-        const initialStockByStore = { 1: 0, 2: 0 };
-        for (const storeNo of [1, 2]) {
+        const activeStores = await getActiveStoreNos();
+        const initialStockByStore = {};
+        activeStores.forEach(n => { initialStockByStore[n] = 0; });
+        for (const storeNo of activeStores) {
             const [result] = await pool.query(`
                 SELECT COALESCE(SUM(CASE
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
@@ -1558,8 +1605,9 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         }
 
         // Closing stock — all transactions up to and including endDatetime
-        const finalStockByStore = { 1: 0, 2: 0 };
-        for (const storeNo of [1, 2]) {
+        const finalStockByStore = {};
+        activeStores.forEach(n => { finalStockByStore[n] = 0; });
+        for (const storeNo of activeStores) {
             const [result] = await pool.query(`
                 SELECT COALESCE(SUM(CASE
                     WHEN st.TYPE IN ('AdjIn', 'Opening', 'Buying', 'TransferIn', 'StockTake') THEN sti.QUANTITY
@@ -1612,8 +1660,10 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         for (const tx of txEvents) {
             const sign = TX_SIGN[tx.event_type] ?? 0;
             const qty = parseFloat(tx.QUANTITY) || 0;
+            const storeKey = String(tx.STORE_NO);
             const delta_s1 = tx.STORE_NO === 1 ? sign * qty : 0;
             const delta_s2 = tx.STORE_NO === 2 ? sign * qty : 0;
+            const deltaByStore = { [storeKey]: sign * qty }; // dynamic
 
             // Check if transaction is linked to an operation (matches OP-YYYY... or WEB-S... or S1-...)
             const opMatch = tx.COMMENTS ? tx.COMMENTS.match(/\[((?:WEB-)?S[12]-\d{6}-CLR-[A-Za-z0-9\-]+|OP-\d{8}-\d{4})\]/i) : null;
@@ -1622,10 +1672,11 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                 const opCode = opMatch[1];
                 opCodeSet.add(opCode);
                 if (!opGroups[opCode]) {
-                    opGroups[opCode] = { opCode, delta_s1: 0, delta_s2: 0, tx_code: opCode, breakdown: [] };
+                    opGroups[opCode] = { opCode, delta_s1: 0, delta_s2: 0, deltaByStore: {}, tx_code: opCode, breakdown: [] };
                 }
                 opGroups[opCode].delta_s1 += delta_s1;
                 opGroups[opCode].delta_s2 += delta_s2;
+                opGroups[opCode].deltaByStore[storeKey] = (opGroups[opCode].deltaByStore[storeKey] || 0) + (sign * qty);
                 opGroups[opCode].breakdown.push({
                     type: tx.event_type,
                     store: tx.STORE_NO,
@@ -1643,7 +1694,8 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                     storeNo: tx.STORE_NO || 1,
                     tx_code: tx.tx_code,
                     delta_s1,
-                    delta_s2
+                    delta_s2,
+                    deltaByStore
                 });
             }
         }
@@ -1687,10 +1739,11 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                         label: formatLabel(timeStr),
                         event_type: OP_TYPE_LABEL_MAP[opTypeNum] || `Op ${opTypeNum}`,
                         event_source: 'stock_operation',
-                        storeNo: null, // Since operations can span stores (transfers), we rely on deltas
+                        storeNo: null,
                         tx_code: group.opCode,
                         delta_s1: group.delta_s1,
                         delta_s2: group.delta_s2,
+                        deltaByStore: group.deltaByStore || {},
                         tx_breakdown: group.breakdown,
                         op_details: {
                             comments: meta.COMMENTS,
@@ -1707,7 +1760,7 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                 } else {
                     // Fallback if metadata not found (rare)
                     allEvents.push({
-                        event_time: normalizeTime(endDatetime), // fallback
+                        event_time: normalizeTime(endDatetime),
                         label: formatLabel(endDatetime),
                         event_type: 'Unknown Operation',
                         event_source: 'stock_operation',
@@ -1715,6 +1768,7 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                         tx_code: group.opCode,
                         delta_s1: group.delta_s1,
                         delta_s2: group.delta_s2,
+                        deltaByStore: group.deltaByStore || {},
                         tx_breakdown: group.breakdown
                     });
                 }
@@ -1729,11 +1783,20 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         // -------------------------------------------------------
         // STEP 4: Build result points + accumulate summary by type
         // -------------------------------------------------------
-        let runS1 = initialStockByStore[1];
-        let runS2 = initialStockByStore[2];
+        let runS1 = initialStockByStore[1] || 0;
+        let runS2 = initialStockByStore[2] || 0;
+        // Dynamic per-store running totals
+        const runByStore = {};
+        Object.keys(initialStockByStore).forEach(n => { runByStore[n] = initialStockByStore[n] || 0; });
+
+        const mkByStore = () => {
+            const out = {};
+            Object.keys(runByStore).forEach(n => { out[n] = parseFloat(runByStore[n].toFixed(3)); });
+            return out;
+        };
 
         const resultPoints = [];
-        const summaryByType = {}; // { typeName: { s1: number, s2: number } }
+        const summaryByType = {}; // { typeName: { byStore:{}, s1, s2 } }
 
         // Opening anchor point
         resultPoints.push({
@@ -1743,28 +1806,43 @@ router.post('/api/graphs/stock-events', async (req, res) => {
             event_source: 'snapshot',
             tx_code: null,
             storeNo: null,
-            delta: 0, delta_s1: 0, delta_s2: 0,
-            prev_s1: null, prev_s2: null, prev_total: null,
+            delta: 0, delta_s1: 0, delta_s2: 0, deltaByStore: {},
+            prev_s1: null, prev_s2: null, prev_total: null, prevByStore: null,
             s1: parseFloat(runS1.toFixed(3)),
             s2: parseFloat(runS2.toFixed(3)),
-            total: parseFloat((runS1 + runS2).toFixed(3))
+            total: parseFloat(Object.values(runByStore).reduce((a, b) => a + b, 0).toFixed(3)),
+            byStore: mkByStore()
         });
 
         for (const ev of allEvents) {
             if (!ev.event_time) continue;
             const prevS1 = parseFloat(runS1.toFixed(3));
             const prevS2 = parseFloat(runS2.toFixed(3));
-            const prevTotal = parseFloat((runS1 + runS2).toFixed(3));
+            const prevTotal = parseFloat(Object.values(runByStore).reduce((a, b) => a + b, 0).toFixed(3));
+            const prevByStore = mkByStore();
 
             runS1 += ev.delta_s1;
             runS2 += ev.delta_s2;
+            // Apply dynamic deltas (covers Store 3+)
+            const dbs = ev.deltaByStore || {};
+            Object.keys(dbs).forEach(n => {
+                if (!runByStore[n]) runByStore[n] = 0;
+                runByStore[n] += dbs[n];
+            });
+
+            // Sum across ALL stores for this event so Store 3+ contributes to the total.
+            const eventDelta = Object.values(dbs).reduce((a, b) => a + b, 0);
 
             // Accumulate summary
             if (!summaryByType[ev.event_type]) {
-                summaryByType[ev.event_type] = { s1: 0, s2: 0 };
+                summaryByType[ev.event_type] = { byStore: {}, s1: 0, s2: 0 };
             }
             summaryByType[ev.event_type].s1 += ev.delta_s1;
             summaryByType[ev.event_type].s2 += ev.delta_s2;
+            Object.keys(dbs).forEach(n => {
+                if (!summaryByType[ev.event_type].byStore[n]) summaryByType[ev.event_type].byStore[n] = 0;
+                summaryByType[ev.event_type].byStore[n] += dbs[n];
+            });
 
             resultPoints.push({
                 time: ev.event_time,
@@ -1773,15 +1851,18 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                 event_source: ev.event_source,
                 tx_code: ev.tx_code,
                 storeNo: ev.storeNo,
-                delta: parseFloat((ev.delta_s1 + ev.delta_s2).toFixed(3)),
+                delta: parseFloat(eventDelta.toFixed(3)),
                 delta_s1: parseFloat(ev.delta_s1.toFixed(3)),
                 delta_s2: parseFloat(ev.delta_s2.toFixed(3)),
+                deltaByStore: dbs,
                 prev_s1: prevS1,
                 prev_s2: prevS2,
                 prev_total: prevTotal,
+                prevByStore,
                 s1: parseFloat(runS1.toFixed(3)),
                 s2: parseFloat(runS2.toFixed(3)),
-                total: parseFloat((runS1 + runS2).toFixed(3)),
+                total: parseFloat(Object.values(runByStore).reduce((a, b) => a + b, 0).toFixed(3)),
+                byStore: mkByStore(),
                 tx_breakdown: ev.tx_breakdown || null,
                 op_details: ev.op_details || null
             });
@@ -1789,12 +1870,22 @@ router.post('/api/graphs/stock-events', async (req, res) => {
 
         // Closing cap point
         const lastPoint = resultPoints[resultPoints.length - 1];
-        const finalS1 = parseFloat(finalStockByStore[1].toFixed(3));
-        const finalS2 = parseFloat(finalStockByStore[2].toFixed(3));
-        const finalTotal = parseFloat((finalStockByStore[1] + finalStockByStore[2]).toFixed(3));
+        const finalS1 = parseFloat((finalStockByStore[1] || 0).toFixed(3));
+        const finalS2 = parseFloat((finalStockByStore[2] || 0).toFixed(3));
+        const finalByStore = {};
+        let finalTotalRaw = 0;
+        activeStores.forEach(n => {
+            const v = parseFloat((finalStockByStore[n] || 0).toFixed(3));
+            finalByStore[n] = v;
+            finalTotalRaw += v;
+        });
+        const finalTotal = parseFloat(finalTotalRaw.toFixed(3));
 
-        if (!lastPoint || lastPoint.event_source === 'snapshot' ||
-            lastPoint.s1 !== finalS1 || lastPoint.s2 !== finalS2) {
+        // Mismatch detection across all active stores (was hardcoded to s1/s2 only)
+        const byStoreMismatch = activeStores.some(n =>
+            !lastPoint || (lastPoint.byStore && lastPoint.byStore[n] !== finalByStore[n])
+        );
+        if (!lastPoint || lastPoint.event_source === 'snapshot' || byStoreMismatch) {
             resultPoints.push({
                 time: endDatetime,
                 label: formatLabel(endDatetime),
@@ -1802,10 +1893,11 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                 event_source: 'snapshot',
                 tx_code: null,
                 storeNo: null,
-                delta: 0, delta_s1: 0, delta_s2: 0,
-                prev_s1: null, prev_s2: null, prev_total: null,
+                delta: 0, delta_s1: 0, delta_s2: 0, deltaByStore: {},
+                prev_s1: null, prev_s2: null, prev_total: null, prevByStore: null,
                 s1: finalS1,
                 s2: finalS2,
+                byStore: finalByStore,
                 total: finalTotal
             });
         }
@@ -1813,43 +1905,86 @@ router.post('/api/graphs/stock-events', async (req, res) => {
         // -------------------------------------------------------
         // STEP 5: Build summary table rows
         // -------------------------------------------------------
-        const byType = Object.entries(summaryByType).map(([type, vals]) => ({
-            type,
-            s1: parseFloat(vals.s1.toFixed(3)),
-            s2: parseFloat(vals.s2.toFixed(3)),
-            net: parseFloat((vals.s1 + vals.s2).toFixed(3))
-        }));
+        const byType = Object.entries(summaryByType).map(([type, vals]) => {
+            const byStoreRounded = {};
+            Object.keys(vals.byStore || {}).forEach(n => {
+                byStoreRounded[n] = parseFloat((vals.byStore[n] || 0).toFixed(3));
+            });
+            // net = sum across ALL stores (Store 3+ included), not just s1 + s2.
+            const netAcrossStores = Object.values(byStoreRounded).reduce((a, b) => a + b, 0);
+            return {
+                type,
+                byStore: byStoreRounded,
+                s1: parseFloat(vals.s1.toFixed(3)), // deprecated mirror
+                s2: parseFloat(vals.s2.toFixed(3)), // deprecated mirror
+                net: parseFloat(netAcrossStores.toFixed(3))
+            };
+        });
 
         // -------------------------------------------------------
         // STEP 6: Mathematical Validation
-        // opening + sum(all deltas) should equal closing
+        // opening + sum(all deltas) should equal closing — across ALL active stores
         // -------------------------------------------------------
-        const openingS1 = parseFloat(initialStockByStore[1].toFixed(3));
-        const openingS2 = parseFloat(initialStockByStore[2].toFixed(3));
-        const openingTotal = parseFloat((openingS1 + openingS2).toFixed(3));
+        const openingByStore = {};
+        let openingTotalRaw = 0;
+        activeStores.forEach(n => {
+            const v = parseFloat((initialStockByStore[n] || 0).toFixed(3));
+            openingByStore[n] = v;
+            openingTotalRaw += v;
+        });
+        const openingS1 = openingByStore[1] || 0;
+        const openingS2 = openingByStore[2] || 0;
+        const openingTotal = parseFloat(openingTotalRaw.toFixed(3));
 
-        const deltaS1Sum = parseFloat(allEvents.reduce((acc, e) => acc + e.delta_s1, 0).toFixed(3));
-        const deltaS2Sum = parseFloat(allEvents.reduce((acc, e) => acc + e.delta_s2, 0).toFixed(3));
+        const deltaSumByStore = {};
+        activeStores.forEach(n => { deltaSumByStore[n] = 0; });
+        allEvents.forEach(e => {
+            const dbs = e.deltaByStore || {};
+            Object.keys(dbs).forEach(n => {
+                if (!(n in deltaSumByStore)) deltaSumByStore[n] = 0;
+                deltaSumByStore[n] += dbs[n];
+            });
+        });
+        Object.keys(deltaSumByStore).forEach(n => {
+            deltaSumByStore[n] = parseFloat(deltaSumByStore[n].toFixed(3));
+        });
+        const deltaS1Sum = deltaSumByStore[1] || 0;
+        const deltaS2Sum = deltaSumByStore[2] || 0;
+        const deltaTotalSum = parseFloat(
+            Object.values(deltaSumByStore).reduce((a, b) => a + b, 0).toFixed(3)
+        );
 
-        const expectedS1 = parseFloat((openingS1 + deltaS1Sum).toFixed(3));
-        const expectedS2 = parseFloat((openingS2 + deltaS2Sum).toFixed(3));
-        const expectedTotal = parseFloat((expectedS1 + expectedS2).toFixed(3));
+        const expectedByStore = {};
+        let expectedTotalRaw = 0;
+        Object.keys(openingByStore).forEach(n => {
+            const v = parseFloat(((openingByStore[n] || 0) + (deltaSumByStore[n] || 0)).toFixed(3));
+            expectedByStore[n] = v;
+            expectedTotalRaw += v;
+        });
+        const expectedS1 = expectedByStore[1] || 0;
+        const expectedS2 = expectedByStore[2] || 0;
+        const expectedTotal = parseFloat(expectedTotalRaw.toFixed(3));
 
-        const discrepancyS1 = parseFloat((finalS1 - expectedS1).toFixed(3));
-        const discrepancyS2 = parseFloat((finalS2 - expectedS2).toFixed(3));
+        const discrepancyByStore = {};
+        activeStores.forEach(n => {
+            discrepancyByStore[n] = parseFloat(
+                ((finalByStore[n] || 0) - (expectedByStore[n] || 0)).toFixed(3)
+            );
+        });
+        const discrepancyS1 = discrepancyByStore[1] || 0;
+        const discrepancyS2 = discrepancyByStore[2] || 0;
         const discrepancyTotal = parseFloat((finalTotal - expectedTotal).toFixed(3));
-        const valid = discrepancyS1 === 0 && discrepancyS2 === 0;
+        const valid = Object.values(discrepancyByStore).every(d => d === 0);
 
         // If invalid, identify the event(s) most likely at fault
         // (any event where running total differs from expected by > 0.001)
         const issues = [];
         if (!valid) {
-            let chkS1 = openingS1, chkS2 = openingS2;
             for (const ev of allEvents) {
-                chkS1 += ev.delta_s1;
-                chkS2 += ev.delta_s2;
-                // Flag if delta is suspiciously zero for a non-snapshot event
-                if (ev.delta_s1 === 0 && ev.delta_s2 === 0) {
+                // Sum across ALL stores in this event's delta (dynamic, store-agnostic)
+                const dbs = ev.deltaByStore || {};
+                const total = Object.values(dbs).reduce((a, b) => a + b, 0);
+                if (total === 0) {
                     issues.push({
                         time: ev.event_time,
                         type: ev.event_type,
@@ -1858,27 +1993,30 @@ router.post('/api/graphs/stock-events', async (req, res) => {
                     });
                 }
             }
-            // If no zero-delta events found, flag the discrepancy itself
             if (issues.length === 0) {
+                const detail = Object.entries(discrepancyByStore)
+                    .map(([n, v]) => `S${n} = ${v}kg`)
+                    .join(', ');
                 issues.push({
                     time: null,
                     type: null,
                     tx_code: null,
-                    reason: `Cannot pin to a specific event.Total discrepancy: S1 = ${discrepancyS1}kg, S2 = ${discrepancyS2}kg.Possible external modification to stock not captured in transaction log.`
+                    reason: `Cannot pin to a specific event. Total discrepancy: ${detail}. Possible external modification to stock not captured in transaction log.`
                 });
             }
         }
 
         const summary = {
-            opening: { s1: openingS1, s2: openingS2, total: openingTotal },
-            closing: { s1: finalS1, s2: finalS2, total: finalTotal },
-            deltaSum: { s1: deltaS1Sum, s2: deltaS2Sum, total: parseFloat((deltaS1Sum + deltaS2Sum).toFixed(3)) },
+            // Legacy s1/s2 fields kept for older frontend consumers; byStore is canonical.
+            opening:  { s1: openingS1,  s2: openingS2,  total: openingTotal,  byStore: openingByStore },
+            closing:  { s1: finalS1,    s2: finalS2,    total: finalTotal,    byStore: finalByStore },
+            deltaSum: { s1: deltaS1Sum, s2: deltaS2Sum, total: deltaTotalSum, byStore: deltaSumByStore },
             byType,
             validation: {
                 valid,
-                expected: { s1: expectedS1, s2: expectedS2, total: expectedTotal },
-                actual: { s1: finalS1, s2: finalS2, total: finalTotal },
-                discrepancy: { s1: discrepancyS1, s2: discrepancyS2, total: discrepancyTotal },
+                expected:    { s1: expectedS1,    s2: expectedS2,    total: expectedTotal,    byStore: expectedByStore },
+                actual:      { s1: finalS1,       s2: finalS2,       total: finalTotal,       byStore: finalByStore },
+                discrepancy: { s1: discrepancyS1, s2: discrepancyS2, total: discrepancyTotal, byStore: discrepancyByStore },
                 issues
             }
         };

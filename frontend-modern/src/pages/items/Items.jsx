@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Input, Tooltip, App, Form, Popconfirm, Drawer, Spin, Switch } from 'antd';
+import { Table, Button, Input, Tooltip, App, Form, Popconfirm, Drawer, Spin, Switch, Tag } from 'antd';
 import { EditOutlined, DeleteOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import { useStores } from '../../contexts/StoresContext';
 
 export default function Items() {
     const { message } = App.useApp();
+    const { stores, getAntTag } = useStores();
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState([]);
     const [filteredData, setFilteredData] = useState([]);
@@ -69,11 +71,26 @@ export default function Items() {
 
     const handleEdit = (record) => {
         setEditingItem(record);
+        const vis = (() => {
+            try { return typeof record.STORE_VISIBILITY === 'string' ? JSON.parse(record.STORE_VISIBILITY) : (record.STORE_VISIBILITY || {}); }
+            catch { return {}; }
+        })();
+        const prices = (() => {
+            try { return typeof record.STORE_PRICES === 'string' ? JSON.parse(record.STORE_PRICES) : (record.STORE_PRICES || {}); }
+            catch { return {}; }
+        })();
+        const storeFields = {};
+        stores.forEach(s => {
+            const key = String(s.STORE_NO);
+            storeFields[`store_vis_form_${s.STORE_NO}`] = vis[key] !== 0;
+            storeFields[`store_price_buying_${s.STORE_NO}`] = prices[key]?.buying ?? null;
+            storeFields[`store_price_selling_${s.STORE_NO}`] = prices[key]?.selling ?? null;
+        });
         form.setFieldsValue({
             ...record,
             BUYING_PRICE: parseFloat(record.BUYING_PRICE || 0),
             SELLING_PRICE: parseFloat(record.SELLING_PRICE || 0),
-            SHOW_IN_WEIGHING: record.SHOW_IN_WEIGHING === 1 || record.SHOW_IN_WEIGHING === true || record.SHOW_IN_WEIGHING === '1' || record.SHOW_IN_WEIGHING === undefined,
+            ...storeFields,
         });
         setDrawerOpen(true);
     };
@@ -95,45 +112,36 @@ export default function Items() {
         }
     };
 
-    // Toggle Weighing Station Visibility
-    const handleWeighingToggle = async (record, checked) => {
-        try {
-            const response = await axios.post('/api/updateItem', {
-                ITEM_ID: record.ITEM_ID,
-                SHOW_IN_WEIGHING: checked ? 1 : 0
-            });
-            if (response.data.success) {
-                message.success(`${record.NAME} ${checked ? 'visible' : 'hidden'} in Weighing Station`);
-                // Update local state
-                const updatedData = data.map(item =>
-                    item.ITEM_ID === record.ITEM_ID ? { ...item, SHOW_IN_WEIGHING: checked ? 1 : 0 } : item
-                );
-                setData(updatedData);
-                setFilteredData(updatedData.filter(item =>
-                    !searchText ||
-                    (item.CODE && item.CODE.toLowerCase().includes(searchText)) ||
-                    (item.NAME && item.NAME.toLowerCase().includes(searchText))
-                ));
-            } else {
-                message.error('Failed to update');
-            }
-        } catch (error) {
-            console.error('Error toggling weighing visibility:', error);
-            message.error('Failed to update');
-        }
-    };
 
     const handleFormSubmit = async (values) => {
         setSubmitting(true);
         try {
             if (editingItem) {
+                const sv = {};
+                const sp = {};
+                stores.forEach(s => {
+                    const key = String(s.STORE_NO);
+                    sv[key] = values[`store_vis_form_${s.STORE_NO}`] !== false ? 1 : 0;
+                    const buying = values[`store_price_buying_${s.STORE_NO}`];
+                    const selling = values[`store_price_selling_${s.STORE_NO}`];
+                    const hasBuying = buying !== null && buying !== '' && buying !== undefined;
+                    const hasSelling = selling !== null && selling !== '' && selling !== undefined;
+                    if (hasBuying || hasSelling) {
+                        sp[key] = {
+                            buying: hasBuying ? parseFloat(buying) : null,
+                            selling: hasSelling ? parseFloat(selling) : null,
+                        };
+                    }
+                });
                 const payload = {
                     ITEM_ID: editingItem.ITEM_ID,
                     CODE: values.CODE,
                     NAME: values.NAME,
                     BUYING_PRICE: values.BUYING_PRICE,
                     SELLING_PRICE: values.SELLING_PRICE,
-                    SHOW_IN_WEIGHING: values.SHOW_IN_WEIGHING ? 1 : 0,
+                    SHOW_IN_WEIGHING: sv['2'] !== 0 ? 1 : 0,
+                    STORE_VISIBILITY: sv,
+                    STORE_PRICES: sp,
                 };
                 const checkDup = await axios.post('/api/checkForDuplicateNameUpdate', { CODE: values.CODE, ITEM_ID: editingItem.ITEM_ID });
                 if (checkDup.data.duplicate) {
@@ -154,14 +162,32 @@ export default function Items() {
                     message.error('Item Code already exists');
                     return;
                 }
+                const sv = {};
+                const sp = {};
+                stores.forEach(s => {
+                    const key = String(s.STORE_NO);
+                    sv[key] = values[`store_vis_form_${s.STORE_NO}`] !== false ? 1 : 0;
+                    const buying = values[`store_price_buying_${s.STORE_NO}`];
+                    const selling = values[`store_price_selling_${s.STORE_NO}`];
+                    const hasBuying = buying !== null && buying !== '' && buying !== undefined;
+                    const hasSelling = selling !== null && selling !== '' && selling !== undefined;
+                    if (hasBuying || hasSelling) {
+                        sp[key] = {
+                            buying: hasBuying ? parseFloat(buying) : null,
+                            selling: hasSelling ? parseFloat(selling) : null,
+                        };
+                    }
+                });
                 const payload = {
                     CODE: values.CODE,
                     NAME: values.NAME,
                     BUYING_PRICE: values.BUYING_PRICE,
                     SELLING_PRICE: values.SELLING_PRICE,
-                    STOCK: JSON.stringify({ "1": 0, "2": 0 }),
+                    STOCK: JSON.stringify(Object.fromEntries(stores.map(s => [String(s.STORE_NO), 0]))),
                     IS_ACTIVE: 1,
-                    SHOW_IN_WEIGHING: values.SHOW_IN_WEIGHING !== false ? 1 : 0,
+                    SHOW_IN_WEIGHING: sv['2'] !== 0 ? 1 : 0,
+                    STORE_VISIBILITY: sv,
+                    STORE_PRICES: sp,
                 };
                 const response = await axios.post('/api/addItem', payload);
                 if (response.data.success) {
@@ -221,25 +247,6 @@ export default function Items() {
                 </span>
             )
         },
-        {
-            title: 'Weighing',
-            dataIndex: 'SHOW_IN_WEIGHING',
-            key: 'SHOW_IN_WEIGHING',
-            align: 'center',
-            width: 100,
-            render: (value, record) => (
-                <Tooltip title={value ? 'Visible in Weighing Station' : 'Hidden from Weighing Station'}>
-                    <Switch
-                        size="small"
-                        checked={value === 1 || value === true || value === '1'}
-                        onChange={(checked) => handleWeighingToggle(record, checked)}
-                        onClick={(checked, e) => e && e.stopPropagation()}
-                        disabled={currentUser?.ROLE === 'MONITOR'}
-                    />
-                </Tooltip>
-            )
-        },
-
         {
             title: 'Actions',
             key: 'actions',
@@ -355,17 +362,7 @@ export default function Items() {
 
 
 
-                                <div className="flex justify-between items-center pt-2 mt-1 border-t border-gray-100 dark:border-white/5">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-gray-400">Weighing:</span>
-                                        <Switch
-                                            size="small"
-                                            checked={item.SHOW_IN_WEIGHING === 1 || item.SHOW_IN_WEIGHING === true || item.SHOW_IN_WEIGHING === '1'}
-                                            onChange={(checked) => handleWeighingToggle(item, checked)}
-                                            onClick={(checked, e) => e && e.stopPropagation()}
-                                            disabled={currentUser?.ROLE === 'MONITOR'}
-                                        />
-                                    </div>
+                                <div className="flex justify-end items-center pt-2 mt-1 border-t border-gray-100 dark:border-white/5">
                                     {currentUser?.ROLE !== 'MONITOR' && (
                                         <div className="flex gap-2">
                                             <Popconfirm
@@ -404,6 +401,7 @@ export default function Items() {
                     form={form}
                     layout="vertical"
                     onFinish={handleFormSubmit}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && e.target.type === 'number') e.preventDefault(); }}
                     className="flex flex-col gap-4"
                     hideRequiredMark
                 >
@@ -442,14 +440,65 @@ export default function Items() {
                         </Form.Item>
                     </div>
 
-                    <Form.Item
-                        name="SHOW_IN_WEIGHING"
-                        label="Show in Weighing Station"
-                        valuePropName="checked"
-                        initialValue={true}
-                    >
-                        <Switch checkedChildren="Yes" unCheckedChildren="No" />
-                    </Form.Item>
+                    {stores.length > 0 && (
+                        <div>
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                Per-Store Settings
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                {stores.map(s => {
+                                    const globalBuying = form.getFieldValue('BUYING_PRICE');
+                                    const globalSelling = form.getFieldValue('SELLING_PRICE');
+                                    return (
+                                        <div key={s.STORE_NO} className="border border-gray-100 dark:border-white/10 rounded-xl p-3 bg-gray-50/50 dark:bg-white/3">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Form.Item
+                                                    name={`store_vis_form_${s.STORE_NO}`}
+                                                    valuePropName="checked"
+                                                    initialValue={true}
+                                                    noStyle
+                                                >
+                                                    <Switch size="small" checkedChildren="On" unCheckedChildren="Off" />
+                                                </Form.Item>
+                                                {s.STORE_NO === 2
+                                                    ? <Tag color="purple" className="m-0">⚖️ Weighing Station</Tag>
+                                                    : <Tag color={getAntTag(s.STORE_NO)} className="m-0">{`S${s.STORE_NO} · ${s.NAME}`}</Tag>
+                                                }
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Form.Item
+                                                    name={`store_price_buying_${s.STORE_NO}`}
+                                                    label={<span className="text-xs text-gray-400">Buy Price</span>}
+                                                    className="mb-0"
+                                                >
+                                                    <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        prefix="Rs."
+                                                        size="small"
+                                                        placeholder={globalBuying ? `${parseFloat(globalBuying).toFixed(2)} (global)` : 'Use global'}
+                                                    />
+                                                </Form.Item>
+                                                <Form.Item
+                                                    name={`store_price_selling_${s.STORE_NO}`}
+                                                    label={<span className="text-xs text-gray-400">Sell Price</span>}
+                                                    className="mb-0"
+                                                >
+                                                    <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        prefix="Rs."
+                                                        size="small"
+                                                        placeholder={globalSelling ? `${parseFloat(globalSelling).toFixed(2)} (global)` : 'Use global'}
+                                                    />
+                                                </Form.Item>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
 
                     <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100 dark:border-white/10">
