@@ -239,8 +239,8 @@ export default function StockOperations() {
         setHistoryLoading(true);
         try {
             const payload = {
-                startDate: historyFilters.dateRange ? historyFilters.dateRange[0].format('YYYY-MM-DD') : dayjs().subtract(14, 'day').format('YYYY-MM-DD'),
-                endDate: historyFilters.dateRange ? historyFilters.dateRange[1].format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+                startDate: historyFilters.dateRange ? historyFilters.dateRange[0].format('YYYY-MM-DD') : null,
+                endDate: historyFilters.dateRange ? historyFilters.dateRange[1].format('YYYY-MM-DD') : null,
                 limit,
                 page
             };

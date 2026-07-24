@@ -67,6 +67,8 @@ app.use(require('./terminalSessionsRoutes'));
 app.use(require('./storeRoutes'));
 
 app.use('/api/stock-transfers', require('./transferRequestRoutes'));
+app.use(require('./millPlaceRoutes'));
+app.use(require('./millStockInwardRoutes'));
 
 // Start the server
 const server = app.listen(port, () => {
