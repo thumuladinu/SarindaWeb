@@ -2030,4 +2030,193 @@ router.post('/api/graphs/stock-events', async (req, res) => {
 });
 
 
+
+// =====================================================
+// NEW: DAILY STORE REPORT (80mm summary)
+// =====================================================
+router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
+    try {
+        const { storeNo, date, detailed, itemIds } = req.body;
+        if (!storeNo || !date) {
+            return res.status(400).json({ success: false, message: 'Missing storeNo or date' });
+        }
+
+        // 1. Calculate Overall P&L (Total Income vs Total Outgoes)
+        // using SL Time SQL
+        const pnlQuery = `
+            SELECT 
+                SUM(CASE WHEN TYPE = 'Selling' THEN SUB_TOTAL ELSE 0 END) as totalIncome,
+                SUM(CASE WHEN TYPE IN ('Buying', 'Expenses') THEN SUB_TOTAL ELSE 0 END) as totalOutgoes
+            FROM store_transactions st
+            WHERE st.IS_ACTIVE = 1 
+              AND st.STORE_NO = ?
+              AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+        `;
+        
+        const [pnlResult] = await pool.query(pnlQuery, [storeNo, date]);
+        
+        let itemsSummary = [];
+        
+        let itemFilter = "";
+
+            let params = [storeNo, date];
+            if (itemIds && itemIds.length > 0) {
+                itemFilter = ` AND sti.ITEM_ID IN (${itemIds.map(() => '?').join(',')})`;
+                params.push(...itemIds);
+            }
+            
+            const itemsQuery = `
+                SELECT 
+                    sti.ITEM_ID,
+                    si.NAME as ITEM_NAME,
+                    st.TYPE,
+                    st.CODE,
+                    st.WEIGHT_CODE,
+                    sti.QUANTITY,
+                    sti.TOTAL
+                FROM store_transactions st
+                JOIN store_transactions_items sti ON st.TRANSACTION_ID = sti.TRANSACTION_ID
+                JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
+                WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1
+                  AND st.STORE_NO = ?
+                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+                  AND st.TYPE IN ('Selling', 'Buying', 'TransferIn', 'TransferOut', 'AdjIn', 'AdjOut', 'StockClear')
+                  ${itemFilter}
+                ORDER BY st.CREATED_DATE ASC
+            `;
+            
+            const txItems = await pool.query(itemsQuery, params);
+            
+            // Group by item
+            const grouped = {};
+            txItems.forEach(row => {
+                if (!grouped[row.ITEM_ID]) {
+                    grouped[row.ITEM_ID] = {
+                        itemId: row.ITEM_ID,
+                        itemName: row.ITEM_NAME,
+                        totalIn: 0,
+                        totalOut: 0,
+                        bills: []
+                    };
+                }
+                
+                const item = grouped[row.ITEM_ID];
+                let isOut = ['Selling', 'TransferOut', 'AdjOut', 'StockClear'].includes(row.TYPE);
+                let isIn = ['Buying', 'TransferIn', 'AdjIn'].includes(row.TYPE);
+                
+                if (isIn) item.totalIn += parseFloat(row.QUANTITY) || 0;
+                if (isOut) item.totalOut += parseFloat(row.QUANTITY) || 0;
+                
+                // Short code (last part after '-')
+                let shortCode = row.CODE || 'N/A';
+                if (shortCode.includes('-')) {
+                    const parts = shortCode.split('-');
+                    shortCode = parts[parts.length - 1];
+                }
+                
+                item.bills.push({
+                    code: shortCode,
+                    weightCode: row.WEIGHT_CODE || null,
+                    type: isIn ? 'IN' : 'OUT',
+                    fullType: row.TYPE,
+                    qty: parseFloat(row.QUANTITY) || 0,
+                    amount: parseFloat(row.TOTAL) || 0
+                });
+            });
+            
+            itemsSummary = Object.values(grouped);
+
+        // Store 2 specific metrics
+        let store2Metrics = null;
+        if (storeNo == 2) {
+            // 1. POS Bills count & amounts today
+            const posQuery = `
+                SELECT COUNT(*) as count, SUM(SUB_TOTAL) as total
+                FROM store_transactions st
+                WHERE st.IS_ACTIVE = 1 AND st.STORE_NO = 2 
+                  AND st.TYPE IN ('Buying', 'Selling')
+                  AND (st.WEIGHT_CODE IS NULL OR st.WEIGHT_CODE = '')
+                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+            `;
+            const [posResult] = await pool.query(posQuery, [date]);
+
+            // 2. Weighing bills count & amounts today
+            const weighingQuery = `
+                SELECT COUNT(*) as count, SUM(SUB_TOTAL) as total
+                FROM store_transactions st
+                WHERE st.IS_ACTIVE = 1 AND st.STORE_NO = 2 
+                  AND st.TYPE IN ('Buying', 'Selling')
+                  AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
+                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+            `;
+            const [weighingResult] = await pool.query(weighingQuery, [date]);
+
+            // 3. Collected from today's weighing bills
+            const collectedTodayQuery = `
+                SELECT COUNT(*) as count, SUM(AMOUNT_SETTLED) as total
+                FROM store_transactions st
+                WHERE st.IS_ACTIVE = 1 AND st.STORE_NO = 2 
+                  AND st.TYPE IN ('Buying', 'Selling')
+                  AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
+                  AND st.AMOUNT_SETTLED > 0
+                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+            `;
+            const [collectedTodayResult] = await pool.query(collectedTodayQuery, [date]);
+
+            // 4. Collected from old weighing bills (Payment transactions today for old weighing bills)
+            const collectedOldQuery = `
+                SELECT COUNT(DISTINCT p.TRANSACTION_ID) as count, SUM(p.PAYMENT_AMOUNT) as total
+                FROM store_transactions p
+                JOIN store_transactions st ON p.REFERENCE_TRANSACTION = st.TRANSACTION_ID
+                WHERE p.IS_ACTIVE = 1 AND p.STORE_NO = 2
+                  AND p.TYPE = 'Payment'
+                  AND DATE(${STOCK_CALC_TIME_SQL('p.CREATED_DATE', 'p.CODE', 'p.WEIGHT_CODE', 'p.STOCK_DATE')}) = ?
+                  AND st.TYPE IN ('Buying', 'Selling')
+                  AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
+                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) < ?
+            `;
+            const [collectedOldResult] = await pool.query(collectedOldQuery, [date, date]);
+
+            // 5. Not collected from today's weighing bills (Left to collect)
+            const leftToCollectQuery = `
+                SELECT COUNT(*) as count, SUM(COALESCE(DUE_AMOUNT, SUB_TOTAL, 0)) as total
+                FROM store_transactions st
+                WHERE st.IS_ACTIVE = 1 AND st.STORE_NO = 2 
+                  AND st.TYPE IN ('Buying', 'Selling')
+                  AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
+                  AND (st.AMOUNT_SETTLED IS NULL OR st.AMOUNT_SETTLED = 0 OR st.DUE_AMOUNT > 0)
+                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+            `;
+            const [leftToCollectResult] = await pool.query(leftToCollectQuery, [date]);
+
+            store2Metrics = {
+                posBills: { count: posResult.count || 0, total: parseFloat(posResult.total) || 0 },
+                weighingBills: { count: weighingResult.count || 0, total: parseFloat(weighingResult.total) || 0 },
+                collectedToday: { count: collectedTodayResult.count || 0, total: parseFloat(collectedTodayResult.total) || 0 },
+                collectedOld: { count: collectedOldResult.count || 0, total: parseFloat(collectedOldResult.total) || 0 },
+                leftToCollect: { count: leftToCollectResult.count || 0, total: parseFloat(leftToCollectResult.total) || 0 }
+            };
+        }
+
+
+        return res.json({
+            success: true,
+            date,
+            store2Metrics,
+            storeNo,
+            summary: {
+                totalIncome: parseFloat(pnlResult.totalIncome) || 0,
+                totalOutgoes: parseFloat(pnlResult.totalOutgoes) || 0,
+                profit: (parseFloat(pnlResult.totalIncome) || 0) - (parseFloat(pnlResult.totalOutgoes) || 0)
+            },
+            itemsSummary
+        });
+
+    } catch (error) {
+        console.error('[ReportsDashboard] Error generating daily store report:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 module.exports = router;
+
