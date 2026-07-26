@@ -2050,7 +2050,7 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
             FROM store_transactions st
             WHERE st.IS_ACTIVE = 1 
               AND st.STORE_NO = ?
-              AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+              AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) = ?
         `;
         
         const [pnlResult] = await pool.query(pnlQuery, [storeNo, date]);
@@ -2079,7 +2079,7 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
                 JOIN store_items si ON sti.ITEM_ID = si.ITEM_ID
                 WHERE st.IS_ACTIVE = 1 AND sti.IS_ACTIVE = 1
                   AND st.STORE_NO = ?
-                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+                  AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) = ?
                   AND st.TYPE IN ('Selling', 'Buying', 'TransferIn', 'TransferOut', 'AdjIn', 'AdjOut', 'StockClear')
                   ${itemFilter}
                 ORDER BY st.CREATED_DATE ASC
@@ -2136,7 +2136,7 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
                 WHERE st.IS_ACTIVE = 1 AND st.STORE_NO = 2 
                   AND st.TYPE IN ('Buying', 'Selling')
                   AND (st.WEIGHT_CODE IS NULL OR st.WEIGHT_CODE = '')
-                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+                  AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) = ?
             `;
             const [posResult] = await pool.query(posQuery, [date]);
 
@@ -2147,7 +2147,7 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
                 WHERE st.IS_ACTIVE = 1 AND st.STORE_NO = 2 
                   AND st.TYPE IN ('Buying', 'Selling')
                   AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
-                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+                  AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) = ?
             `;
             const [weighingResult] = await pool.query(weighingQuery, [date]);
 
@@ -2159,7 +2159,7 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
                   AND st.TYPE IN ('Buying', 'Selling')
                   AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
                   AND st.AMOUNT_SETTLED > 0
-                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+                  AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) = ?
             `;
             const [collectedTodayResult] = await pool.query(collectedTodayQuery, [date]);
 
@@ -2170,12 +2170,25 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
                 JOIN store_transactions st ON p.REFERENCE_TRANSACTION = st.TRANSACTION_ID
                 WHERE p.IS_ACTIVE = 1 AND p.STORE_NO = 2
                   AND p.TYPE = 'Payment'
-                  AND DATE(${STOCK_CALC_TIME_SQL('p.CREATED_DATE', 'p.CODE', 'p.WEIGHT_CODE', 'p.STOCK_DATE')}) = ?
+                  AND DATE(p.CREATED_DATE) = ?
                   AND st.TYPE IN ('Buying', 'Selling')
                   AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
-                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) < ?
+                  AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) < ?
             `;
             const [collectedOldResult] = await pool.query(collectedOldQuery, [date, date]);
+
+            // 4.5. Collected today from old weighing bills (Initial settlement at creation today but old stock date)
+            const collectedOldInitialSettledQuery = `
+                SELECT COUNT(*) as count, SUM(AMOUNT_SETTLED) as total
+                FROM store_transactions st
+                WHERE st.IS_ACTIVE = 1 AND st.STORE_NO = 2
+                  AND st.TYPE IN ('Buying', 'Selling')
+                  AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
+                  AND st.AMOUNT_SETTLED > 0
+                  AND DATE(st.CREATED_DATE) = ?
+                  AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) < ?
+            `;
+            const [collectedOldInitialSettledResult] = await pool.query(collectedOldInitialSettledQuery, [date, date]);
 
             // 5. Not collected from today's weighing bills (Left to collect)
             const leftToCollectQuery = `
@@ -2185,16 +2198,19 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
                   AND st.TYPE IN ('Buying', 'Selling')
                   AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
                   AND (st.AMOUNT_SETTLED IS NULL OR st.AMOUNT_SETTLED = 0 OR st.DUE_AMOUNT > 0)
-                  AND DATE(${STOCK_CALC_TIME_SQL('st.CREATED_DATE', 'st.CODE', 'st.WEIGHT_CODE', 'st.STOCK_DATE')}) = ?
+                  AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) = ?
             `;
             const [leftToCollectResult] = await pool.query(leftToCollectQuery, [date]);
 
             store2Metrics = {
-                posBills: { count: posResult.count || 0, total: parseFloat(posResult.total) || 0 },
-                weighingBills: { count: weighingResult.count || 0, total: parseFloat(weighingResult.total) || 0 },
-                collectedToday: { count: collectedTodayResult.count || 0, total: parseFloat(collectedTodayResult.total) || 0 },
-                collectedOld: { count: collectedOldResult.count || 0, total: parseFloat(collectedOldResult.total) || 0 },
-                leftToCollect: { count: leftToCollectResult.count || 0, total: parseFloat(leftToCollectResult.total) || 0 }
+                posBills: { count: posResult?.count || 0, total: parseFloat(posResult?.total) || 0 },
+                weighingBills: { count: weighingResult?.count || 0, total: parseFloat(weighingResult?.total) || 0 },
+                collectedToday: { count: collectedTodayResult?.count || 0, total: parseFloat(collectedTodayResult?.total) || 0 },
+                collectedOld: { 
+                    count: (collectedOldResult?.count || 0) + (collectedOldInitialSettledResult?.count || 0), 
+                    total: (parseFloat(collectedOldResult?.total) || 0) + (parseFloat(collectedOldInitialSettledResult?.total) || 0) 
+                },
+                leftToCollect: { count: leftToCollectResult?.count || 0, total: parseFloat(leftToCollectResult?.total) || 0 }
             };
         }
 

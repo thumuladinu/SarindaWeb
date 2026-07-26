@@ -73,6 +73,7 @@ export default function StockOperations() {
     // Data State
     const [products, setProducts] = useState([]);
     const [history, setHistory] = useState([]);
+    const [mappings, setMappings] = useState([]);
     const [customers, setCustomers] = useState([]); // New Customer State
     const [destinations, setDestinations] = useState([]); // New Destinations State
     const [loading, setLoading] = useState(false);
@@ -141,8 +142,9 @@ export default function StockOperations() {
     // Initial Load
     useEffect(() => {
         fetchProducts();
-        fetchCustomers(); // Fetch customers
-        fetchDestinations(); // Fetch destinations
+        fetchCustomers();
+        fetchDestinations();
+        fetchMappings();
 
         if (urlOpId) {
             handleDeepLink(urlOpId);
@@ -232,6 +234,17 @@ export default function StockOperations() {
             }
         } catch (error) {
             console.error('Failed to fetch products', error);
+        }
+    };
+
+    const fetchMappings = async () => {
+        try {
+            const response = await axios.get('/api/mill/settings/item-mappings');
+            if (response.data.success) {
+                setMappings(response.data.mappings || []);
+            }
+        } catch (error) {
+            console.error('Failed to fetch item mappings', error);
         }
     };
 
@@ -505,17 +518,24 @@ export default function StockOperations() {
 
     // SEARCH PRODUCTS
     const filteredProducts = useMemo(() => {
+        let baseProducts = products;
+        
+        // If operation is Stock Transfer (12) and destination is Mill (999), filter by mappings
+        if (selectedOpType === 12 && transferTargetStore === 999) {
+            baseProducts = baseProducts.filter(p => mappings.some(m => m.STORE_ITEM_ID === p.ITEM_ID && m.MILL_ITEM_ID != null));
+        }
+
         if (!searchTerm) {
             // If search is focused but empty, show first 50 items
-            if (searchFocused) return products.slice(0, 50);
+            if (searchFocused) return baseProducts.slice(0, 50);
             return []; // Otherwise don't show list (unless logic changes)
         }
         const term = searchTerm.toLowerCase();
-        return products.filter(p =>
+        return baseProducts.filter(p =>
             (p.NAME && p.NAME.toLowerCase().includes(term)) ||
             (p.CODE && p.CODE.toLowerCase().includes(term))
         ).slice(0, 50);
-    }, [products, searchTerm, searchFocused]);
+    }, [products, searchTerm, searchFocused, selectedOpType, transferTargetStore, mappings]);
 
     // HANDLERS
     const handleSelectItem = (item) => {

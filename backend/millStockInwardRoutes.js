@@ -178,6 +178,56 @@ router.post('/api/mill/inward/add', async (req, res) => {
                 data.CREATED_BY
             );
 
+            // ─── DRYING OPERATION (AMU WEE -> DRY WEE) ───
+            if (data.MOISTURE_LOSS_PERCENT) {
+                const lossPercent = parseFloat(data.MOISTURE_LOSS_PERCENT);
+                if (lossPercent >= 0 && lossPercent <= 100) {
+                    const finalDryWeight = parseFloat(data.QUANTITY) * (1 - (lossPercent / 100));
+
+                    // Get ITEM_ID for Dry Wee
+                    const [dryWeeRes] = await pool.query('SELECT ITEM_ID FROM mill_items WHERE SYSTEM_CODE = ?', ['RAW_WEE_DRY']);
+                    if (dryWeeRes && dryWeeRes.length > 0) {
+                        const dryWeeItemId = dryWeeRes[0].ITEM_ID;
+
+                        // Deduct Amu Wee
+                        await updateInventoryLedger(
+                            data.ITEM_ID,
+                            data.PLACE_ID || null,
+                            data.QUANTITY,
+                            'OUT',
+                            'drying',
+                            inwardId,
+                            data.DATE,
+                            `Drying Moisture Loss: ${lossPercent}%`,
+                            data.CREATED_BY
+                        );
+
+                        // Add Dry Wee
+                        await updateInventoryLedger(
+                            dryWeeItemId,
+                            data.PLACE_ID || null,
+                            finalDryWeight,
+                            'IN',
+                            'drying',
+                            inwardId,
+                            data.DATE,
+                            `Drying Result from Inward ${data.REFERENCE_NO}`,
+                            data.CREATED_BY
+                        );
+
+                        // Record drying operation
+                        await pool.query('INSERT INTO mill_drying_operations SET ?', {
+                            INWARD_ID: inwardId,
+                            ORIGINAL_WEIGHT: data.QUANTITY,
+                            MOISTURE_LOSS_PERCENT: lossPercent,
+                            FINAL_DRY_WEIGHT: finalDryWeight,
+                            DATE: data.DATE,
+                            CREATED_BY: data.CREATED_BY
+                        });
+                    }
+                }
+            }
+
             return res.status(200).json({ 
                 success: true, 
                 message: 'Stock inward recorded successfully',
@@ -188,6 +238,34 @@ router.post('/api/mill/inward/add', async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to add record' });
     } catch (error) {
         console.error('Error adding mill inward:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// ─── PENDING STORE TRANSFERS ────────────────────────────────
+// Fetches transfers sent from stores to the mill that are pending
+router.get('/api/mill/inward/pending-transfers', async (req, res) => {
+    try {
+        const query = `
+            SELECT MAX(st.id) as STORE_TRANSFER_ID, MAX(st.store_from_id) as STORE_NO, MAX(st.main_item_id) as STORE_ITEM_ID,
+            MAX(st.main_item_name) as STORE_ITEM_NAME, COALESCE(MAX(st.transfer_code), st.local_id) as TRANSFER_CODE,
+            MAX(st.main_item_qty) as STORE_QUANTITY, MAX(st.has_conversion) as has_conversion, MAX(st.status) as status, MAX(st.request_date) as DATE,
+            MAX(sm.mill_item_id) as MAPPED_MILL_ITEM_ID, MAX(mi.CODE) as MAPPED_MILL_ITEM_CODE, MAX(mi.NAME) as MAPPED_MILL_ITEM_NAME
+            FROM store_stock_transfers st
+            LEFT JOIN store_mill_item_mapping sm ON st.main_item_id = sm.store_item_id
+            LEFT JOIN mill_items mi ON sm.mill_item_id = mi.ITEM_ID
+            WHERE st.store_to_id = 999 AND (st.status = 'PENDING' OR st.status = 'APPROVED' OR st.status = 'IN_TRANSIT')
+            GROUP BY st.local_id
+            ORDER BY MAX(st.request_date) DESC
+        `;
+        const transfers = await pool.query(query);
+        return res.status(200).json({ success: true, result: Array.isArray(transfers) ? transfers.map(r => ({ ...r })) : [] });
+    } catch (error) {
+        // Table might not exist yet during migration
+        if (error.code === 'ER_NO_SUCH_TABLE') {
+             return res.status(200).json({ success: true, result: [] });
+        }
+        console.error('Error fetching pending transfers:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
@@ -213,6 +291,14 @@ router.post('/api/mill/inward/accept-transfer', async (req, res) => {
         const totalPrice = MILL_QUANTITY && PRICE_PER_UNIT 
             ? parseFloat(MILL_QUANTITY) * parseFloat(PRICE_PER_UNIT) 
             : null;
+
+        let storeTransferRef = null;
+        if (STORE_TRANSFER_ID) {
+            const transferRes = await pool.query('SELECT transfer_code, local_id FROM store_stock_transfers WHERE id = ?', [STORE_TRANSFER_ID]);
+            if (transferRes.length > 0) {
+                storeTransferRef = transferRes[0].transfer_code || transferRes[0].local_id;
+            }
+        }
 
         // 1. Create mill_stock_transfers record
         const transferResult = await pool.query('INSERT INTO mill_stock_transfers SET ?', {
@@ -249,7 +335,7 @@ router.post('/api/mill/inward/accept-transfer', async (req, res) => {
             TOTAL_PRICE: totalPrice,
             NO_OF_BAGS: MILL_NO_OF_BAGS || null,
             STORE_NO: STORE_NO || 1,
-            STORE_TRANSFER_REF: STORE_TRANSFER_ID ? `STR-${STORE_TRANSFER_ID}` : null,
+            STORE_TRANSFER_REF: storeTransferRef || (STORE_TRANSFER_ID ? `STR-${STORE_TRANSFER_ID}` : null),
             DATE,
             NOTES: NOTES || null,
             RECEIVED_BY: ACCEPTED_BY || null,
@@ -275,13 +361,29 @@ router.post('/api/mill/inward/accept-transfer', async (req, res) => {
         if (STORE_TRANSFER_ID) {
             try {
                 await pool.query(
-                    `UPDATE store_stock_transfers SET status = 'COMPLETED', mill_accepted = 1, 
-                    mill_quantity = ?, mill_accepted_date = NOW() WHERE id = ?`,
-                    [MILL_QUANTITY, STORE_TRANSFER_ID]
+                    `UPDATE store_stock_transfers SET status = 'COMPLETED' WHERE local_id = (SELECT local_id FROM (SELECT local_id FROM store_stock_transfers WHERE id = ?) AS tmp) OR id = ?`,
+                    [STORE_TRANSFER_ID, STORE_TRANSFER_ID]
                 );
+                
+                if (global.io) {
+                    global.io.emit('transfer_accepted', { 
+                        transferId: STORE_TRANSFER_ID,
+                        storeNo: STORE_NO,
+                        millQuantity: MILL_QUANTITY
+                    });
+                }
             } catch (e) {
                 // Table might not have these columns yet, log but don't fail
                 console.log('Note: Could not update store_stock_transfers:', e.message);
+                
+                // Still emit event even if DB update failed columns
+                if (global.io) {
+                    global.io.emit('transfer_accepted', { 
+                        transferId: STORE_TRANSFER_ID,
+                        storeNo: STORE_NO,
+                        millQuantity: MILL_QUANTITY
+                    });
+                }
             }
         }
 

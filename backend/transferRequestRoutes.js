@@ -216,9 +216,9 @@ const approveTransfer = async (transferId, approvedBy, approvedByName, clearance
     // --- UPDATE REQUEST STATUS ---
     await query(
         `UPDATE store_stock_transfers 
-            SET status = 'APPROVED', approval_date = ?, approved_by = ?, approved_by_name = ?, clearance_type = ?
+            SET status = 'APPROVED', approval_date = ?, approved_by = ?, approved_by_name = ?, clearance_type = ?, transfer_code = ?
         WHERE id = ? `,
-        [opTimestamp, approvedBy, approvedByName, clearanceType, transferId]
+        [opTimestamp, approvedBy, approvedByName, clearanceType, opCode, transferId]
     );
 
     // --- Trigger Notification ---
@@ -297,6 +297,16 @@ router.post('/request', async (req, res) => {
             'New Transfer Request',
             `${createdByName || 'Someone'} requested ${mainItemQty} kg of ${mainItemName}`
         );
+
+        if (global.io) {
+            global.io.emit('transfer_created', { 
+                transferId, 
+                storeFrom, 
+                storeTo, 
+                mainItemName, 
+                mainItemQty 
+            });
+        }
 
         res.json({ success: true, message: 'Request submitted', transferId, localId });
     } catch (error) {
