@@ -2050,10 +2050,43 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
             FROM store_transactions st
             WHERE st.IS_ACTIVE = 1 
               AND st.STORE_NO = ?
+              AND (st.WEIGHT_CODE IS NULL OR st.WEIGHT_CODE = '')
               AND DATE(IFNULL(st.STOCK_DATE, st.CREATED_DATE)) = ?
         `;
         
         const [pnlResult] = await pool.query(pnlQuery, [storeNo, date]);
+        
+        let store2QrIncome = 0;
+        let store2QrOutgoes = 0;
+        
+        if (storeNo == 1) {
+            const s2QrTodayQ = `
+                SELECT 
+                    SUM(CASE WHEN TYPE = 'Selling' THEN AMOUNT_SETTLED ELSE 0 END) as qrIncome,
+                    SUM(CASE WHEN TYPE IN ('Buying') THEN AMOUNT_SETTLED ELSE 0 END) as qrOutgoes
+                FROM store_transactions
+                WHERE IS_ACTIVE = 1 AND STORE_NO = 2 
+                  AND WEIGHT_CODE IS NOT NULL AND WEIGHT_CODE != ''
+                  AND DATE(CREATED_DATE) = ?
+            `;
+            const [s2QrTodayRes] = await pool.query(s2QrTodayQ, [date]);
+
+            const s2QrOldQ = `
+                SELECT 
+                    SUM(CASE WHEN st.TYPE = 'Selling' THEN p.PAYMENT_AMOUNT ELSE 0 END) as qrIncome,
+                    SUM(CASE WHEN st.TYPE IN ('Buying') THEN p.PAYMENT_AMOUNT ELSE 0 END) as qrOutgoes
+                FROM store_transactions p
+                JOIN store_transactions st ON p.REFERENCE_TRANSACTION = st.TRANSACTION_ID
+                WHERE p.IS_ACTIVE = 1 AND p.STORE_NO = 2
+                  AND p.TYPE = 'Payment'
+                  AND DATE(p.CREATED_DATE) = ?
+                  AND st.WEIGHT_CODE IS NOT NULL AND st.WEIGHT_CODE != ''
+            `;
+            const [s2QrOldRes] = await pool.query(s2QrOldQ, [date]);
+
+            store2QrIncome = (parseFloat(s2QrTodayRes?.qrIncome) || 0) + (parseFloat(s2QrOldRes?.qrIncome) || 0);
+            store2QrOutgoes = (parseFloat(s2QrTodayRes?.qrOutgoes) || 0) + (parseFloat(s2QrOldRes?.qrOutgoes) || 0);
+        }
         
         let itemsSummary = [];
         
@@ -2218,14 +2251,14 @@ router.post('/api/reports-dashboard/daily-store-report', async (req, res) => {
         return res.json({
             success: true,
             date,
-            store2Metrics,
-            storeNo,
-            summary: {
-                totalIncome: parseFloat(pnlResult.totalIncome) || 0,
-                totalOutgoes: parseFloat(pnlResult.totalOutgoes) || 0,
-                profit: (parseFloat(pnlResult.totalIncome) || 0) - (parseFloat(pnlResult.totalOutgoes) || 0)
+            pnl: {
+                totalIncome: parseFloat(pnlResult?.totalIncome) || 0,
+                totalOutgoes: parseFloat(pnlResult?.totalOutgoes) || 0,
+                store2QrIncome: store2QrIncome,
+                store2QrOutgoes: store2QrOutgoes
             },
-            itemsSummary
+            itemsSummary: itemsSummary,
+            store2Metrics: store2Metrics
         });
 
     } catch (error) {
