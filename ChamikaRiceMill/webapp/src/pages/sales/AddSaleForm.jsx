@@ -126,6 +126,8 @@ export default function AddSaleForm({ onSuccess, onCancel }) {
         return total;
     };
 
+    const currentUser = JSON.parse(Cookies.get('millUser') || '{}');
+
     const handleFinish = async (values) => {
         setLoading(true);
         try {
@@ -179,7 +181,7 @@ export default function AddSaleForm({ onSuccess, onCancel }) {
                 PRINTED_SUB_TOTAL: calculateTotal(),
                 NET_AMOUNT: calculateTotal(), // No discount at this stage yet
                 PAYMENT_METHOD: 'cash',
-                CREATED_BY: currentUser.ID || 1,
+                CREATED_BY: currentUser.USER_ID || currentUser.ID || 1,
                 CREATED_BY_NAME: getCurrentUserName(),
                 DEVICE_ID: getTerminalDeviceCode(),
                 ITEMS: items
