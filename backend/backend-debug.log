@@ -1,0 +1,684 @@
+MySQL connection pool created successfully
+[ChequeJob] Initializing cheque notification schedules...
+>>> BACKEND RELOADED: Balance Fix Applied <<<
+Server is running on port 3001
+Client connected: YIXudBx75Z-MDSqjAAAB
+Client connected: i547nXg1Lic74HpPAAAD
+Client connected: RBVUcr2l66vNkoGBAAAF
+[Socket] Terminal Registered: WeighingStation - WS-MTLU5853B
+Client connected: p95UGAfms7fg-0HFAAAH
+[Socket] Terminal Registered: POS - TJOD1
+push_subscriptions table verified/created.
+notifications table verified/created.
+Verified 'cash_floats' table.
+[Migration] UNIQUE index on CODE already exists - good!
+[Migration] stores table ready.
+[storeRoutes] GET /api/stores (includeInactive=false) → 4 rows
+  Store 1 "Main Store" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 2 "Weighing Station" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 3 "Test1 " QR_ENABLED=1 TRANSFER_ENABLED=0
+  Store 999 "Mill" QR_ENABLED=1 TRANSFER_ENABLED=1
+[Socket] Created new DB session: 162
+[Socket] Cleared dangling terminal sessions on startup
+[MergeSync] Received 51 items from POS
+[Socket] Created new DB session: 161
+[MergeSync] Web DB has 51 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
+[Migration] Cannot create unique index on transactions - duplicates still exist.
+Client connected: VY4M-b3ZeC5z4xYDAAAJ
+Client disconnected: i547nXg1Lic74HpPAAAD
+Client disconnected: YIXudBx75Z-MDSqjAAAB
+Client connected: UtXmEVVVQbBEtJ13AAAM
+Get all Items request received:
+Get all Items request received:
+Client connected: bvQ0T0-1WOydtRLsAAAP
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+Client disconnected: VY4M-b3ZeC5z4xYDAAAJ
+Client connected: kHwO-mDXagUJsLvyAAAR
+Client disconnected: bvQ0T0-1WOydtRLsAAAP
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+Client disconnected: UtXmEVVVQbBEtJ13AAAM
+Client connected: AcVglada7IOmYHONAAAU
+Client connected: tTt3OLIWHjTLEiMeAAAX
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+Client disconnected: tTt3OLIWHjTLEiMeAAAX
+Client connected: uiTx98bgVLtMm2YkAAAa
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+Client disconnected: uiTx98bgVLtMm2YkAAAa
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T12:36:07.297Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+Client disconnected: kHwO-mDXagUJsLvyAAAR
+Client disconnected: p95UGAfms7fg-0HFAAAH
+Client disconnected: RBVUcr2l66vNkoGBAAAF
+Client disconnected: AcVglada7IOmYHONAAAU
+Client connected: VkYLtnK0O5ILGrAhAAAc
+Client connected: JIq6J70jfe4jLinBAAAf
+[Socket] Terminal Registered: WeighingStation - WS-MTLU5853B
+Client connected: JmLD2GGrhQvLkRsUAAAi
+[Socket] Terminal Registered: POS - TJOD1
+[storeRoutes] GET /api/stores (includeInactive=false) → 4 rows
+  Store 1 "Main Store" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 2 "Weighing Station" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 3 "Test1 " QR_ENABLED=1 TRANSFER_ENABLED=0
+  Store 999 "Mill" QR_ENABLED=1 TRANSFER_ENABLED=1
+[MergeSync] Received 51 items from POS
+Client connected: jIrYqI7OAYCeVd1SAAAl
+[storeRoutes] GET /api/stores (includeInactive=false) → 4 rows
+  Store 1 "Main Store" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 2 "Weighing Station" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 3 "Test1 " QR_ENABLED=1 TRANSFER_ENABLED=0
+  Store 999 "Mill" QR_ENABLED=1 TRANSFER_ENABLED=1
+[storeRoutes] GET /api/stores (includeInactive=false) → 4 rows
+  Store 1 "Main Store" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 2 "Weighing Station" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 3 "Test1 " QR_ENABLED=1 TRANSFER_ENABLED=0
+  Store 999 "Mill" QR_ENABLED=1 TRANSFER_ENABLED=1
+[MergeSync] Web DB has 51 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[Socket] Created new DB session: 164
+[Socket] Created new DB session: 163
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[2026-07-29T19:02:53.290Z] [PID: 51401] [32m[NODE-CRON][32m [33m[WARN][0m missed execution at Wed Jul 29 2026 19:00:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-29T16:15:36.521Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+Client disconnected: JmLD2GGrhQvLkRsUAAAi
+Client disconnected: JIq6J70jfe4jLinBAAAf
+Client disconnected: VkYLtnK0O5ILGrAhAAAc
+Client disconnected: jIrYqI7OAYCeVd1SAAAl
+Client connected: 6gBTSymmhlaQfop-AAAn
+[Socket] Terminal Registered: WeighingStation - WS-MTLU5853B
+[Socket] Created new DB session: 165
+Client connected: ZmOLOVcHMJp36dBsAAAq
+[storeRoutes] GET /api/stores (includeInactive=false) → 4 rows
+  Store 1 "Main Store" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 2 "Weighing Station" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 3 "Test1 " QR_ENABLED=1 TRANSFER_ENABLED=0
+  Store 999 "Mill" QR_ENABLED=1 TRANSFER_ENABLED=1
+[storeRoutes] GET /api/stores (includeInactive=false) → 4 rows
+  Store 1 "Main Store" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 2 "Weighing Station" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 3 "Test1 " QR_ENABLED=1 TRANSFER_ENABLED=0
+  Store 999 "Mill" QR_ENABLED=1 TRANSFER_ENABLED=1
+Client connected: 2iHYL5Q1e_eYBBMiAAAt
+[Socket] Terminal Registered: POS - TJOD1
+[Socket] Resumed recent DB session: 164
+[storeRoutes] GET /api/stores (includeInactive=false) → 4 rows
+  Store 1 "Main Store" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 2 "Weighing Station" QR_ENABLED=1 TRANSFER_ENABLED=1
+  Store 3 "Test1 " QR_ENABLED=1 TRANSFER_ENABLED=0
+  Store 999 "Mill" QR_ENABLED=1 TRANSFER_ENABLED=1
+[MergeSync] Received 51 items from POS
+[MergeSync] Received 51 items from POS
+[MergeSync] Web DB has 51 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+[MergeSync] Web DB has 51 valid items (all active states)
+[MergeSync] POS has 51 unique valid items
+Client connected: aJfJ2nXtYbua-7sAAAAv
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
+[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)
+Client connected: j22p5Nf9l-tLabmkAAAy
+[Sync] Items since 2026-07-30T03:31:07.489Z requested
+[Sync] Returning 0 items (includes deleted items for sync)

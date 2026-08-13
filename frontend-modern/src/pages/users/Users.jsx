@@ -146,6 +146,16 @@ const Users = () => {
             }
         },
         {
+            title: 'Quick PIN',
+            dataIndex: 'PIN',
+            key: 'PIN',
+            align: 'center',
+            width: 110,
+            render: (pin) => (
+                pin ? <Tag color="cyan">•••• ({pin})</Tag> : <Tag color="default">Not Set</Tag>
+            )
+        },
+        {
             title: 'Status',
             dataIndex: 'IS_ACTIVE',
             key: 'IS_ACTIVE',

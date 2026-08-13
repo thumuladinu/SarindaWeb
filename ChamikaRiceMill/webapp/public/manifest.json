@@ -1,0 +1,31 @@
+{
+  "short_name": "Chamika Mill",
+  "name": "Chamika Rice Mill - Management System",
+  "description": "Comprehensive mill operations, inventory, billing and cheque management system",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-dark.png",
+      "type": "image/png",
+      "sizes": "2000x2000"
+    }
+  ],
+  "id": "/",
+  "start_url": "/",
+  "background_color": "#0f1012",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "scope": "/"
+}

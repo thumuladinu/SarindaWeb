@@ -5,55 +5,86 @@ const router = express.Router();
 const cors = require('cors');
 
 // Enable CORS for all routes
-router.use(cors());
+// router.use(cors());
 
 // Create a MySQL connection pool
 const pool = require('./index');
 
 // Route to handle login
 router.post('/api/login', async (req, res, next) => {
-    const { user, password } = req.body; // Update to 'user' for consistency
+    const { user, password, pin } = req.body;
 
-    console.log('Login request received:', req.body);
+    console.log('Login request received:', { user, hasPassword: !!password, hasPin: !!pin });
 
     if (!pool) {
         console.error('Error: MySQL connection pool is not defined');
         return res.status(500).json({ message: 'Internal server error' });
     }
 
-    pool.query('SELECT * FROM user_details WHERE USERNAME = ? AND IS_ACTIVE = 1', [user], (queryErr, user) => {
+    pool.query('SELECT * FROM user_details WHERE USERNAME = ? AND IS_ACTIVE = 1', [user], (queryErr, dbUsers) => {
         if (queryErr) {
             console.error('Error executing MySQL query:', queryErr);
             return res.status(500).json({ message: 'Internal server error' });
         }
 
-        if (!user.length) {
-            // console.log('Invalid username or password');
-            return res.status(401).json({ message: 'Invalid username or password' });
+        if (!dbUsers.length) {
+            return res.status(401).json({ message: 'Invalid username or credentials' });
         }
 
-        bcrypt.compare(password, user[0].PASSWORD, (compareErr, passwordMatch) => {
-            if (compareErr) {
-                console.error('Error comparing passwords:', compareErr);
-                return res.status(500).json({ message: 'Internal server error' });
+        const foundUser = dbUsers[0];
+
+        const userResponse = {
+            USER_ID: foundUser.USER_ID,
+            USERNAME: foundUser.USERNAME,
+            NAME: foundUser.NAME,
+            EMAIL: foundUser.EMAIL,
+            ROLE: foundUser.ROLE,
+            PHOTO: foundUser.PHOTO,
+            PIN: foundUser.PIN
+        };
+
+        // If explicit PIN provided
+        if (pin !== undefined && pin !== null && pin !== '') {
+            if (foundUser.PIN && String(foundUser.PIN) === String(pin)) {
+                return res.status(200).json({
+                    message: 'Login successful via PIN',
+                    user: userResponse
+                });
+            } else {
+                return res.status(401).json({ message: 'Invalid PIN' });
+            }
+        }
+
+        // If password provided
+        if (password) {
+            // Check if password matches 4-digit PIN first
+            if (foundUser.PIN && String(foundUser.PIN) === String(password)) {
+                return res.status(200).json({
+                    message: 'Login successful via PIN',
+                    user: userResponse
+                });
             }
 
-            if (!passwordMatch) {
-                // console.log('Invalid username or password');
-                return res.status(401).json({ message: 'Invalid username or password' });
-            }
+            // Compare password with bcrypt
+            bcrypt.compare(password, foundUser.PASSWORD, (compareErr, passwordMatch) => {
+                if (compareErr) {
+                    console.error('Error comparing passwords:', compareErr);
+                    return res.status(500).json({ message: 'Internal server error' });
+                }
 
-            return res.status(200).json({
-                message: 'Login successful', user: {
-                    USER_ID: user[0].USER_ID,
-                    USERNAME: user[0].USERNAME,
-                    NAME: user[0].NAME,
-                    EMAIL: user[0].EMAIL,
-                    ROLE: user[0].ROLE,
-                    PHOTO: user[0].PHOTO,
-                },
+                if (!passwordMatch) {
+                    return res.status(401).json({ message: 'Invalid password' });
+                }
+
+                return res.status(200).json({
+                    message: 'Login successful',
+                    user: userResponse
+                });
             });
-        });
+            return;
+        }
+
+        return res.status(400).json({ message: 'Password or PIN required' });
     });
 });
 

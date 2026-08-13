@@ -19,6 +19,7 @@
     "html-pdf": "^3.0.1",
     "mysql": "^2.18.1",
     "mysql2": "^3.6.5",
+    "node-cron": "^4.6.0",
     "nodemon": "^3.1.11",
     "pdf-to-printer": "^5.6.0",
     "phantomjs-prebuilt": "^2.1.16",

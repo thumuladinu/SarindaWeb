@@ -1,0 +1,36 @@
+{
+    "name": "chamika-rice-mill-webapp",
+    "private": true,
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "@ant-design/icons": "^5.2.6",
+        "@heroui/react": "^2.2.4",
+        "antd": "^6.1.4",
+        "axios": "^1.6.7",
+        "dayjs": "^1.11.10",
+        "dexie": "^4.0.4",
+        "framer-motion": "^11.0.0",
+        "js-cookie": "^3.0.5",
+        "moment": "^2.30.1",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "react-router-dom": "^6.21.3",
+        "socket.io-client": "^4.8.3"
+    },
+    "devDependencies": {
+        "@types/react": "^18.2.43",
+        "@types/react-dom": "^18.2.17",
+        "@vitejs/plugin-react": "^4.2.1",
+        "autoprefixer": "^10.4.17",
+        "eslint": "^8.55.0",
+        "postcss": "^8.4.33",
+        "tailwindcss": "^3.4.17",
+        "vite": "^5.0.8"
+    }
+}

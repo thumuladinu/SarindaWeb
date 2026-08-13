@@ -23,10 +23,15 @@ router.post('/api/getTerminalSessions', async (req, res) => {
             SELECT TS.*, U.PHOTO as cashierPhoto 
             FROM terminal_sessions TS
             LEFT JOIN user_details U ON TS.cashier = U.NAME
-            WHERE DATE(CONVERT_TZ(TS.connectedAt, '+00:00', '+05:30')) = ?
+            WHERE (
+               DATE(CONVERT_TZ(TS.connectedAt, '+00:00', '+05:30')) = ?
                OR DATE(CONVERT_TZ(TS.disconnectedAt, '+00:00', '+05:30')) = ?
                OR (DATE(CONVERT_TZ(TS.connectedAt, '+00:00', '+05:30')) < ? AND DATE(CONVERT_TZ(TS.disconnectedAt, '+00:00', '+05:30')) > ?)
                OR (DATE(CONVERT_TZ(TS.connectedAt, '+00:00', '+05:30')) <= ? AND TS.disconnectedAt IS NULL)
+            )
+            AND TS.cashier IS NOT NULL 
+            AND TS.cashier != '' 
+            AND LOWER(TS.cashier) NOT IN ('not logged in', 'no cashier', 'cashier')
             ORDER BY TS.terminalId, TS.connectedAt ASC
         `;
 

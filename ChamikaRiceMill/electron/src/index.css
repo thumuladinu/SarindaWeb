@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        background-color: #f1f5f9;
+        color: #0f172a;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+    }
+}
+
+/* Officer Header Styles (Light Blue theme matching store2-weighing-app) */
+.officer-header {
+    background: linear-gradient(135deg, #1e40af, #2563eb, #3b82f6);
+    color: white;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+}
+
+.officer-badge {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(8px);
+}
+
+/* Custom Navigation Tabs */
+.nav-tab-item {
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.nav-tab-item:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff !important;
+}
+
+.nav-tab-item.active {
+    background: #ffffff;
+    color: #1e40af !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* Cards & Surface panels */
+.officer-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    transition: all 0.2s ease;
+}
+
+.officer-card-header {
+    border-bottom: 1px solid #f1f5f9;
+    padding: 16px 20px;
+    background: #f8fafc;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+}
+
+/* Quick Touch Keypad for POS & Billing */
+.touch-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.touch-key {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1e293b;
+    padding: 14px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.touch-key:hover {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+
+.touch-key:active {
+    transform: scale(0.96);
+    background: #dbeafe;
+}
+
+.touch-key.action {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.touch-key.action-clear {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #dc2626;
+}
+
+.touch-key.action-clear:hover {
+    background: #fecaca;
+    color: #b91c1c;
+}
+
+/* Print Styles */
+@media print {
+    html, body, #root {
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    body > *:not(#root),
+    .print\:hidden {
+        display: none !important;
+    }
+
+    body * {
+        visibility: hidden;
+    }
+
+    .print-area, .print-area * {
+        visibility: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .print-area {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        color: black !important;
+    }
+}

@@ -68,11 +68,16 @@ module.exports = {
                 // Notify Admins
                 io.emit('admin:terminals_update', Array.from(connectedTerminals.values()));
 
-                // DB: Insert or Reconnect Session
-                if (pool) {
+                // DB: Insert or Reconnect Session ONLY if real cashier is logged in
+                const isRealCashier = (name) => {
+                    if (!name) return false;
+                    const lower = name.trim().toLowerCase();
+                    return lower !== 'not logged in' && lower !== 'no cashier' && lower !== 'cashier';
+                };
+
+                if (pool && isRealCashier(terminalInfo.cashier)) {
                     // Check if there's a recently disconnected session (within last 30 seconds) for this terminal
                     const thirtySecondsAgo = new Date(Date.now() - 30000);
-                    // Create formatted date strings for MySQL
                     const formatDatetime = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
 
                     pool.query(
@@ -92,7 +97,6 @@ module.exports = {
                                     `UPDATE terminal_sessions SET disconnectedAt = NULL, cashier = ? WHERE id = ?`,
                                     [terminalInfo.cashier, sessionId]
                                 );
-                                // Store DB inserted ID in terminalInfo map for easy reference on disconnect
                                 terminalInfo.dbSessionId = sessionId;
                                 connectedTerminals.set(socket.id, terminalInfo);
                                 console.log(`[Socket] Resumed recent DB session: ${sessionId}`);
@@ -127,7 +131,7 @@ module.exports = {
                 }
             });
 
-            // 2. Dynamic Update: Terminal sends new info (e.g. Cashier Login)
+            // 2. Dynamic Update: Terminal sends new info (e.g. Cashier Login / Logout)
             socket.on('terminal:update_info', (data) => {
                 if (connectedTerminals.has(socket.id)) {
                     const currentInfo = connectedTerminals.get(socket.id);
@@ -137,13 +141,58 @@ module.exports = {
                     // Notify Admins
                     io.emit('admin:terminals_update', Array.from(connectedTerminals.values()));
 
-                    // Update Cashier in DB if it changed and we have a dbSessionId
-                    if (data.cashier && data.cashier !== currentInfo.cashier && updatedInfo.dbSessionId && pool) {
+                    const isRealCashier = (name) => {
+                        if (!name) return false;
+                        const lower = name.trim().toLowerCase();
+                        return lower !== 'not logged in' && lower !== 'no cashier' && lower !== 'cashier';
+                    };
+
+                    const formatDatetime = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
+
+                    // If real cashier logged in
+                    if (data.cashier && isRealCashier(data.cashier) && pool) {
+                        if (updatedInfo.dbSessionId) {
+                            pool.query(
+                                `UPDATE terminal_sessions SET cashier = ? WHERE id = ?`,
+                                [data.cashier, updatedInfo.dbSessionId],
+                                (err) => {
+                                    if (err) console.error('Error updating session cashier:', err);
+                                }
+                            );
+                        } else {
+                            // Create new DB session on cashier login
+                            pool.query(
+                                `INSERT INTO terminal_sessions 
+                                 (terminalId, storeNo, storeName, type, cashier, ip, connectedAt) 
+                                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                                [
+                                    updatedInfo.terminalId,
+                                    updatedInfo.storeNo,
+                                    updatedInfo.storeName,
+                                    updatedInfo.type,
+                                    data.cashier,
+                                    updatedInfo.ip,
+                                    formatDatetime(new Date())
+                                ],
+                                (insertErr, insertResult) => {
+                                    if (!insertErr) {
+                                        updatedInfo.dbSessionId = insertResult.insertId;
+                                        connectedTerminals.set(socket.id, updatedInfo);
+                                        console.log(`[Socket] Created DB session on cashier login: ${insertResult.insertId}`);
+                                    }
+                                }
+                            );
+                        }
+                    } else if (data.cashier && !isRealCashier(data.cashier) && updatedInfo.dbSessionId && pool) {
+                        // Close DB session on logout
                         pool.query(
-                            `UPDATE terminal_sessions SET cashier = ? WHERE id = ?`,
-                            [data.cashier, updatedInfo.dbSessionId],
+                            `UPDATE terminal_sessions SET disconnectedAt = ? WHERE id = ?`,
+                            [formatDatetime(new Date()), updatedInfo.dbSessionId],
                             (err) => {
-                                if (err) console.error('Error updating session cashier:', err);
+                                if (!err) {
+                                    updatedInfo.dbSessionId = null;
+                                    connectedTerminals.set(socket.id, updatedInfo);
+                                }
                             }
                         );
                     }

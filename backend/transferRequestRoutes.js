@@ -379,15 +379,70 @@ router.post('/approve', async (req, res) => {
 router.post('/decline', async (req, res) => {
     try {
         const { transferId, approvedBy, approvedByName, comments } = req.body;
+        
+        // 1. Fetch the request to see its status and local_id
+        const [request] = await query(`SELECT local_id, status FROM store_stock_transfers WHERE id = ?`, [transferId]);
+        
+        if (!request) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
 
+        // 2. If it was already approved/in_transit, we need to reverse the stock transactions
+        if (request.status === 'APPROVED' || request.status === 'IN_TRANSIT') {
+            const dateTimeUtils = require("./dateTimeUtils");
+            const opTimestamp = new Date();
+            const sltTimeString = dateTimeUtils.toSLMySQLDateTime(opTimestamp);
+            
+            // Helper to reverse transaction
+            const reverseTransaction = async (storeNo, originalType, itemId, qty, refId, comments) => {
+                const newType = originalType === 'AdjOut' ? 'AdjIn' : 'AdjOut';
+                const result = await query(
+                    `INSERT INTO store_transactions
+                (DATE, CREATED_DATE, STOCK_DATE, STORE_NO, TYPE, REFERENCE_TRANSACTION, COMMENTS, CREATED_BY, IS_ACTIVE, CODE)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+                    [sltTimeString, opTimestamp, opTimestamp, storeNo, newType, refId, comments, approvedBy, `TX-${opTimestamp.getTime()}-${Math.random().toString(36).substr(2, 4)}`]
+                );
+                const transId = result.insertId;
+        
+                await query(
+                    `INSERT INTO store_transactions_items
+                (TRANSACTION_ID, ITEM_ID, QUANTITY, TOTAL, IS_ACTIVE, CREATED_BY)
+                    VALUES(?, ?, ?, 0, 1, ?)`,
+                    [transId, itemId, qty, approvedBy]
+                );
+            };
+
+            // Find all related transactions (AdjOut and AdjIn) linked to this local_id
+            const transactions = await query(`
+                SELECT t.STORE_NO, t.TYPE, i.ITEM_ID, i.QUANTITY 
+                FROM store_transactions t
+                JOIN store_transactions_items i ON t.TRANSACTION_ID = i.TRANSACTION_ID
+                WHERE t.REFERENCE_TRANSACTION = ? AND t.IS_ACTIVE = 1
+            `, [request.local_id]);
+
+            // Reverse them
+            for (const t of transactions) {
+                await reverseTransaction(
+                    t.STORE_NO, 
+                    t.TYPE, 
+                    t.ITEM_ID, 
+                    t.QUANTITY, 
+                    request.local_id, 
+                    `[Reversal] Declined Transfer ${request.local_id}`
+                );
+            }
+        }
+
+        // 3. Update status to DECLINED for all duplicates
         const querySql = `UPDATE store_stock_transfers 
                           SET status = 'DECLINED', approval_date = NOW(), approved_by = ?, approved_by_name = ?, comments = CONCAT(IFNULL(comments, ''), '\n[DECLINED]: ', ?)
-                          WHERE id = ? `;
+                          WHERE local_id = ? OR id = ?`;
 
-        await query(querySql, [approvedBy, approvedByName, comments, transferId]);
+        await query(querySql, [approvedBy, approvedByName, comments, request.local_id, transferId]);
 
-        res.json({ success: true, message: 'Request declined' });
+        res.json({ success: true, message: 'Request declined and stock reverted' });
     } catch (error) {
+        console.error('Decline error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });

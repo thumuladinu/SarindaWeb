@@ -9,7 +9,18 @@ const util = require('util');
 router.use(cors());
 pool.query = util.promisify(pool.query);
 
-// ─── HELPERS ────────────────────────────────────────────────
+// Auto-migrate new columns for condition and dry percentage
+(async () => {
+    try {
+        await pool.query("ALTER TABLE mill_stock_inward ADD COLUMN `CONDITION` VARCHAR(20) DEFAULT 'dry'");
+    } catch (e) {}
+    try {
+        await pool.query("ALTER TABLE mill_stock_inward ADD COLUMN `DRY_PERCENTAGE` DECIMAL(5,2) DEFAULT 100.00");
+    } catch (e) {}
+    try {
+        await pool.query("ALTER TABLE mill_stock_inward ADD COLUMN `GROSS_WEIGHT` DECIMAL(12,2) DEFAULT NULL");
+    } catch (e) {}
+})();
 
 // Generate reference number: MI-YYYYMMDD-XXXX
 const generateReferenceNo = async (type) => {
@@ -153,7 +164,8 @@ router.post('/api/mill/inward/add', async (req, res) => {
             'INWARD_TYPE', 'REFERENCE_NO', 'ITEM_ID', 'PLACE_ID', 'QUANTITY', 'SOURCE_QUANTITY',
             'SURPLUS_WASTAGE', 'PRICE_PER_UNIT', 'TOTAL_PRICE', 'NO_OF_BAGS', 'STORE_NO',
             'STORE_TRANSFER_REF', 'VEHICLE_NO', 'DRIVER_NAME', 'SUPPLIER_ID', 'DATE',
-            'NOTES', 'RECEIVED_BY', 'CREATED_BY', 'IS_SYNCED', 'LOCAL_ID', 'SYNC_TIMESTAMP'
+            'NOTES', 'RECEIVED_BY', 'CREATED_BY', 'IS_SYNCED', 'LOCAL_ID', 'SYNC_TIMESTAMP',
+            'CONDITION', 'DRY_PERCENTAGE', 'GROSS_WEIGHT', 'MOISTURE_LOSS_PERCENT'
         ];
         const insertData = {};
         allowedFields.forEach(f => {
@@ -507,6 +519,64 @@ router.post('/api/mill/inward/deactivate', async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to deactivate record' });
     } catch (error) {
         console.error('Error deactivating mill inward:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// ─── UPDATE INWARD RECORD ───────────────────────────────────
+router.post('/api/mill/inward/update', async (req, res) => {
+    try {
+        const { INWARD_ID } = req.body;
+        if (!INWARD_ID) {
+            return res.status(400).json({ success: false, message: 'INWARD_ID is required' });
+        }
+
+        const existing = await pool.query('SELECT * FROM mill_stock_inward WHERE INWARD_ID = ? AND IS_ACTIVE = 1', [INWARD_ID]);
+        if (!existing || existing.length === 0) {
+            return res.status(404).json({ success: false, message: 'Inward record not found' });
+        }
+        const oldRecord = existing[0];
+
+        const data = req.body;
+        const allowedFields = [
+            'INWARD_TYPE', 'ITEM_ID', 'PLACE_ID', 'QUANTITY', 'SOURCE_QUANTITY',
+            'SURPLUS_WASTAGE', 'PRICE_PER_UNIT', 'TOTAL_PRICE', 'NO_OF_BAGS', 'STORE_NO',
+            'STORE_TRANSFER_REF', 'VEHICLE_NO', 'DRIVER_NAME', 'SUPPLIER_ID', 'DATE',
+            'NOTES', 'CONDITION', 'DRY_PERCENTAGE', 'GROSS_WEIGHT', 'MOISTURE_LOSS_PERCENT'
+        ];
+        const updateData = {};
+        allowedFields.forEach(f => {
+            if (data[f] !== undefined) updateData[f] = data[f];
+        });
+
+        await pool.query('UPDATE mill_stock_inward SET ? WHERE INWARD_ID = ?', [updateData, INWARD_ID]);
+
+        // Adjust inventory ledger if quantity changed
+        const newQty = parseFloat(data.QUANTITY !== undefined ? data.QUANTITY : oldRecord.QUANTITY);
+        const oldQty = parseFloat(oldRecord.QUANTITY || 0);
+        const diff = newQty - oldQty;
+
+        const itemId = data.ITEM_ID || oldRecord.ITEM_ID;
+        const placeId = data.PLACE_ID !== undefined ? data.PLACE_ID : oldRecord.PLACE_ID;
+        const date = data.DATE || oldRecord.DATE;
+
+        if (diff !== 0) {
+            await updateInventoryLedger(
+                itemId,
+                placeId,
+                Math.abs(diff),
+                diff > 0 ? 'ADJ_IN' : 'ADJ_OUT',
+                'inward_edit',
+                INWARD_ID,
+                date,
+                `Edit inward ${oldRecord.REFERENCE_NO}: qty adjusted by ${diff > 0 ? '+' : ''}${diff}kg`,
+                data.UPDATED_BY || oldRecord.CREATED_BY
+            );
+        }
+
+        return res.status(200).json({ success: true, message: 'Stock inward record updated successfully' });
+    } catch (error) {
+        console.error('Error updating mill inward:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });

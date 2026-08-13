@@ -33,7 +33,7 @@ const NAV_ITEMS = [
     { label: 'Items', path: '/items', icon: <ShopOutlined /> },
     { label: 'Inventory', path: '/inventory', icon: <StockOutlined /> }, // New
     { label: 'Customers', path: '/customers', icon: <TeamOutlined /> },
-    // { label: 'Users', path: '/users', icon: <UserOutlined /> },
+    { label: 'Users', path: '/users', icon: <UserOutlined /> },
     { label: 'Weighting', path: '/weighting', icon: <ExperimentOutlined /> },
     { label: 'Trips', path: '/trips', icon: <TruckOutlined /> }, // Changed from CarOutlined
     { key: '/stock-operations', label: 'Stock Ops', path: '/stock-operations', icon: <StockOutlined /> }, // New

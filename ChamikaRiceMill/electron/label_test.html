@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: sans-serif; }
+  .page-root { max-width: 1152px; margin: 0 auto; padding: 16px 16px 48px 16px; }
+  .page-root > * + * { margin-top: 24px; }
+
+  /* === REPLICA of MiniBagLabel === */
+  .mini {
+    background: #fff; color: #000; overflow: hidden;
+    width: 60mm; height: 40mm;
+    box-sizing: border-box; border: 1.5px solid #000; padding: 2px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-family: sans-serif;
+  }
+  .mini-header { display:flex; align-items:flex-start; justify-content:space-between; gap:4px; border-bottom:1.5px solid #000; padding-bottom:1px; min-height:0; }
+  .mini-header .left { line-height:1.15; min-width:0; flex:1; }
+  .mini-brand { font-size:7px; font-weight:800; letter-spacing:1px; color:#111; }
+  .mini-prod { font-size:9.5px; font-weight:900; letter-spacing:0.4px; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mini-qr { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+  .mini-specs { display:flex; justify-content:space-between; align-items:baseline; gap:4px; font-size:8px; font-weight:700; padding:1px 0; white-space:nowrap; }
+  .mini-batch { display:flex; justify-content:space-between; align-items:center; gap:4px; font-size:6.5px; font-weight:700; border-top:1px solid #000; border-bottom:1px solid #000; padding:1px 0; white-space:nowrap; }
+  .mini-bcode { display:flex; flex-direction:column; align-items:center; justify-content:center; padding-top:1px; }
+
+  /* preview scale */
+  .prev-wrap { width:340px; height:227px; overflow:hidden; }
+  .prev-scale { transform: scale(1.5); transform-origin: top left; width: 60mm; height: 40mm; }
+
+  /* === Print-only (exact copy of BagLabels printCss thermal) === */
+  .print-only { display: none; }
+  @media print {
+    @page { size: 60mm 40mm; margin: 0; }
+    html, body { background: white !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .print-only { display: block !important; }
+    .print-labels-container { display: block !important; }
+    .print-label-item { width: 60mm; height: 40mm; break-after: page; page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+<div class="page-root">
+  <!-- SCREEN PREVIEW -->
+  <div class="prev-wrap" style="background:#eee; padding:12px;">
+    <div class="prev-scale">
+      <div id="label-screen" class="mini"></div>
+    </div>
+  </div>
+
+  <!-- PRINT ONLY -->
+  <div class="print-only">
+    <div class="print-labels-container">
+      <div class="print-label-item" id="label-print-1"></div>
+      <div class="print-label-item" id="label-print-2"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const EAN13 = (() => {
+  function calc(first12){
+    let s=0; for(let i=0;i<12;i++){const v=parseInt(first12[i],10); if(i%2===0)s+=v; else s+=v*3;}
+    const r=s%10; return r===0?'0':String(10-r);
+  }
+  const L=['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+  const G=['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+  const R=['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+  const PM=['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+  return function svg(code13, width, height){
+    const digits=String(code13); const first=digits[0];
+    const left=digits.slice(1,7), right=digits.slice(7,13);
+    const parity=PM[parseInt(first,10)]||'LLLLLL';
+    let m='101';
+    for(let i=0;i<6;i++){const d=parseInt(left[i],10); m+=(parity[i]==='L')?L[d]:G[d];}
+    m+='01010';
+    for(let i=0;i<6;i++){const d=parseInt(right[i],10); m+=R[d];}
+    m+='101';
+    const quiet=14, tot=95, bw=width-(quiet+10), mw=bw/tot;
+    const bh=height*0.72, bg=height*0.85;
+    let rects='';
+    for(let i=0;i<tot;i++){
+      if(m[i]==='1'){
+        const guard=(i<=2)||(i>=45&&i<=49)||(i>=92&&i<=94);
+        const h=guard?bg:bh;
+        rects+=`<rect x="${quiet+(i*mw)}" y="2" width="${mw+0.15}" height="${h}" fill="#000"/>`;
+      }
+    }
+    const textY=height-3, lx=quiet+24*mw, rx=quiet+70*mw;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect width="${width}" height="${height}" fill="#fff"/>
+      ${rects}
+      <g font-family="monospace" font-size="${height*0.22}" font-weight="bold" fill="#000">
+        <text x="${quiet-9}" y="${height*0.78}" text-anchor="end">${first}</text>
+        <text x="${lx}" y="${textY}" text-anchor="middle" letter-spacing="1">${left}</text>
+        <text x="${rx}" y="${textY}" text-anchor="middle" letter-spacing="1">${right}</text>
+      </g></svg>`;
+  };
+})();
+
+function fill(id, code, weight){
+  const ean = EAN13(code, 196, 42);
+  const el = document.getElementById(id);
+  el.innerHTML = `
+    <div class="mini-header">
+      <div class="left">
+        <div class="mini-brand">CHAMIKA RICE MILLS</div>
+        <div class="mini-prod">KEERI SAMBA RICE</div>
+      </div>
+      <div class="mini-qr">
+        <svg width="28" height="28" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg"><path fill="#000" d="M2 2h4v4H2zm4 4h3v3H6zm3 3h4v4H9zm4-6h4v4h-4zM2 6h3v2H2zm0 8h4v4H2zm13-8h4v2h-4zm-4 8h5v2h-5z"/></svg>
+        <span style="font-size:4.5px;font-weight:800;letter-spacing:.5px;color:#555;text-transform:uppercase">QR</span>
+      </div>
+    </div>
+    <div class="mini-specs">
+      <span><span style="color:#333">NET WT:</span> <b>${weight}</b></span>
+      <span><span style="color:#333">MRP:</span> <b>Rs. 260.00</b></span>
+    </div>
+    <div class="mini-batch">
+      <span style="overflow:hidden;text-overflow:ellipsis">BATCH: <b>B-2026-08A</b></span>
+      <span style="flex-shrink:0">MFG <b>09/08/2026</b> · EXP <b>08/08/2027</b></span>
+    </div>
+    <div class="mini-bcode">
+      ${ean}
+      <span style="font-size:4.5px;font-weight:800;letter-spacing:1px;color:#555;margin-top:1px">GS1 LANKA · 479</span>
+    </div>`;
+}
+fill('label-screen','4790000000011','5 kg');
+fill('label-print-1','4790000000028','10 kg');
+fill('label-print-2','4790000000219','25 kg');
+</script>
+</body>
+</html>

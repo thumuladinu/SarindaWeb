@@ -2034,7 +2034,7 @@ router.get('/api/weights/:code', async (req, res) => {
 router.get('/api/users/all', async (req, res) => {
     try {
         const queryResult = await pool.query(
-            'SELECT USER_ID, NAME, USERNAME, ROLE, PHOTO, IS_ACTIVE FROM user_details WHERE IS_ACTIVE = 1'
+            'SELECT USER_ID, NAME, USERNAME, ROLE, PHOTO, IS_ACTIVE, PIN FROM user_details WHERE IS_ACTIVE = 1'
         );
 
         if (Array.isArray(queryResult)) {

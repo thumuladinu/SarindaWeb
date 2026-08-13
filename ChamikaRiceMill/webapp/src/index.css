@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+    --primary-color: #3B82F6;
+    color-scheme: dark;
+}
+
+html, body, #root {
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+body {
+    @apply bg-[#09090b] min-h-screen text-gray-100 transition-colors duration-300;
+    background-image: radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.05), transparent 25%);
+}
+
+/* ─── Permanent Dark Glassmorphism Utilities ─────────────────────── */
+@layer utilities {
+    .glass-card {
+        @apply bg-zinc-900/80 backdrop-blur-xl border border-white/10 shadow-2xl;
+    }
+    .glass-sidebar {
+        @apply bg-[#0f1012]/90 backdrop-blur-xl border-r border-white/10;
+    }
+    .page-paper {
+        @apply bg-zinc-900/80 rounded-2xl shadow-2xl border border-white/10 p-4 md:p-6;
+    }
+
+    /* Input Styles */
+    .input-dark-glass {
+        @apply !bg-zinc-800/80 !border-white/10 !text-white !transition-all !duration-300;
+    }
+    .input-dark-glass::placeholder {
+        @apply !text-zinc-500;
+    }
+    .input-dark-glass:hover {
+        @apply !border-blue-500/50;
+    }
+    .input-dark-glass:focus {
+        @apply !border-blue-500;
+    }
+
+    .login-gradient {
+        background: radial-gradient(circle at 50% -20%, rgba(59, 130, 246, 0.2) 0%, rgba(0, 0, 0, 0) 50%),
+            radial-gradient(circle at 100% 0%, #1e3a5f 0%, transparent 50%),
+            radial-gradient(circle at 0% 100%, #1e40af 0%, transparent 50%),
+            linear-gradient(135deg, #0f172a 0%, #172554 100%);
+    }
+}
+
+/* ─── Ant Design Overrides (Dark Theme) ──────────────────── */
+.ant-btn-primary {
+    @apply !bg-gradient-to-r !from-blue-500 !to-blue-600 !shadow-lg !shadow-blue-900/30 !font-semibold tracking-wide !transition-opacity !duration-200 !important;
+}
+.ant-btn-primary:hover {
+    @apply !opacity-90 !text-white !important;
+}
+
+/* Form input styling */
+.ant-input,
+.ant-input-number,
+.ant-picker,
+.ant-select-selector,
+.ant-input-number-handler-wrap {
+    @apply !bg-[#18181b] !border-white/15 !text-gray-100 !important;
+}
+.ant-input-number-input,
+.ant-select-selection-item,
+.ant-select-selection-placeholder,
+.ant-picker-input > input,
+.ant-picker-suffix,
+.ant-select-arrow {
+    @apply !text-gray-200 !important;
+}
+
+.ant-form-item-label > label {
+    @apply !text-gray-300 !font-medium !important;
+}
+
+/* ─── Table Styling ──────────────────────────────────────── */
+.ant-table {
+    @apply !bg-transparent !text-gray-200;
+}
+.ant-table-thead > tr > th {
+    @apply !bg-zinc-800/70 !text-gray-200 !font-bold !border-b !border-white/10 !important;
+}
+.ant-table-tbody > tr > td {
+    @apply !border-b !border-white/5 !text-gray-200;
+}
+.ant-table-tbody > tr:hover > td {
+    @apply !bg-zinc-800/50 !important;
+}
+.ant-pagination-item-active {
+    @apply !bg-blue-600 !border-blue-500;
+}
+.ant-pagination-item-active a {
+    @apply !text-white !important;
+}
+
+/* ─── Drawer & Modal Styling ─────────────────────────────────────── */
+.ant-drawer-content,
+.ant-modal-content {
+    @apply !bg-zinc-900 !border !border-white/10 !text-gray-100;
+}
+.ant-drawer-header,
+.ant-modal-header {
+    @apply !bg-zinc-900 !border-b !border-white/10;
+}
+.ant-drawer-title,
+.ant-modal-title {
+    @apply !text-white !font-bold;
+}
+.ant-modal-close-icon {
+    @apply !text-gray-400 hover:!text-white;
+}
+
+/* ─── Dropdowns & Popovers ───────────────────────────────── */
+.ant-select-dropdown,
+.ant-picker-dropdown,
+.ant-dropdown-menu {
+    @apply !bg-zinc-900 !border !border-white/10 !shadow-2xl !important;
+}
+.ant-select-item {
+    @apply !text-gray-200 !transition-colors;
+}
+.ant-select-item-option-active,
+.ant-select-item-option-selected {
+    @apply !bg-blue-600/30 !text-blue-300 !font-semibold !important;
+}
+
+/* ─── Tabs Styling ───────────────────────────────────────── */
+.ant-tabs-tab {
+    @apply !text-gray-400 !font-medium;
+}
+.ant-tabs-tab-active .ant-tabs-tab-btn {
+    @apply !text-blue-400 !font-bold;
+}
+.ant-tabs-ink-bar {
+    @apply !bg-blue-500;
+}
+
+/* ─── Card Overrides ─────────────────────────────────────── */
+.ant-card {
+    @apply !bg-zinc-900/80 !border-white/10 !text-gray-100;
+}
+.ant-card-head {
+    @apply !border-white/10 !text-white !font-bold;
+}
+
+/* ─── Scrollbar styling ──────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    @apply bg-zinc-700 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-zinc-600;
+}
+
+/* ─── Tag Styling ────────────────────────────────────────── */
+.category-tag-raw_input {
+    @apply !bg-amber-500/20 !text-amber-300 !border-amber-500/30;
+}
+.category-tag-output {
+    @apply !bg-green-500/20 !text-green-300 !border-green-500/30;
+}
+.category-tag-by_product {
+    @apply !bg-purple-500/20 !text-purple-300 !border-purple-500/30;
+}
+.category-tag-seasonal {
+    @apply !bg-orange-500/20 !text-orange-300 !border-orange-500/30;
+}
+.category-tag-other {
+    @apply !bg-gray-500/20 !text-gray-300 !border-gray-500/30;
+}
+
+/* ─── Mobile Optimizations (4" screens) ──────────────────── */
+@media (max-width: 374px) {
+    .ant-table {
+        font-size: 12px;
+    }
+    .ant-btn {
+        @apply !text-xs !px-2;
+    }
+    .page-paper {
+        @apply !p-3;
+    }
+}
+
+/* ─── Safe area for mobile browsers ──────────────────────── */
+.pt-safe-top {
+    padding-top: env(safe-area-inset-top, 0);
+}
+.pb-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Print Styles */
+@media print {
+    html, body, #root {
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    body > *:not(#root),
+    .print\:hidden {
+        display: none !important;
+    }
+
+    body * {
+        visibility: hidden;
+    }
+
+    .print-area, .print-area * {
+        visibility: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .print-area {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        color: black !important;
+    }
+}

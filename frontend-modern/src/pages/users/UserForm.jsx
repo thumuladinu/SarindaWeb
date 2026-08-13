@@ -393,6 +393,31 @@ const UserForm = ({ open, onClose, onSuccess, initialValues, mode = 'add' }) => 
                     <Row gutter={16}>
                         <Col span={24}>
                             <Form.Item
+                                name="PIN"
+                                label="4-Digit Quick Login PIN"
+                                help="Optional 4-digit PIN for quick POS & Weighing App login"
+                                rules={[
+                                    {
+                                        pattern: /^[0-9]{4}$/,
+                                        message: 'PIN must be exactly 4 numeric digits (e.g. 1234)'
+                                    }
+                                ]}
+                            >
+                                <Input
+                                    maxLength={4}
+                                    placeholder="Enter 4-digit PIN (e.g. 1234)"
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                        form.setFieldValue('PIN', val);
+                                    }}
+                                />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={16}>
+                        <Col span={24}>
+                            <Form.Item
                                 name="IS_ACTIVE"
                                 valuePropName="checked"
                                 label="Status"
