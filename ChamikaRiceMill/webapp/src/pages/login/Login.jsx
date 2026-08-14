@@ -18,7 +18,7 @@ const Login = () => {
             const response = await axios.post('/api/login', values);
 
             if (response.status === 200) {
-                const { USER_ID, NAME, EMAIL, ROLE, PHOTO } = response.data.user;
+                const { USER_ID, NAME, EMAIL, ROLE, PHOTO, USERNAME } = response.data.user;
 
                 // Enforce role access — supports comma-separated roles
                 if (!hasAnyRole(ROLE, ALLOWED_ROLES)) {
@@ -26,10 +26,12 @@ const Login = () => {
                     return;
                 }
 
+                const cookieUserObj = { USER_ID, NAME, EMAIL, ROLE, PHOTO, USERNAME: USERNAME || values.username || '' };
+
                 if (values.remember) {
-                    Cookies.set('millUser', JSON.stringify({ USER_ID, NAME, EMAIL, ROLE, PHOTO }), { expires: 90 });
+                    Cookies.set('millUser', JSON.stringify(cookieUserObj), { expires: 90 });
                 } else {
-                    Cookies.set('millUser', JSON.stringify({ USER_ID, NAME, EMAIL, ROLE, PHOTO }));
+                    Cookies.set('millUser', JSON.stringify(cookieUserObj));
                 }
 
                 message.success({ content: 'Welcome back!', key: 'login' });

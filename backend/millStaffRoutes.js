@@ -97,7 +97,7 @@ router.post('/api/mill/staff/update', async (req, res) => {
             [
                 NAME,
                 PHONE_NUMBER || null,
-                ROLE || 'labor',
+                ROLE || 'officer',
                 USERNAME || null,
                 PASSWORD || null,
                 PIN || null,
@@ -106,6 +106,18 @@ router.post('/api/mill/staff/update', async (req, res) => {
                 STAFF_ID
             ]
         );
+
+        // Sync PIN, PASSWORD, USERNAME to user_details so the same PIN works across POS, Weighing, and Mill apps
+        if (PIN || USERNAME || PASSWORD) {
+            await pool.query(
+                `UPDATE user_details 
+                 SET PIN = COALESCE(?, PIN),
+                     PASSWORD = COALESCE(?, PASSWORD),
+                     USERNAME = COALESCE(?, USERNAME)
+                 WHERE USER_ID = ? OR LOWER(USERNAME) = LOWER(?) OR LOWER(NAME) = LOWER(?)`,
+                [PIN || null, PASSWORD || null, USERNAME || null, STAFF_ID, USERNAME || '', NAME || '']
+            ).catch(e => console.warn('[StaffSync] Could not sync user_details:', e.message));
+        }
 
         res.json({ success: true, message: 'Staff member updated successfully' });
     } catch (error) {
@@ -138,10 +150,17 @@ router.post('/api/mill/staff/pin-login', async (req, res) => {
             return res.status(400).json({ success: false, message: 'PIN required' });
         }
 
-        const result = await pool.query(
-            "SELECT * FROM mill_staff WHERE PIN = ? AND ROLE = 'officer' AND IS_ACTIVE = 1 LIMIT 1",
+        let result = await pool.query(
+            "SELECT * FROM mill_staff WHERE PIN = ? AND IS_ACTIVE = 1 LIMIT 1",
             [PIN]
         );
+
+        if (!result || result.length === 0) {
+            result = await pool.query(
+                "SELECT * FROM user_details WHERE PIN = ? AND (IS_ACTIVE = 1 OR IS_ACTIVE IS NULL) LIMIT 1",
+                [PIN]
+            );
+        }
 
         if (!result || result.length === 0) {
             return res.status(401).json({ success: false, message: 'Invalid PIN or unauthorized officer' });
@@ -151,9 +170,9 @@ router.post('/api/mill/staff/pin-login', async (req, res) => {
         res.json({
             success: true,
             user: {
-                USER_ID: officer.STAFF_ID,
+                USER_ID: officer.STAFF_ID || officer.USER_ID,
                 NAME: officer.NAME,
-                ROLE: 'officer',
+                ROLE: officer.ROLE || 'officer',
                 USERNAME: officer.USERNAME
             }
         });
