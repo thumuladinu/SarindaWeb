@@ -64,9 +64,14 @@ export default function Header() {
     const userInitial = userName.charAt(0).toUpperCase();
 
     const handleLogout = () => {
+        Cookies.remove('millUser', { path: '/' });
         Cookies.remove('millUser');
+        Cookies.remove('rememberedUser', { path: '/' });
+        Cookies.remove('rememberedUser');
+        localStorage.removeItem('millUser');
+        sessionStorage.clear();
         message.success('Logged out successfully');
-        window.location.href = '/';
+        window.location.href = '/login';
     };
 
     // Helper to calculate due status
@@ -117,6 +122,7 @@ export default function Header() {
 
     const urgentCount = categorizedCheques.filter(c => c.info.canAction).length;
 
+    // Profile Dropdown Menu Items
     const profileMenuItems = [
         {
             key: 'user-info',
@@ -140,11 +146,9 @@ export default function Header() {
         { type: 'divider' },
         {
             key: 'logout',
-            label: (
-                <Button type="primary" danger icon={<LogoutOutlined />} block className="!bg-red-500 hover:!bg-red-600 !border-none">
-                    Logout
-                </Button>
-            ),
+            danger: true,
+            icon: <LogoutOutlined />,
+            label: 'Logout',
             onClick: handleLogout,
         },
     ];

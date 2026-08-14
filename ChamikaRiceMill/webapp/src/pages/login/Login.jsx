@@ -27,7 +27,7 @@ const Login = () => {
                 }
 
                 if (values.remember) {
-                    Cookies.set('millUser', JSON.stringify({ USER_ID, NAME, EMAIL, ROLE, PHOTO }), { expires: 2 });
+                    Cookies.set('millUser', JSON.stringify({ USER_ID, NAME, EMAIL, ROLE, PHOTO }), { expires: 90 });
                 } else {
                     Cookies.set('millUser', JSON.stringify({ USER_ID, NAME, EMAIL, ROLE, PHOTO }));
                 }

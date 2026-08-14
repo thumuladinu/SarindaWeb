@@ -268,38 +268,46 @@ export default function Login() {
                             />
                         </div>
 
-                        {/* List of Registered Accounts in IndexedDB for 1-click select */}
-                        {availableStaff.length > 0 && (
-                            <div>
-                                <div className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">
-                                    Registered Officers ({availableStaff.length})
-                                </div>
-                                <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                                    {availableStaff.map(staff => (
-                                        <div
-                                            key={staff.STAFF_ID}
-                                            onClick={() => handleProceedToStep2(staff.USERNAME || staff.NAME)}
-                                            className="p-2.5 rounded-xl border border-slate-200/80 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-between cursor-pointer group"
-                                        >
-                                            <div className="flex items-center gap-2.5">
-                                                <Avatar size={28} className="bg-blue-600 text-white text-xs font-bold">
-                                                    {(staff.NAME || staff.USERNAME || 'U')[0].toUpperCase()}
-                                                </Avatar>
-                                                <div>
-                                                    <div className="text-xs font-bold text-slate-800 group-hover:text-blue-700">
-                                                        {staff.NAME}
-                                                    </div>
-                                                    <div className="text-[10px] text-slate-400 font-mono">
-                                                        @{staff.USERNAME || `user${staff.STAFF_ID}`} • {staff.ROLE || 'Officer'}
+                        {/* Autocomplete Suggestions — ONLY shown after user types at least 2 characters to prevent exposing usernames */}
+                        {usernameInput.trim().length >= 2 && (() => {
+                            const q = usernameInput.trim().toLowerCase();
+                            const matches = availableStaff.filter(staff => 
+                                (staff.USERNAME && staff.USERNAME.toLowerCase().includes(q)) ||
+                                (staff.NAME && staff.NAME.toLowerCase().includes(q))
+                            );
+                            if (matches.length === 0) return null;
+                            return (
+                                <div>
+                                    <div className="text-[11px] font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                                        Matching Accounts ({matches.length})
+                                    </div>
+                                    <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                                        {matches.map(staff => (
+                                            <div
+                                                key={staff.STAFF_ID}
+                                                onClick={() => handleProceedToStep2(staff.USERNAME || staff.NAME)}
+                                                className="p-2 rounded-xl border border-slate-200/80 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-between cursor-pointer group"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <Avatar size={26} className="bg-blue-600 text-white text-xs font-bold">
+                                                        {(staff.NAME || staff.USERNAME || 'U')[0].toUpperCase()}
+                                                    </Avatar>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-slate-800 group-hover:text-blue-700">
+                                                            {staff.NAME}
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-400 font-mono">
+                                                            @{staff.USERNAME || `user${staff.STAFF_ID}`}
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                <ArrowRightOutlined className="text-xs text-slate-300 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
                                             </div>
-                                            <ArrowRightOutlined className="text-xs text-slate-300 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            );
+                        })()}
 
                         <Button
                             type="primary"

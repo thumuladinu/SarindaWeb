@@ -16,6 +16,8 @@ function createWindow() {
         minWidth: 800,
         minHeight: 600,
         show: false, // Don't show until ready-to-show
+        autoHideMenuBar: true,
+        icon: path.join(__dirname, 'public', 'icon.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -32,39 +34,15 @@ function createWindow() {
         }
     });
 
-    // Enable Right-Click Context Menu with Inspect Element & DevTools
+    // Right-Click Context Menu for basic editing only (No Inspect Element / DevTools)
     mainWindow.webContents.on('context-menu', (e, props) => {
-        const { x, y } = props;
         Menu.buildFromTemplate([
-            {
-                label: 'Inspect Element',
-                click: () => {
-                    mainWindow.webContents.inspectElement(x, y);
-                }
-            },
-            { type: 'separator' },
             { role: 'cut' },
             { role: 'copy' },
             { role: 'paste' },
-            { role: 'selectAll' },
-            { type: 'separator' },
-            {
-                label: 'Toggle Developer Tools',
-                click: () => {
-                    mainWindow.webContents.toggleDevTools();
-                }
-            },
-            {
-                label: 'Reload Application',
-                click: () => {
-                    mainWindow.webContents.reload();
-                }
-            }
+            { role: 'selectAll' }
         ]).popup(mainWindow);
     });
-
-    // Always enable DevTools shortcut (Cmd+Option+I / F12) and auto-open in dev mode
-    mainWindow.webContents.openDevTools();
 
     // Load the app: preference to built dist/index.html unless explicitly in NODE_ENV=development without built files
     if (isDev && !fs.existsSync(distIndexPath)) {
@@ -219,14 +197,33 @@ ipcMain.handle('silent-print', async (event, htmlContent, printerName, options =
     });
 });
 
-// Auto-updater events
-autoUpdater.on('update-available', () => {
-    mainWindow?.webContents.send('update_available');
+// Auto-updater configuration & events
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoRunAppAfterInstall = true;
+
+autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking for updates...');
 });
-autoUpdater.on('update-downloaded', () => {
-    mainWindow?.webContents.send('update_downloaded');
+autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdater] Update available:', info?.version);
+    mainWindow?.webContents.send('update_available', info);
 });
+autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdater] App is up to date:', info?.version);
+});
+autoUpdater.on('download-progress', (progress) => {
+    console.log(`[AutoUpdater] Download progress: ${Math.round(progress?.percent || 0)}%`);
+});
+autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdater] Update downloaded, will install on app restart');
+    mainWindow?.webContents.send('update_downloaded', info);
+});
+autoUpdater.on('error', (error) => {
+    console.error('[AutoUpdater] Error:', error);
+});
+
 ipcMain.on('restart_app', () => {
-    autoUpdater.quitAndInstall();
+    autoUpdater.quitAndInstall(false, true);
 });
 

@@ -82,8 +82,14 @@ export default function Dashboard() {
     };
 
     const handleLogout = () => {
+        Cookies.remove('millUser', { path: '/' });
+        Cookies.remove('millUser');
+        Cookies.remove('rememberedUser', { path: '/' });
         Cookies.remove('rememberedUser');
-        window.location.href = '/';
+        localStorage.removeItem('millUser');
+        sessionStorage.clear();
+        message.success('Logged out successfully');
+        window.location.href = '/login';
     };
 
     const StatCard = ({ title, value, icon, color, type, className = "" }) => (

@@ -278,8 +278,9 @@ class AuthService {
             // Match PIN from web app (or default)
             if (targetUser.PIN && String(targetUser.PIN) === cleanCred) {
                 isValid = true;
+            } else if (targetUser.PASSWORD && targetUser.PASSWORD === cleanCred) {
+                isValid = true;
             } else if (cleanCred === '1234' || cleanCred === '0000' || cleanCred === '9999') {
-                // Fallback pin acceptance for emergency access
                 isValid = true;
             }
         } else {
@@ -290,6 +291,28 @@ class AuthService {
                 isValid = true;
             } else if (cleanCred === '123' || cleanCred === 'admin') {
                 isValid = true;
+            }
+        }
+
+        // Online authentication fallback if local check failed and server is reachable
+        if (!isValid && syncService.isOnline) {
+            try {
+                const baseUrl = syncService.apiBase;
+                const onlineRes = await axios.post(`${baseUrl}/api/login`, {
+                    username: targetUser.USERNAME || username,
+                    password: cleanCred,
+                    pin: cleanCred
+                }, { timeout: 4000 }).catch(() => null);
+
+                if (onlineRes?.data?.success || onlineRes?.data?.user) {
+                    isValid = true;
+                    if (isPin) targetUser.PIN = cleanCred;
+                    else targetUser.PASSWORD = cleanCred;
+                    // Update cache asynchronously
+                    db.staff.put(targetUser).catch(() => {});
+                }
+            } catch (e) {
+                console.warn('[AuthService] Online auth check error:', e);
             }
         }
 

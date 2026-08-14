@@ -26,7 +26,7 @@ const Login = () => {
                 }
 
                 if (values.remember) {
-                    Cookies.set('rememberedUser', JSON.stringify({ USER_ID, NAME, EMAIL, ROLE, PHOTO }), { expires: 2 });
+                    Cookies.set('rememberedUser', JSON.stringify({ USER_ID, NAME, EMAIL, ROLE, PHOTO }), { expires: 90 });
                 }
 
                 message.success({ content: 'Welcome back!', key: 'login' });

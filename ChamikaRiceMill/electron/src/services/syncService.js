@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import db from './db';
 import { getTerminalDeviceCode, getCurrentUserName } from '../utils/terminalHelper';
 
-const DEFAULT_API_BASE = 'http://localhost:3001';
+const DEFAULT_API_BASE = 'https://crm.bridgitalsolutions.com';
 
 export function getStoredApiBase() {
     try {
