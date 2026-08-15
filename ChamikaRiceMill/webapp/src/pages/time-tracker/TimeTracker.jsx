@@ -208,7 +208,7 @@ export default function TimeTracker() {
                         onClick={() => fetchSessions(selectedDate)}
                         className="p-2.5 rounded-xl bg-blue-600/20 border border-blue-500/30 text-blue-400 hover:bg-blue-600/30 transition-all flex items-center gap-1.5 text-xs font-semibold"
                     >
-                        <SyncOutlined spin={loading} /> Refresh
+                        <SyncOutlined /> Refresh
                     </button>
                     <DatePicker
                         value={selectedDate}

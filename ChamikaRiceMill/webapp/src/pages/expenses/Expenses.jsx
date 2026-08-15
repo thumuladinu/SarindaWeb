@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { formatSLDateTime } from '../../utils/helpers';
 
 const { Option } = Select;
 
@@ -351,7 +352,8 @@ export default function Expenses() {
             title: 'Date',
             dataIndex: 'DATE',
             key: 'DATE',
-            render: d => d ? dayjs(d).format('DD/MM/YYYY HH:mm') : '-'
+            width: 110,
+            render: d => d ? dayjs(d).format('YYYY-MM-DD') : '-'
         },
         {
             title: 'Category',
@@ -383,6 +385,25 @@ export default function Expenses() {
             dataIndex: 'NOTES',
             key: 'NOTES',
             render: n => <span className="text-xs text-slate-500 max-w-xs block truncate">{n || '—'}</span>
+        },
+        {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 150,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             title: 'Action',
@@ -501,8 +522,8 @@ export default function Expenses() {
                                 >
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <div className="font-mono font-bold text-rose-400 text-base">#{record.EXPENSE_ID}</div>
-                                            <div className="text-xs text-gray-400">{record.DATE ? dayjs(record.DATE).format('DD/MM/YYYY HH:mm') : '-'}</div>
+                                            <div className="font-mono font-bold text-rose-400 text-base">#{record.EXPENSE_ID || record.EXPENSE_NO}</div>
+                                            <div className="text-xs text-gray-400 font-mono mt-0.5">{record.DATE ? dayjs(record.DATE).format('YYYY/MM/DD') : '-'}</div>
                                         </div>
                                         <Tag color="blue" className="font-bold m-0">{record.CATEGORY_NAME}</Tag>
                                     </div>
@@ -524,6 +545,9 @@ export default function Expenses() {
                                             <Button size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); handleOpenEdit(record); }} className="rounded-lg !text-amber-500" />
                                             <Button size="small" danger type="text" icon={<DeleteOutlined />} onClick={(e) => { e.stopPropagation(); handleDeleteExpense(record.EXPENSE_ID); }} />
                                         </div>
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 font-normal pt-1.5 border-t border-white/5">
+                                        created {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).dateStr.replace(/-/g, '/')} {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).timeStr}{formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy ? ` by ${formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy}` : ''}
                                     </div>
                                 </div>
                             ))

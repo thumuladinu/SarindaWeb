@@ -4,7 +4,10 @@ import { SearchOutlined, PlusOutlined, DeleteOutlined, EyeOutlined, ImportOutlin
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import dayjs from 'dayjs';
-import { canModify, formatNumber, formatCurrency, formatWeight, toSLDateDisplay, toSLTime, getSLToday } from '../../utils/helpers';
+import { 
+    toSLTime, toSLDate, toSLDateDisplay, getSLToday, getSLNow, 
+    formatNumber, formatCurrency, canModify, formatSLDateTime 
+} from '../../utils/helpers';
 
 const typeLabels = { store_transfer: 'Store Transfer', mill_purchase: 'Mill Purchase', go_and_get: 'Go & Get' };
 const typeColors = { store_transfer: 'blue', mill_purchase: 'purple', go_and_get: 'cyan' };
@@ -471,8 +474,27 @@ export default function StockInward() {
             title: 'Date',
             dataIndex: 'DATE',
             key: 'DATE',
-            width: 100,
-            render: (val) => toSLDateDisplay(val),
+            width: 110,
+            render: val => val ? dayjs(val).format('YYYY-MM-DD') : '-'
+        },
+        {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 150,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             title: '',
@@ -643,7 +665,12 @@ export default function StockInward() {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <div className="font-mono font-bold text-blue-400 text-sm">{record.REFERENCE_NO}</div>
-                                    <div className="text-xs text-gray-400">{toSLDateDisplay(record.DATE)}</div>
+                                    <div className="text-xs text-gray-400 font-mono mt-0.5">{record.DATE ? dayjs(record.DATE).format('YYYY/MM/DD') : '-'}</div>
+                                    <div className="text-xs text-gray-400 font-mono flex items-center gap-1 flex-wrap mt-0.5">
+                                        {formatSLDateTime(record.DATE, record).addedBy && (
+                                            <span className="text-blue-300 font-semibold">👤 {formatSLDateTime(record.DATE, record).addedBy}</span>
+                                        )}
+                                    </div>
                                 </div>
                                 <div>
                                     <Tag color={record.INWARD_TYPE === 'amu_wee' ? 'gold' : record.INWARD_TYPE === 'store_transfer' ? 'cyan' : record.INWARD_TYPE === 'mill_purchase' ? 'purple' : 'green'}>
@@ -705,6 +732,9 @@ export default function StockInward() {
                                         </Popconfirm>
                                     </div>
                                 )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-normal pt-1.5 border-t border-white/5">
+                                created {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).dateStr.replace(/-/g, '/')} {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).timeStr}{formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy ? ` by ${formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy}` : ''}
                             </div>
                         </div>
                     ))

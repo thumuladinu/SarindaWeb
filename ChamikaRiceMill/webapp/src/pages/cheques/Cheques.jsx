@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CheckCircle
 import axios from 'axios';
 import moment from 'moment';
 import dayjs from 'dayjs';
+import { formatSLDateTime } from '../../utils/helpers';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -193,11 +194,12 @@ export default function Cheques() {
             title: 'Due Date',
             dataIndex: 'DUE_DATE',
             key: 'DUE_DATE',
-            render: text => {
-                const isOverdue = moment(text).isBefore(moment(), 'day');
+            render: (text, record) => {
+                const { dateStr } = formatSLDateTime(text, record);
+                const isOverdue = dayjs(text).isBefore(dayjs(), 'day');
                 return (
                     <Text type={isOverdue ? "danger" : undefined}>
-                        {new Date(text).toLocaleDateString()}
+                        {dateStr}
                     </Text>
                 );
             }
@@ -408,7 +410,7 @@ export default function Cheques() {
                                     <div className="flex justify-between items-center">
                                         <span className="text-gray-400">Due Date:</span>
                                         <span className={`font-mono font-bold ${isOverdue ? 'text-red-400' : 'text-gray-200'}`}>
-                                            {record.DUE_DATE ? dayjs(record.DUE_DATE).format('YYYY-MM-DD') : '-'}
+                                            {formatSLDateTime(record.DUE_DATE, record).dateStr}
                                         </span>
                                     </div>
                                 </div>

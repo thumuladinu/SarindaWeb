@@ -127,6 +127,7 @@ router.post('/api/mill/returns/add', async (req, res) => {
             REFUND_METHOD: REFUND_METHOD || 'cash',
             REASON: REASON || null,
             DATE: DATE || new Date().toISOString().slice(0, 10),
+            CREATED_DATE: req.body.CREATED_DATE ? new Date(req.body.CREATED_DATE) : new Date(),
             CREATED_BY: CREATED_BY || null
         });
 

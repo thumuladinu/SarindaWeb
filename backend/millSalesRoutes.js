@@ -127,6 +127,7 @@ router.post('/api/mill/sales/add', async (req, res) => {
             FINAL_AMOUNT: FINAL_AMOUNT || NET_AMOUNT || TOTAL_AMOUNT || 0,
             IS_SETTLED: IS_SETTLED !== undefined ? IS_SETTLED : 0,
             DATE: DATE,
+            CREATED_DATE: req.body.CREATED_DATE ? new Date(req.body.CREATED_DATE) : new Date(),
             PAYMENT_METHOD: PAYMENT_METHOD || 'cash',
             REMARK: REMARK || null,
             CREATED_BY: CREATED_BY || null,

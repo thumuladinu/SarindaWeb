@@ -3,6 +3,7 @@ import { Table, Button, Input, Form, Modal, Tag, Select, App, Card, Row, Col, In
 import { PlusOutlined, SearchOutlined, RollbackOutlined, EyeOutlined, FileTextOutlined, BarcodeOutlined, ScanOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { formatSLDateTime } from '../../utils/helpers';
 import { decodeBatchEAN13, batchToUniqueCode } from '../../utils/labelUtils';
 
 const { Option } = Select;
@@ -385,7 +386,8 @@ export default function SalesReturns() {
             title: 'Return Date',
             dataIndex: 'DATE',
             key: 'DATE',
-            render: d => d ? dayjs(d).format('DD/MM/YYYY') : '-'
+            width: 110,
+            render: d => d ? dayjs(d).format('YYYY-MM-DD') : '-'
         },
         {
             title: 'Refunded Amount',
@@ -399,6 +401,25 @@ export default function SalesReturns() {
             dataIndex: 'REFUND_METHOD',
             key: 'REFUND_METHOD',
             render: m => <Tag color={m === 'cash' ? 'green' : m === 'credit_note' ? 'purple' : 'blue'} className="uppercase font-bold">{m || 'CASH'}</Tag>
+        },
+        {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 150,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             title: 'Action',
@@ -513,7 +534,8 @@ export default function SalesReturns() {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <div className="font-mono font-bold text-rose-400 text-base">{record.RETURN_NO || `RET-${record.RETURN_ID}`}</div>
-                                    <div className="text-xs text-gray-400">{record.DATE ? dayjs(record.DATE).format('DD/MM/YYYY') : '-'} • {record.CUSTOMER_NAME || 'Walk-in'}</div>
+                                    <div className="text-xs text-gray-400 font-mono mt-0.5">{record.DATE ? dayjs(record.DATE).format('YYYY/MM/DD') : '-'}</div>
+                                    <div className="text-xs text-gray-300 font-medium mt-0.5">{record.CUSTOMER_NAME || 'Walk-in'}</div>
                                 </div>
                                 <Tag color={record.REFUND_METHOD === 'cash' ? 'green' : record.REFUND_METHOD === 'credit_note' ? 'purple' : 'blue'} className="uppercase font-bold m-0">
                                     {record.REFUND_METHOD || 'CASH'}
@@ -553,6 +575,9 @@ export default function SalesReturns() {
                                         <Button size="small" icon={<DeleteOutlined />} danger onClick={(e) => e.stopPropagation()} className="rounded-lg" />
                                     </Popconfirm>
                                 </div>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-normal pt-1.5 border-t border-white/5">
+                                created {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).dateStr.replace(/-/g, '/')} {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).timeStr}{formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy ? ` by ${formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy}` : ''}
                             </div>
                         </div>
                     ))

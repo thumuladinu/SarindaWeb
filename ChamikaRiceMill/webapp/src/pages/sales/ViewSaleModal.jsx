@@ -3,6 +3,7 @@ import { Modal, Descriptions, Spin, Table, Tag, Typography, Divider, Row, Col, B
 import { PrinterOutlined, BarcodeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { formatSLDateTime } from '../../utils/helpers';
 
 const { Title, Text } = Typography;
 
@@ -133,7 +134,12 @@ export default function ViewSaleModal({ visible, onClose, billId }) {
                         <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered>
                             <Descriptions.Item label="Invoice No"><Text strong className="text-blue-500">{bill.INVOICE_NO}</Text></Descriptions.Item>
                             <Descriptions.Item label="Batch No">{bill.BATCH_NO || '-'}</Descriptions.Item>
-                            <Descriptions.Item label="Date">{new Date(bill.DATE).toLocaleDateString()}</Descriptions.Item>
+                            <Descriptions.Item label="Date / Time">
+                                {formatSLDateTime(bill.DATE, bill).dateStr} ({formatSLDateTime(bill.DATE, bill).timeStr})
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Billed By">
+                                {formatSLDateTime(bill.DATE, bill).addedBy || 'Cashier'}
+                            </Descriptions.Item>
                             <Descriptions.Item label="Status">
                                 {bill.IS_SETTLED ? <Tag color="green">Settled</Tag> : <Tag color="orange">Pending</Tag>}
                             </Descriptions.Item>

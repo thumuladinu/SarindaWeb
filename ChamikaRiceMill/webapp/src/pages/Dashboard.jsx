@@ -18,6 +18,7 @@ import {
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { formatSLDateTime } from '../utils/helpers';
 import TerminalMonitor from '../components/TerminalMonitor';
 
 export default function Dashboard() {
@@ -114,7 +115,7 @@ export default function Dashboard() {
                 {/* Header Action Row */}
                 <div className="flex justify-end gap-2">
                     <Button
-                        icon={<ReloadOutlined spin={loading} />}
+                        icon={<ReloadOutlined />}
                         onClick={fetchDashboardData}
                         className="rounded-xl h-10 border-blue-500/30 text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 shadow-sm text-xs md:text-sm"
                     >
@@ -132,14 +133,14 @@ export default function Dashboard() {
 
                 {/* Global Financial Stats Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                    <StatCard
+                    {/* <StatCard
                         title="Today Average Profit"
                         value={formatCurrency(data.global.avgProfit || 0)}
                         icon={<RiseOutlined style={{ fontSize: '48px' }} />}
                         color="text-blue-600"
                         type={data.global.avgProfit >= 0 ? 'success' : 'danger'}
                         className="xl:col-span-4 bg-gradient-to-r from-blue-600/10 via-indigo-500/10 to-transparent border-blue-200"
-                    />
+                    /> */}
                     <StatCard
                         title="Today's Sales"
                         value={formatCurrency(data.global.sales)}
@@ -320,7 +321,7 @@ export default function Dashboard() {
                                                             Chq #{chq.CHEQUE_NUMBER} ({chq.BANK || 'Bank'})
                                                         </div>
                                                         <div className="text-xs text-gray-400">
-                                                            Invoice: {chq.INVOICE_NO || '-'} • Customer: {chq.CUSTOMER_NAME || 'Retail'} • Due: <span className="font-mono font-bold">{dayjs(chq.DUE_DATE).format('DD/MM/YYYY')}</span>
+                                                            Invoice: {chq.INVOICE_NO || '-'} • Customer: {chq.CUSTOMER_NAME || 'Retail'} • Due: <span className="font-mono font-bold">{formatSLDateTime(chq.DUE_DATE, chq).dateStr}</span>
                                                         </div>
                                                     </div>
                                                     <span className="text-sm sm:text-base font-bold text-white font-mono">

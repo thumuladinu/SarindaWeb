@@ -5,8 +5,14 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import { formatNumber, formatWeight, toSLDateDisplay, toSLTime } from '../../utils/helpers';
 
-const categoryColorMap = { raw_input: 'gold', output: 'green', by_product: 'purple', seasonal: 'orange', other: 'default' };
 const typeColorMap = { IN: 'green', OUT: 'red', ADJ_IN: 'cyan', ADJ_OUT: 'volcano' };
+
+const isRawInputItem = (item) => {
+    if (!item) return false;
+    const cat = (item.CATEGORY || item.category || item.ITEM_TYPE || '').toLowerCase();
+    const code = (item.CODE || item.code || '').toUpperCase();
+    return cat === 'raw_input' || cat === 'seasonal' || cat === 'raw_item' || cat === 'raw' || code.startsWith('RAW_');
+};
 
 export default function Inventory() {
     const { message } = App.useApp();
@@ -86,69 +92,47 @@ export default function Inventory() {
         }).filter(p => p.balance !== 0);
     };
 
-    // ─── Stock Columns ──────────────────────────────────────
+    // Filter raw input stock records only
+    const displayStock = stockData.filter(isRawInputItem);
+
+    // ─── Stock Columns (Category & Unit removed for max space) ───────────────────
     const stockColumns = [
         {
             title: 'Code',
             dataIndex: 'CODE',
             key: 'CODE',
-            width: 100,
+            width: 120,
             render: (text) => <span className="font-mono font-semibold text-blue-500">{text}</span>,
         },
         {
-            title: 'Item',
+            title: 'Raw Input Item',
             dataIndex: 'NAME',
             key: 'NAME',
             ellipsis: true,
         },
         {
-            title: 'Category',
-            dataIndex: 'CATEGORY',
-            key: 'CATEGORY',
-            width: 110,
-            render: (cat) => <Tag color={categoryColorMap[cat] || 'default'}>{cat || '-'}</Tag>,
-        },
-        {
-            title: 'Unit',
-            dataIndex: 'UNIT',
-            key: 'UNIT',
-            width: 60,
-        },
-        {
             title: 'Total Stock',
             dataIndex: 'TOTAL_STOCK',
             key: 'TOTAL_STOCK',
-            width: 130,
-            render: (val, record) => {
-                const cat = (record.CATEGORY || '').toLowerCase();
-                const isTracked = cat === 'raw_input' || cat === 'seasonal' || cat === 'raw_item' || cat === 'raw';
-                if (!isTracked) {
-                    return <Tag color="default" className="!text-xs font-semibold">N/A</Tag>;
-                }
-                return (
-                    <span className={`font-bold text-base ${(val || 0) <= 0 ? 'text-red-500' : 'text-green-500'}`}>
-                        {formatNumber(val)} {record.UNIT || 'kg'}
-                    </span>
-                );
-            },
+            width: 160,
+            render: (val, record) => (
+                <span className={`font-bold text-base ${(val || 0) <= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                    {formatNumber(val)} {record.UNIT || 'kg'}
+                </span>
+            ),
         },
         {
-            title: 'By Place',
+            title: 'Stock By Place',
             dataIndex: 'PLACE_BREAKDOWN',
             key: 'PLACE_BREAKDOWN',
-            responsive: ['lg'],
-            render: (str, record) => {
-                const cat = (record.CATEGORY || '').toLowerCase();
-                const isTracked = cat === 'raw_input' || cat === 'seasonal' || cat === 'raw_item' || cat === 'raw';
-                if (!isTracked) {
-                    return <span className="text-gray-400 text-xs">N/A</span>;
-                }
+            responsive: ['md'],
+            render: (str) => {
                 const breakdown = parsePlaceBreakdown(str);
                 if (breakdown.length === 0) return <span className="text-gray-400 text-xs">-</span>;
                 return (
                     <div className="flex flex-wrap gap-1">
                         {breakdown.map((p, i) => (
-                            <Tag key={i} className="!text-xs" icon={<EnvironmentOutlined />}>
+                            <Tag key={i} className="!text-xs font-medium" icon={<EnvironmentOutlined />}>
                                 {p.name}: {formatNumber(p.balance)}
                             </Tag>
                         ))}
@@ -235,7 +219,7 @@ export default function Inventory() {
                     <div className="hidden md:block">
                         <Table
                             columns={stockColumns}
-                            dataSource={stockData}
+                            dataSource={displayStock}
                             loading={loading}
                             rowKey="ITEM_ID"
                             pagination={false}
@@ -244,22 +228,41 @@ export default function Inventory() {
                         />
                     </div>
                     <div className="md:hidden space-y-3 pb-20">
-                        {stockData.map(record => (
-                            <div key={record.ITEM_ID} className="p-4 rounded-2xl glass-card border border-white/10 space-y-2">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <div className="font-bold text-white text-base">{record.NAME}</div>
-                                        <div className="text-xs text-gray-400 font-mono">Code: {record.CODE}</div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] text-gray-400 uppercase">Total Stock</div>
-                                        <div className="text-base font-bold text-emerald-400 font-mono">
-                                            {formatNumber(record.TOTAL_STOCK)} {record.UNIT}
-                                        </div>
-                                    </div>
-                                </div>
+                        {displayStock.length === 0 ? (
+                            <div className="p-8 text-center glass-card rounded-2xl text-gray-400">
+                                No raw input inventory records found
                             </div>
-                        ))}
+                        ) : (
+                            displayStock.map(record => {
+                                const breakdown = parsePlaceBreakdown(record.PLACE_BREAKDOWN);
+                                return (
+                                    <div key={record.ITEM_ID} className="p-4 rounded-2xl glass-card border border-white/10 space-y-2.5">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="font-bold text-white text-base">{record.NAME}</div>
+                                                <div className="text-xs text-blue-400 font-mono">Code: {record.CODE}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[10px] text-gray-400 uppercase tracking-wider">Total Stock</div>
+                                                <div className={`text-base font-bold font-mono ${(record.TOTAL_STOCK || 0) <= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                                    {formatNumber(record.TOTAL_STOCK)} {record.UNIT || 'kg'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {breakdown.length > 0 && (
+                                            <div className="pt-2 border-t border-white/5 flex flex-wrap gap-1">
+                                                {breakdown.map((p, i) => (
+                                                    <Tag key={i} className="!text-[11px]" icon={<EnvironmentOutlined />}>
+                                                        {p.name}: {formatNumber(p.balance)}
+                                                    </Tag>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 </>
             ),
@@ -278,7 +281,7 @@ export default function Inventory() {
                             value={ledgerItemFilter}
                             onChange={setLedgerItemFilter}
                             className="!w-full sm:!w-48"
-                            options={items.filter(i => Number(i.IS_ACTIVE) !== 0).map(i => ({ value: i.ITEM_ID, label: `${i.CODE} - ${i.NAME}` }))}
+                            options={items.filter(i => Number(i.IS_ACTIVE) !== 0 && isRawInputItem(i)).map(i => ({ value: i.ITEM_ID, label: `${i.CODE} - ${i.NAME}` }))}
                         />
                         <Select
                             allowClear
@@ -340,8 +343,8 @@ export default function Inventory() {
         <div className="page-paper">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                 <div>
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Inventory</h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Current stock levels and inventory movement history</p>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Raw Material Inventory</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Current raw input stock levels and inventory movement history</p>
                 </div>
             </div>
 

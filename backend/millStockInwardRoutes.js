@@ -163,7 +163,7 @@ router.post('/api/mill/inward/add', async (req, res) => {
         const allowedFields = [
             'INWARD_TYPE', 'REFERENCE_NO', 'ITEM_ID', 'PLACE_ID', 'QUANTITY', 'SOURCE_QUANTITY',
             'SURPLUS_WASTAGE', 'PRICE_PER_UNIT', 'TOTAL_PRICE', 'NO_OF_BAGS', 'STORE_NO',
-            'STORE_TRANSFER_REF', 'VEHICLE_NO', 'DRIVER_NAME', 'SUPPLIER_ID', 'DATE',
+            'STORE_TRANSFER_REF', 'VEHICLE_NO', 'DRIVER_NAME', 'SUPPLIER_ID', 'DATE', 'CREATED_DATE',
             'NOTES', 'RECEIVED_BY', 'CREATED_BY', 'IS_SYNCED', 'LOCAL_ID', 'SYNC_TIMESTAMP',
             'CONDITION', 'DRY_PERCENTAGE', 'GROSS_WEIGHT', 'MOISTURE_LOSS_PERCENT'
         ];
@@ -171,6 +171,7 @@ router.post('/api/mill/inward/add', async (req, res) => {
         allowedFields.forEach(f => {
             if (data[f] !== undefined) insertData[f] = data[f];
         });
+        if (data.CREATED_DATE) insertData.CREATED_DATE = new Date(data.CREATED_DATE);
 
         const insertResult = await pool.query('INSERT INTO mill_stock_inward SET ?', insertData);
 

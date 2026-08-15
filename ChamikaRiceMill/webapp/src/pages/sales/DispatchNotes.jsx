@@ -4,6 +4,7 @@ import { PrinterOutlined, CheckCircleOutlined, DeleteOutlined, SyncOutlined, Edi
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import dayjs from 'dayjs';
+import { formatSLDateTime } from '../../utils/helpers';
 import PrintableDispatchNote from './PrintableDispatchNote';
 import SettleDispatchForm from './SettleDispatchForm';
 
@@ -173,7 +174,8 @@ export default function DispatchNotes() {
             title: 'Date',
             dataIndex: 'DATE',
             key: 'DATE',
-            render: (text) => new Date(text).toLocaleDateString(),
+            width: 110,
+            render: (text) => text ? dayjs(text).format('YYYY-MM-DD') : '-'
         },
         {
             title: 'Driver',
@@ -201,8 +203,27 @@ export default function DispatchNotes() {
                 if (status === 'SETTLED') {
                     return <Tag color="green" icon={<LockOutlined />}>Settled (Locked)</Tag>;
                 }
-                return <Tag color="orange" icon={<SyncOutlined spin />}>Pending</Tag>;
+                return <Tag color="orange" icon={<SyncOutlined />}>Pending</Tag>;
             }
+        },
+        {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 150,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             title: 'Actions',
@@ -415,13 +436,13 @@ export default function DispatchNotes() {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <div className="font-mono font-bold text-blue-400 text-base">{record.DISPATCH_NO}</div>
-                                    <div className="text-xs text-gray-400">{record.DATE ? dayjs(record.DATE).format('YYYY-MM-DD') : '-'}</div>
+                                    <div className="text-xs text-gray-400 font-mono mt-0.5">{record.DATE ? dayjs(record.DATE).format('YYYY/MM/DD') : '-'}</div>
                                 </div>
                                 <div>
                                     {record.STATUS === 'settled' || record.IS_SETTLED === 1 ? (
                                         <Tag color="success" icon={<CheckCircleOutlined />}>Settled</Tag>
                                     ) : (
-                                        <Tag color="warning" icon={<SyncOutlined spin />}>In Dispatch</Tag>
+                                        <Tag color="warning" icon={<SyncOutlined />}>In Dispatch</Tag>
                                     )}
                                 </div>
                             </div>
@@ -520,6 +541,9 @@ export default function DispatchNotes() {
                                         </>
                                     )}
                                 </div>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-normal pt-1.5 border-t border-white/5">
+                                 created {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).dateStr.replace(/-/g, '/')} {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).timeStr}{formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy ? ` by ${formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy}` : ''}
                             </div>
                         </div>
                     ))

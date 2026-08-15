@@ -125,6 +125,7 @@ router.post('/api/mill/expenses/add', async (req, res) => {
             PAID_TO: PAID_TO || null,
             REF_NO: REF_NO || null,
             DATE: DATE || new Date().toISOString().slice(0, 19).replace('T', ' '),
+            CREATED_DATE: req.body.CREATED_DATE ? new Date(req.body.CREATED_DATE) : new Date(),
             NOTES: NOTES || null,
             CALCULATION_DATA: CALCULATION_DATA ? JSON.stringify(CALCULATION_DATA) : null,
             DEVICE_ID: DEVICE_ID || 'WEB',

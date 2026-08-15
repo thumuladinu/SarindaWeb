@@ -5,6 +5,7 @@ import { PlusOutlined, PrinterOutlined, EditOutlined, FileTextOutlined, CheckCir
 import axios from 'axios';
 import dayjs from 'dayjs';
 import { getTerminalDeviceCode, getCurrentUserName } from '../../utils/terminalHelper';
+import { formatSLDateTime } from '../../utils/helpers';
 import AddSaleForm from './AddSaleForm';
 import SettleSaleForm from './SettleSaleForm';
 import EditSaleForm from './EditSaleForm';
@@ -187,7 +188,8 @@ export default function Sales() {
             title: 'Date',
             dataIndex: 'DATE',
             key: 'DATE',
-            render: (text) => new Date(text).toLocaleDateString(),
+            width: 110,
+            render: (text) => text ? dayjs(text).format('YYYY-MM-DD') : '-'
         },
         {
             title: 'Customer',
@@ -205,7 +207,7 @@ export default function Sales() {
                 if (record.DISPATCH_ID) {
                     return <Tag color="blue" icon={<SendOutlined />}>In Dispatch</Tag>;
                 }
-                return <Tag color="orange" icon={<SyncOutlined spin />}>Pending Settlement</Tag>;
+                return <Tag color="orange" icon={<SyncOutlined />}>Pending Settlement</Tag>;
             }
         },
         {
@@ -224,6 +226,25 @@ export default function Sales() {
                 if (!record.IS_SETTLED) return <Text type="secondary">-</Text>;
                 return <Text strong>Rs. {parseFloat(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>;
             }
+        },
+        {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 150,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             title: 'Actions',
@@ -422,9 +443,8 @@ export default function Sales() {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <div className="font-bold text-white text-base">{record.INVOICE_NO}</div>
-                                    <div className="text-xs text-gray-400">
-                                        {record.DATE ? dayjs(record.DATE).format('YYYY-MM-DD') : '-'} • {record.CUSTOMER_NAME || 'Walk-in'}
-                                    </div>
+                                    <div className="text-xs text-gray-400 font-mono mt-0.5">{record.DATE ? dayjs(record.DATE).format('YYYY/MM/DD') : '-'}</div>
+                                    <div className="text-xs text-gray-300 font-medium mt-0.5">{record.CUSTOMER_NAME || 'Walk-in'}</div>
                                 </div>
                                 <div>
                                     {record.IS_SETTLED === 1 ? (
@@ -432,7 +452,7 @@ export default function Sales() {
                                     ) : record.DISPATCH_ID ? (
                                         <Tag color="processing" icon={<SendOutlined />}>In Dispatch</Tag>
                                     ) : (
-                                        <Tag color="warning" icon={<SyncOutlined spin />}>Pending</Tag>
+                                        <Tag color="warning" icon={<SyncOutlined />}>Pending</Tag>
                                     )}
                                 </div>
                             </div>
@@ -529,6 +549,9 @@ export default function Sales() {
                                         </>
                                     )}
                                 </div>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-normal pt-1.5 border-t border-white/5">
+                                created {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).dateStr.replace(/-/g, '/')} {formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).timeStr}{formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy ? ` by ${formatSLDateTime(record.CREATED_DATE || record.CREATED_AT || record.DATE, record).addedBy}` : ''}
                             </div>
                         </div>
                     ))

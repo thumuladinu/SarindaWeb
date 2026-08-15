@@ -164,6 +164,7 @@ router.post('/api/mill/dispatch/create', async (req, res) => {
             STAFF_NAME,
             CREATED_BY: createdById
         };
+        if (req.body.CREATED_DATE) insertRow.CREATED_DATE = new Date(req.body.CREATED_DATE);
         if (DEVICE_ID) insertRow.DEVICE_ID = DEVICE_ID;
         if (CREATED_BY_NAME) insertRow.CREATED_BY_NAME = CREATED_BY_NAME;
 
