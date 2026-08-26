@@ -63,7 +63,7 @@ const updateInventoryLedger = async (itemId, placeId, quantity, type, refType, r
         REFERENCE_ID: refId,
         DATE: date,
         NOTES: notes || null,
-        CREATED_BY: createdBy || null,
+        CREATED_BY: (createdBy && !isNaN(Number(createdBy))) ? Number(createdBy) : null,
     });
 
     // Also update STOCK in mill_items (aggregate)

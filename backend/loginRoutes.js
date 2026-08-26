@@ -65,6 +65,14 @@ router.post('/api/login', async (req, res, next) => {
                 });
             }
 
+            // Check if plaintext password matches directly
+            if (foundUser.PASSWORD === password) {
+                return res.status(200).json({
+                    message: 'Login successful',
+                    user: userResponse
+                });
+            }
+
             // Compare password with bcrypt
             bcrypt.compare(password, foundUser.PASSWORD, (compareErr, passwordMatch) => {
                 if (compareErr) {

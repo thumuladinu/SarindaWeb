@@ -78,6 +78,8 @@ const updateInventoryLedger = async (itemIdInput, placeId, quantity, type, refTy
         ? currentBalance + parseFloat(quantity) 
         : currentBalance - parseFloat(quantity);
 
+    const validCreatedBy = (createdBy && !isNaN(Number(createdBy))) ? Number(createdBy) : null;
+
     await pool.query('INSERT INTO mill_inventory_ledger SET ?', {
         ITEM_ID: itemId,
         PLACE_ID: placeId || null,
@@ -88,7 +90,7 @@ const updateInventoryLedger = async (itemIdInput, placeId, quantity, type, refTy
         REFERENCE_ID: refId,
         DATE: date,
         NOTES: notes || null,
-        CREATED_BY: createdBy || null,
+        CREATED_BY: validCreatedBy
     });
 
     // Also update STOCK in mill_items
@@ -104,11 +106,29 @@ router.post('/api/mill/sales/add', async (req, res) => {
     try {
         const { CUSTOMER_ID, TOTAL_AMOUNT, DISCOUNT, NET_AMOUNT, DATE, PAYMENT_METHOD, CREATED_BY, ITEMS, PRINTED_SUB_TOTAL, BATCH_NO, IS_SETTLED, REMARK, FINAL_AMOUNT, HANDWRITTEN_SUB_TOTAL, DEVICE_ID, CREATED_BY_NAME } = req.body;
         
-        if (!ITEMS || !Array.isArray(ITEMS) || ITEMS.length === 0) {
-            return res.status(400).json({ success: false, message: 'Bill must contain at least one item' });
+        let itemsList = ITEMS;
+        if (typeof itemsList === 'string') {
+            try { itemsList = JSON.parse(itemsList); } catch(e) { itemsList = []; }
         }
+        if (!Array.isArray(itemsList)) itemsList = [];
 
-        const invoiceNo = await generateInvoiceNo(DEVICE_ID);
+        let invoiceNo = req.body.INVOICE_NO || await generateInvoiceNo(DEVICE_ID);
+        const customerId = (CUSTOMER_ID && !isNaN(Number(CUSTOMER_ID))) ? Number(CUSTOMER_ID) : null;
+        const createdById = (CREATED_BY && !isNaN(Number(CREATED_BY))) ? Number(CREATED_BY) : null;
+
+        // Check if invoice already exists to avoid ER_DUP_ENTRY
+        const existingBill = await pool.query('SELECT BILL_ID, INVOICE_NO FROM mill_bills WHERE INVOICE_NO = ?', [invoiceNo]);
+        if (existingBill.length > 0) {
+            if (req.body.INVOICE_NO) {
+                return res.json({ 
+                    success: true, 
+                    message: 'Invoice already exists in database', 
+                    billId: existingBill[0].BILL_ID, 
+                    invoiceNo: existingBill[0].INVOICE_NO 
+                });
+            }
+            invoiceNo = await generateInvoiceNo(DEVICE_ID);
+        }
 
         // Ensure columns exist on mill_bills
         try { await pool.query("ALTER TABLE mill_bills ADD COLUMN DEVICE_ID VARCHAR(50) NULL"); } catch (e) {}
@@ -118,7 +138,7 @@ router.post('/api/mill/sales/add', async (req, res) => {
         const billResult = await pool.query('INSERT INTO mill_bills SET ?', {
             INVOICE_NO: invoiceNo,
             BATCH_NO: BATCH_NO || null,
-            CUSTOMER_ID: CUSTOMER_ID || null,
+            CUSTOMER_ID: customerId,
             TOTAL_AMOUNT: TOTAL_AMOUNT || 0,
             DISCOUNT: DISCOUNT || 0,
             NET_AMOUNT: NET_AMOUNT || 0,
@@ -126,11 +146,11 @@ router.post('/api/mill/sales/add', async (req, res) => {
             HANDWRITTEN_SUB_TOTAL: HANDWRITTEN_SUB_TOTAL || 0,
             FINAL_AMOUNT: FINAL_AMOUNT || NET_AMOUNT || TOTAL_AMOUNT || 0,
             IS_SETTLED: IS_SETTLED !== undefined ? IS_SETTLED : 0,
-            DATE: DATE,
-            CREATED_DATE: req.body.CREATED_DATE ? new Date(req.body.CREATED_DATE) : new Date(),
+            DATE: (DATE && new Date(DATE).toString() !== 'Invalid Date') ? new Date(DATE) : new Date(),
+            CREATED_DATE: (req.body.CREATED_DATE && new Date(req.body.CREATED_DATE).toString() !== 'Invalid Date') ? new Date(req.body.CREATED_DATE) : new Date(),
             PAYMENT_METHOD: PAYMENT_METHOD || 'cash',
             REMARK: REMARK || null,
-            CREATED_BY: CREATED_BY || null,
+            CREATED_BY: createdById,
             DEVICE_ID: DEVICE_ID || 'WEB',
             CREATED_BY_NAME: CREATED_BY_NAME || null
         });
@@ -155,7 +175,7 @@ router.post('/api/mill/sales/add', async (req, res) => {
         const hunsalId = systemItems['OUT_HUNSAL'];
 
         // 3. Process each item in the bill
-        for (const item of ITEMS) {
+        for (const item of itemsList) {
             const validItemId = await resolveItemId(item.ITEM_ID, item.ITEM_NAME || item.itemName, item.GS1_CODE || item.gs1Code);
             if (!validItemId) {
                 console.error('Skipping invalid item in sale:', item);
@@ -330,7 +350,7 @@ router.get('/api/mill/sales/list', async (req, res) => {
             FROM mill_bills b
             LEFT JOIN mill_customers c ON b.CUSTOMER_ID = c.CUSTOMER_ID
             WHERE b.IS_ACTIVE = 1
-            ORDER BY b.CREATED_DATE DESC
+            ORDER BY b.CREATED_DATE DESC, b.BILL_ID DESC
         `);
         res.json({ success: true, result: bills });
     } catch (error) {
@@ -463,7 +483,7 @@ router.post('/api/mill/sales/unlock', async (req, res) => {
 // ─── EDIT BILL (Unsettled) ────────────────────────────────────
 router.post('/api/mill/sales/edit', async (req, res) => {
     try {
-        const { BILL_ID, INVOICE_NO, BATCH_NO, CUSTOMER_ID, TOTAL_AMOUNT, DISCOUNT, NET_AMOUNT, DATE, ITEMS, CREATED_BY } = req.body;
+        const { BILL_ID, INVOICE_NO, BATCH_NO, CUSTOMER_ID, TOTAL_AMOUNT, DISCOUNT, NET_AMOUNT, FINAL_AMOUNT, DATE, ITEMS, CREATED_BY } = req.body;
         
         const billRes = await pool.query('SELECT * FROM mill_bills WHERE BILL_ID = ?', [BILL_ID]);
         if (!billRes || billRes.length === 0) return res.status(404).json({ success: false, message: 'Bill not found' });
@@ -471,6 +491,9 @@ router.post('/api/mill/sales/edit', async (req, res) => {
         if (billRes[0].IS_SETTLED) {
             return res.status(400).json({ success: false, message: 'Cannot edit a settled bill. Please unlock it first.' });
         }
+
+        const customerId = (CUSTOMER_ID && !isNaN(Number(CUSTOMER_ID))) ? Number(CUSTOMER_ID) : null;
+        const finalAmt = FINAL_AMOUNT !== undefined ? Number(FINAL_AMOUNT) : (NET_AMOUNT || TOTAL_AMOUNT || 0);
 
         // 1. Revert Old Inventory
         const oldItems = await pool.query('SELECT * FROM mill_bill_items WHERE BILL_ID = ? AND IS_ARCHIVED = 0 AND (IS_HANDWRITTEN IS NULL OR IS_HANDWRITTEN = 0)', [BILL_ID]);
@@ -491,9 +514,9 @@ router.post('/api/mill/sales/edit', async (req, res) => {
         await pool.query(
             `UPDATE mill_bills SET 
                 BATCH_NO = ?, CUSTOMER_ID = ?, TOTAL_AMOUNT = ?, DISCOUNT = ?, 
-                NET_AMOUNT = ?, PRINTED_SUB_TOTAL = ?, DATE = ?
+                NET_AMOUNT = ?, PRINTED_SUB_TOTAL = ?, FINAL_AMOUNT = ?, DATE = ?
              WHERE BILL_ID = ?`,
-            [BATCH_NO || null, CUSTOMER_ID || null, TOTAL_AMOUNT || 0, DISCOUNT || 0, NET_AMOUNT || 0, TOTAL_AMOUNT || 0, DATE, BILL_ID]
+            [BATCH_NO || null, customerId, TOTAL_AMOUNT || 0, DISCOUNT || 0, NET_AMOUNT || 0, TOTAL_AMOUNT || 0, finalAmt, DATE, BILL_ID]
         );
 
         // 4. Insert New Items & Deduct Inventory

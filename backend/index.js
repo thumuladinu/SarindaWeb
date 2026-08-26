@@ -222,6 +222,7 @@ app.use(require('./millDispatchRoutes'));
 app.use(require('./millChequeRoutes'));
 app.use(require('./millSettingsRoutes'));
 app.use(require('./millExpenseRoutes'));
+app.use(require('./devRoutes'));
 
 // Start the server
 const server = app.listen(port, () => {

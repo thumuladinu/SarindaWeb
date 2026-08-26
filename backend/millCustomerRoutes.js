@@ -578,4 +578,167 @@ router.post('/api/MillgetCustomerHeatTTransactions', async (req, res) => {
 
 
 
+// Ensure columns exist on mill_customers
+(async () => {
+    try { await pool.query("ALTER TABLE mill_customers ADD COLUMN BANK_DETAILS_JSON LONGTEXT NULL"); } catch (e) {}
+    try { await pool.query("ALTER TABLE mill_customers ADD COLUMN PHONE VARCHAR(50) NULL"); } catch (e) {}
+    try { await pool.query("ALTER TABLE mill_customers ADD COLUMN LOCATION VARCHAR(255) NULL"); } catch (e) {}
+})();
+
+// ─── GET CUSTOMER SUMMARY (Bills, Credit, Cheques, Bank Accounts) ───────────
+router.post('/api/MillgetCustomerSummary', async (req, res) => {
+    try {
+        const { CUSTOMER_ID, NAME } = req.body;
+        if (!CUSTOMER_ID && !NAME) {
+            return res.status(400).json({ success: false, message: 'CUSTOMER_ID or NAME required' });
+        }
+
+        // 1. Fetch Customer Profile
+        let custRows = [];
+        if (CUSTOMER_ID) {
+            custRows = await pool.query('SELECT * FROM mill_customers WHERE CUSTOMER_ID = ?', [CUSTOMER_ID]);
+        } else {
+            custRows = await pool.query('SELECT * FROM mill_customers WHERE NAME = ?', [NAME]);
+        }
+
+        const customer = custRows.length > 0 ? custRows[0] : null;
+        const targetId = customer ? customer.CUSTOMER_ID : (CUSTOMER_ID || null);
+        const targetName = customer ? customer.NAME : (NAME || '');
+
+        // Parse Bank Details JSON if present
+        let bankAccounts = [];
+        if (customer && customer.BANK_DETAILS_JSON) {
+            try {
+                bankAccounts = typeof customer.BANK_DETAILS_JSON === 'string' ? JSON.parse(customer.BANK_DETAILS_JSON) : customer.BANK_DETAILS_JSON;
+            } catch(e) { bankAccounts = []; }
+        }
+
+        // 2. Fetch Sales Bills for Customer
+        const bills = await pool.query(
+            `SELECT b.*, c.NAME as CUSTOMER_NAME 
+             FROM mill_bills b 
+             LEFT JOIN mill_customers c ON b.CUSTOMER_ID = c.CUSTOMER_ID 
+             WHERE (b.CUSTOMER_ID = ? OR (c.NAME = ? AND c.NAME IS NOT NULL)) 
+             ORDER BY b.BILL_ID DESC`,
+            [targetId, targetName]
+        );
+
+        let billsCount = bills.length;
+        let totalBillsAmount = 0;
+        let totalCreditAmount = 0;
+
+        bills.forEach(b => {
+            const finalAmt = Number(b.FINAL_AMOUNT || b.NET_AMOUNT || b.TOTAL_AMOUNT || 0);
+            totalBillsAmount += finalAmt;
+            if (Number(b.IS_SETTLED) === 0) {
+                totalCreditAmount += finalAmt;
+            }
+        });
+
+        // 3. Fetch Cheques for Customer
+        let cheques = [];
+        try {
+            cheques = await pool.query(
+                `SELECT c.* FROM mill_cheques c 
+                 LEFT JOIN mill_bills b ON c.BILL_ID = b.BILL_ID 
+                 WHERE b.CUSTOMER_ID = ? OR c.CUSTOMER_NAME = ?`,
+                [targetId, targetName]
+            );
+        } catch(e) { cheques = []; }
+
+        let totalChequesAmount = cheques.reduce((sum, ch) => sum + Number(ch.AMOUNT || 0), 0);
+
+        return res.json({
+            success: true,
+            customer,
+            bankAccounts,
+            billsCount,
+            totalBillsAmount,
+            totalCreditAmount,
+            totalChequesAmount,
+            bills,
+            cheques
+        });
+    } catch (error) {
+        console.error('Error fetching customer summary:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ─── GET STAFF SUMMARY (Bills, Credit, Cheques created/managed) ─────────────
+router.post('/api/MillgetStaffSummary', async (req, res) => {
+    try {
+        const { STAFF_ID, NAME, USERNAME } = req.body;
+        if (!STAFF_ID && !NAME && !USERNAME) {
+            return res.status(400).json({ success: false, message: 'STAFF_ID, NAME, or USERNAME required' });
+        }
+
+        // 1. Fetch Staff Profile
+        let staffRows = [];
+        if (STAFF_ID) {
+            staffRows = await pool.query('SELECT * FROM mill_staff WHERE STAFF_ID = ?', [STAFF_ID]);
+        } else if (USERNAME) {
+            staffRows = await pool.query('SELECT * FROM mill_staff WHERE USERNAME = ?', [USERNAME]);
+        } else {
+            staffRows = await pool.query('SELECT * FROM mill_staff WHERE NAME = ?', [NAME]);
+        }
+
+        const staff = staffRows.length > 0 ? staffRows[0] : null;
+        const targetId = staff ? staff.STAFF_ID : (STAFF_ID || null);
+        const targetName = staff ? staff.NAME : (NAME || '');
+        const targetUsername = staff ? staff.USERNAME : (USERNAME || '');
+
+        // 2. Fetch Bills Created by Staff
+        const bills = await pool.query(
+            `SELECT b.*, c.NAME as CUSTOMER_NAME 
+             FROM mill_bills b 
+             LEFT JOIN mill_customers c ON b.CUSTOMER_ID = c.CUSTOMER_ID 
+             WHERE (b.CREATED_BY = ? OR b.CREATED_BY_NAME = ? OR b.CREATED_BY_NAME = ?) 
+             ORDER BY b.BILL_ID DESC`,
+            [targetId, targetName, targetUsername]
+        );
+
+        let billsCount = bills.length;
+        let totalBillsAmount = 0;
+        let totalCreditAmount = 0;
+
+        bills.forEach(b => {
+            const finalAmt = Number(b.FINAL_AMOUNT || b.NET_AMOUNT || b.TOTAL_AMOUNT || 0);
+            totalBillsAmount += finalAmt;
+            if (Number(b.IS_SETTLED) === 0) {
+                totalCreditAmount += finalAmt;
+            }
+        });
+
+        // 3. Cheques collected on staff's bills
+        let cheques = [];
+        if (bills.length > 0) {
+            const billIds = bills.map(b => b.BILL_ID).filter(Boolean);
+            if (billIds.length > 0) {
+                try {
+                    cheques = await pool.query(
+                        `SELECT * FROM mill_cheques WHERE BILL_ID IN (?)`,
+                        [billIds]
+                    );
+                } catch(e) { cheques = []; }
+            }
+        }
+        let totalChequesAmount = cheques.reduce((sum, ch) => sum + Number(ch.AMOUNT || 0), 0);
+
+        return res.json({
+            success: true,
+            staff,
+            billsCount,
+            totalBillsAmount,
+            totalCreditAmount,
+            totalChequesAmount,
+            bills,
+            cheques
+        });
+    } catch (error) {
+        console.error('Error fetching staff summary:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 module.exports = router;

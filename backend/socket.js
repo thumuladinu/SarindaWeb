@@ -1,6 +1,7 @@
 const { Server } = require('socket.io');
 
 let io;
+const connectedTerminals = new Map(); // socketId -> { info, allowed: true }
 
 module.exports = {
     init: (httpServer) => {
@@ -27,14 +28,13 @@ module.exports = {
             );
         }
 
-        const connectedTerminals = new Map(); // socketId -> { info, allowed: true }
-
         io.on('connection', (socket) => {
             console.log('Client connected:', socket.id);
 
             // 1. Handshake: Client registers itself
             socket.on('register', (data) => {
                 const terminalId = data.terminalId || 'UNKNOWN';
+                socket.terminalId = terminalId;
 
                 // Deduplicate: Remove any existing connection with the same terminalId
                 for (const [sId, info] of connectedTerminals.entries()) {
@@ -250,6 +250,37 @@ module.exports = {
                 io.to(targetSocketId).emit('terminal:update_storage', { key, value, action });
             });
 
+            // ─── DEV TOOL REALTIME INDEXEDDB RELAY ───────────────────────
+            socket.on('dev:idb_request', (payload) => {
+                const { targetTerminalId, event, data, reqId } = payload || {};
+                if (!targetTerminalId || !event) return;
+
+                let targetSocketId = null;
+                for (const [sId, info] of connectedTerminals.entries()) {
+                    if (info.terminalId === targetTerminalId) {
+                        targetSocketId = sId;
+                        break;
+                    }
+                }
+
+                if (targetSocketId) {
+                    io.to(targetSocketId).emit(event, { ...data, senderSocketId: socket.id, reqId });
+                } else {
+                    socket.emit('dev:idb_response', {
+                        reqId,
+                        success: false,
+                        message: `Terminal '${targetTerminalId}' is offline or not connected over socket.`
+                    });
+                }
+            });
+
+            socket.on('dev:idb_response', (payload) => {
+                const { senderSocketId, reqId, result, success, message } = payload || {};
+                if (senderSocketId) {
+                    io.to(senderSocketId).emit('dev:idb_response', { reqId, result, success, message });
+                }
+            });
+
             socket.on('disconnect', () => {
                 console.log('Client disconnected:', socket.id);
                 if (connectedTerminals.has(socket.id)) {
@@ -281,5 +312,66 @@ module.exports = {
             throw new Error('Socket.io not initialized!');
         }
         return io;
+    },
+    sendDevCommandToTerminal: (targetTerminalId, event, data, timeoutMs = 8000) => {
+        return new Promise((resolve) => {
+            if (!io) return resolve({ success: false, message: 'Socket.io server not initialized' });
+
+            let targetSocket = null;
+            // 1. Look up target socket ID from connectedTerminals map
+            for (const [sId, info] of connectedTerminals.entries()) {
+                if (info.terminalId === targetTerminalId) {
+                    const s = io.sockets.sockets.get(sId);
+                    if (s) {
+                        targetSocket = s;
+                        break;
+                    }
+                }
+            }
+
+            // 2. Fallback: Search active sockets list
+            if (!targetSocket) {
+                const sockets = io.sockets.sockets;
+                for (const [sId, s] of sockets.entries()) {
+                    if (s.terminalId === targetTerminalId || s.deviceCode === targetTerminalId) {
+                        targetSocket = s;
+                        break;
+                    }
+                }
+            }
+
+            if (!targetSocket) {
+                return resolve({
+                    success: false,
+                    message: `Terminal '${targetTerminalId}' is currently offline or not connected over socket.`
+                });
+            }
+
+            const reqId = 'dev_req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+
+            let resolved = false;
+            const timer = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    targetSocket.off('dev:idb_response', responseListener);
+                    resolve({
+                        success: false,
+                        message: `Terminal '${targetTerminalId}' response timed out after ${timeoutMs / 1000}s.`
+                    });
+                }
+            }, timeoutMs);
+
+            const responseListener = (payload) => {
+                if (payload && payload.reqId === reqId && !resolved) {
+                    resolved = true;
+                    clearTimeout(timer);
+                    targetSocket.off('dev:idb_response', responseListener);
+                    resolve(payload);
+                }
+            };
+
+            targetSocket.on('dev:idb_response', responseListener);
+            targetSocket.emit(event, { ...data, reqId });
+        });
     }
 };

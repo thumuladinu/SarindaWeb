@@ -53,7 +53,7 @@ const updateInventoryLedger = async (itemIdInput, placeId, quantity, type, refTy
         REFERENCE_ID: refId,
         DATE: date,
         NOTES: notes || null,
-        CREATED_BY: createdBy || null,
+        CREATED_BY: (createdBy && !isNaN(Number(createdBy))) ? Number(createdBy) : null,
     });
 
     // Also update STOCK in mill_items
@@ -94,12 +94,33 @@ router.get('/api/mill/dispatch/list', async (req, res) => {
     try {
         const notes = await queryAsync(`
             SELECT d.*, 
-                   COUNT(db.BILL_ID) as BILL_COUNT
+                   COUNT(b.BILL_ID) as BILL_COUNT,
+                   JSON_ARRAYAGG(b.BILL_ID) as BILL_IDS_JSON,
+                   JSON_ARRAYAGG(b.INVOICE_NO) as INVOICE_NOS_JSON
             FROM mill_dispatch_notes d
-            LEFT JOIN mill_dispatch_bills db ON d.DISPATCH_ID = db.DISPATCH_ID
+            LEFT JOIN mill_bills b ON d.DISPATCH_NO = b.DISPATCH_NO
             GROUP BY d.DISPATCH_ID
             ORDER BY d.CREATED_DATE DESC
         `);
+        for (let note of notes) {
+            if (typeof note.INVOICE_NOS_JSON === 'string') {
+                try { note.INVOICE_NOS_JSON = JSON.parse(note.INVOICE_NOS_JSON); } catch(e) {}
+            }
+            if (Array.isArray(note.INVOICE_NOS_JSON)) {
+                note.INVOICE_NOS_JSON = note.INVOICE_NOS_JSON.filter(Boolean);
+            } else {
+                note.INVOICE_NOS_JSON = [];
+            }
+
+            if (typeof note.BILL_IDS_JSON === 'string') {
+                try { note.BILL_IDS_JSON = JSON.parse(note.BILL_IDS_JSON); } catch(e) {}
+            }
+            if (Array.isArray(note.BILL_IDS_JSON)) {
+                note.BILL_IDS_JSON = note.BILL_IDS_JSON.filter(Boolean);
+            } else {
+                note.BILL_IDS_JSON = [];
+            }
+        }
         res.json({ success: true, result: notes });
     } catch (error) {
         console.error('Error fetching dispatch notes:', error);
@@ -118,11 +139,10 @@ router.get('/api/mill/dispatch/:id', async (req, res) => {
         // Fetch associated bills with customer details
         const bills = await queryAsync(`
             SELECT b.*, c.NAME as CUSTOMER_NAME, c.ADDRESS as CUSTOMER_ADDRESS
-            FROM mill_dispatch_bills db
-            JOIN mill_bills b ON db.BILL_ID = b.BILL_ID
+            FROM mill_bills b
             LEFT JOIN mill_customers c ON b.CUSTOMER_ID = c.CUSTOMER_ID
-            WHERE db.DISPATCH_ID = ?
-        `, [req.params.id]);
+            WHERE b.DISPATCH_NO = ?
+        `, [note.DISPATCH_NO]);
 
         for (let b of bills) {
             b.ITEMS = await queryAsync(`
@@ -146,13 +166,54 @@ router.get('/api/mill/dispatch/:id', async (req, res) => {
 // ─── CREATE DISPATCH NOTE ──────────────────────────────────────
 router.post('/api/mill/dispatch/create', async (req, res) => {
     try {
-        const { BILL_IDS, DATE, DRIVER_NAME, LORRY_NO, STAFF_NAME, CREATED_BY, DEVICE_ID, CREATED_BY_NAME } = req.body;
+        const { BILL_IDS, INVOICE_NOS, DATE, DRIVER_NAME, LORRY_NO, STAFF_NAME, CREATED_BY, DEVICE_ID, CREATED_BY_NAME } = req.body;
         
-        if (!BILL_IDS || !Array.isArray(BILL_IDS) || BILL_IDS.length === 0) {
+        const allBillRefs = [];
+        if (Array.isArray(INVOICE_NOS)) allBillRefs.push(...INVOICE_NOS);
+        if (Array.isArray(BILL_IDS)) allBillRefs.push(...BILL_IDS);
+
+        if (allBillRefs.length === 0) {
             return res.status(400).json({ success: false, message: 'No bills selected' });
         }
 
-        const dispatchNo = await generateDispatchNo(DEVICE_ID || 'WEB');
+        let dispatchNo = req.body.DISPATCH_NO || await generateDispatchNo(DEVICE_ID || 'WEB');
+
+        // Check if dispatch note already exists to update or avoid ER_DUP_ENTRY
+        const existingNote = await queryAsync('SELECT DISPATCH_ID, DISPATCH_NO FROM mill_dispatch_notes WHERE DISPATCH_NO = ?', [dispatchNo]);
+        if (existingNote.length > 0) {
+            if (req.body.DISPATCH_NO) {
+                const existingId = existingNote[0].DISPATCH_ID;
+
+                const updateFields = {
+                    DATE,
+                    DRIVER_NAME,
+                    LORRY_NO,
+                    STAFF_NAME
+                };
+
+                await queryAsync('UPDATE mill_dispatch_notes SET ? WHERE DISPATCH_ID = ?', [updateFields, existingId]);
+
+                // Clear old bill associations & re-link updated bills
+                await queryAsync('UPDATE mill_bills SET DISPATCH_NO = NULL WHERE DISPATCH_NO = ?', [existingNote[0].DISPATCH_NO]);
+
+                for (const ref of allBillRefs) {
+                    if (!ref) continue;
+                    const strRef = String(ref).trim();
+                    let updateRes = await queryAsync('UPDATE mill_bills SET DISPATCH_NO = ? WHERE INVOICE_NO = ?', [existingNote[0].DISPATCH_NO, strRef]);
+                    if (updateRes.affectedRows === 0 && !isNaN(Number(strRef))) {
+                        await queryAsync('UPDATE mill_bills SET DISPATCH_NO = ? WHERE BILL_ID = ?', [existingNote[0].DISPATCH_NO, Number(strRef)]);
+                    }
+                }
+
+                return res.json({ 
+                    success: true, 
+                    message: 'Dispatch note updated successfully in database', 
+                    dispatchId: existingId, 
+                    dispatchNo: existingNote[0].DISPATCH_NO 
+                });
+            }
+            dispatchNo = await generateDispatchNo(DEVICE_ID || 'WEB');
+        }
 
         const createdById = Number(CREATED_BY) || null; // CREATED_BY must be INT; name goes in CREATED_BY_NAME
 
@@ -172,8 +233,13 @@ router.post('/api/mill/dispatch/create', async (req, res) => {
 
         const dispatchId = insertRes.insertId;
 
-        for (const billId of BILL_IDS) {
-            await queryAsync('INSERT INTO mill_dispatch_bills (DISPATCH_ID, BILL_ID) VALUES (?, ?)', [dispatchId, billId]);
+        for (const ref of allBillRefs) {
+            if (!ref) continue;
+            const strRef = String(ref).trim();
+            let updateRes = await queryAsync('UPDATE mill_bills SET DISPATCH_NO = ? WHERE INVOICE_NO = ?', [dispatchNo, strRef]);
+            if (updateRes.affectedRows === 0 && !isNaN(Number(strRef))) {
+                await queryAsync('UPDATE mill_bills SET DISPATCH_NO = ? WHERE BILL_ID = ?', [dispatchNo, Number(strRef)]);
+            }
         }
 
         res.json({ success: true, message: 'Dispatch note created successfully', dispatchNo, dispatchId });
@@ -192,8 +258,11 @@ router.post('/api/mill/dispatch/delete', async (req, res) => {
         if (noteRes.length === 0) return res.status(404).json({ success: false, message: 'Not found' });
         if (noteRes[0].STATUS === 'SETTLED') return res.status(400).json({ success: false, message: 'Cannot delete a settled dispatch note' });
 
+        const dNoRes = await queryAsync('SELECT DISPATCH_NO FROM mill_dispatch_notes WHERE DISPATCH_ID = ?', [DISPATCH_ID]);
+        if (dNoRes.length > 0) {
+            await queryAsync('UPDATE mill_bills SET DISPATCH_NO = NULL WHERE DISPATCH_NO = ?', [dNoRes[0].DISPATCH_NO]);
+        }
         await queryAsync('DELETE FROM mill_dispatch_notes WHERE DISPATCH_ID = ?', [DISPATCH_ID]);
-        // Foreign key CASCADE will delete mill_dispatch_bills
 
         res.json({ success: true, message: 'Dispatch note deleted successfully' });
     } catch (error) {
@@ -355,7 +424,7 @@ router.post('/api/mill/dispatch/settle', async (req, res) => {
                 const billId = billRes.insertId;
 
                 // Link to dispatch note
-                await queryAsync('INSERT INTO mill_dispatch_bills (DISPATCH_ID, BILL_ID) VALUES (?, ?)', [DISPATCH_ID, billId]);
+                await queryAsync('UPDATE mill_bills SET DISPATCH_NO = ? WHERE BILL_ID = ?', [noteRes[0].DISPATCH_NO, billId]);
 
                 // Insert cheques if any
                 if ((PAYMENT_METHOD === 'cheque' || PAYMENT_METHOD === 'mixed') && CHEQUES && Array.isArray(CHEQUES)) {
@@ -461,7 +530,7 @@ router.post('/api/mill/dispatch/unlock', async (req, res) => {
         if (noteRes.length === 0) return res.status(404).json({ success: false, message: 'Dispatch note not found' });
         if (noteRes[0].STATUS !== 'SETTLED') return res.status(400).json({ success: false, message: 'Dispatch note is not settled' });
 
-        const bills = await queryAsync('SELECT BILL_ID FROM mill_dispatch_bills WHERE DISPATCH_ID = ?', [DISPATCH_ID]);
+        const bills = await queryAsync('SELECT BILL_ID FROM mill_bills WHERE DISPATCH_NO = ?', [noteRes[0].DISPATCH_NO]);
 
         for (const b of bills) {
             const billId = b.BILL_ID;

@@ -1,81 +1,685 @@
 MySQL connection pool created successfully
+[ChequeJob] Initializing cheque notification schedules...
 >>> BACKEND RELOADED: Balance Fix Applied <<<
 Server is running on port 3001
-[Socket] Cleared dangling terminal sessions on startup
-notifications table verified/created.
-push_subscriptions table verified/created.
 Verified 'cash_floats' table.
-Client connected: 5tgy6f7LGjgn-fOlAAAB
-[Socket] Terminal Registered: POS - TL6E8
-[MergeSync] Received 51 items from POS
-[MergeSync] Received 51 items from POS
+push_subscriptions table verified/created.
+[Migration] mill_item_variations table ready
+notifications table verified/created.
+[Migration] stores table ready.
+[Migration] Seeded 0 default weight variations for output items
 [Migration] UNIQUE index on CODE already exists - good!
-[MergeSync] Web DB has 51 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Web DB has 51 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[Socket] Created new DB session: 11
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
+[Socket] Cleared dangling terminal sessions on startup
+[Expenses] Table schema & default categories verified
 [Migration] Cannot create unique index on transactions - duplicates still exist.
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 7, toUpdateOnPOS: 44, newForPOS: 7 }
-Client disconnected: 5tgy6f7LGjgn-fOlAAAB
-Client connected: kkBH0GO7NOfv05X3AAAE
-[Socket] Terminal Registered: POS - TL6E8
-[MergeSync] Received 51 items from POS
-[Socket] Resumed recent DB session: 11
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 50 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 8, toUpdateOnPOS: 43, newForPOS: 7 }
-Client disconnected: kkBH0GO7NOfv05X3AAAE
-Client connected: 8oUucXvsj0B7VI7bAAAH
-[MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[Socket] Terminal Registered: POS - TL6E8
-[Socket] Resumed recent DB session: 11
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-[MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 50 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 8, toUpdateOnPOS: 43, newForPOS: 7 }
-Client disconnected: 8oUucXvsj0B7VI7bAAAH
-Client connected: l_Gcxt8ccZKd3ZneAAAK
-[Socket] Terminal Registered: POS - TL6E8
-[Socket] Resumed recent DB session: 11
-[MergeSync] Received 51 items from POS
-[MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-Client disconnected: l_Gcxt8ccZKd3ZneAAAK
-Client connected: 9PxO2z8d5CGx6aAlAAAN
-[Socket] Terminal Registered: POS - TL6E8
-[MergeSync] Received 51 items from POS
-[MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[Socket] Resumed recent DB session: 11
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-Client disconnected: 9PxO2z8d5CGx6aAlAAAN
-[MergeSync] Received 51 items from POS
-Client connected: EKGC_HHptLL4LQYNAAAQ
-[Socket] Terminal Registered: POS - TL6E8
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[Socket] Resumed recent DB session: 11
-[MergeSync] Received 51 items from POS
-[MergeSync] Web DB has 49 valid items (all active states)
-[MergeSync] POS has 51 unique valid items
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-[MergeSync] Complete: { updatedOnWeb: 0, createdOnWeb: 9, toUpdateOnPOS: 42, newForPOS: 7 }
-Client disconnected: EKGC_HHptLL4LQYNAAAQ
+Client connected: uQy-zmOuBKdG_jTRAAAB
+Client connected: asLbhHKWlGkIlpjrAAAD
+Client connected: Y5qz0DY4FWQdbERVAAAF
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Get all Items request received:
+Client disconnected: uQy-zmOuBKdG_jTRAAAB
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: asLbhHKWlGkIlpjrAAAD
+Client connected: 5dZZ3HviRzhJxMBsAAAI
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: 5dZZ3HviRzhJxMBsAAAI
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: Y5qz0DY4FWQdbERVAAAF
+Client connected: zEc8hun1v7EedeLYAAAL
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Client disconnected: zEc8hun1v7EedeLYAAAL
+Client connected: 8VGhExyQirn_efMhAAAR
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Client disconnected: 8VGhExyQirn_efMhAAAR
+Client connected: zOjdgG92hhAIuGYsAAAT
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Get all Items request received:
+Client disconnected: zOjdgG92hhAIuGYsAAAT
+Client connected: OHBLa5kplj4oICPuAAAW
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Get all Items request received:
+Client connected: SIOv4bRKyy8UDQbkAAAb
+Client connected: lBhkOJgTtV7d7PW3AAAc
+Client disconnected: lBhkOJgTtV7d7PW3AAAc
+Client disconnected: SIOv4bRKyy8UDQbkAAAb
+Get all Items request received:
+Client connected: yUF75LFhM0ryZIWBAAAf
+Client connected: DrxYrDTKLJR3h7EMAAAi
+Client disconnected: DrxYrDTKLJR3h7EMAAAi
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: bPWXtJ_NT2-GSpjuAAAl
+Client disconnected: bPWXtJ_NT2-GSpjuAAAl
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: OHBLa5kplj4oICPuAAAW
+Client connected: 2GNrjccuRx5akoOSAAAq
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: 2GNrjccuRx5akoOSAAAq
+Client connected: owcGiXYKru1RrzGMAAAv
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Get all Items request received:
+Get all Items request received:
+Client disconnected: owcGiXYKru1RrzGMAAAv
+Client connected: 9wqn65kIvZjO2v4UAAAy
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: 9wqn65kIvZjO2v4UAAAy
+Client connected: MXQSlhQCB0DeIFtHAAA3
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: tFYonrYX5q0mKY67AAA5
+Client disconnected: MXQSlhQCB0DeIFtHAAA3
+[Socket] Force disconnected duplicate terminal: V9XHG (MXQSlhQCB0DeIFtHAAA3)
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Created new DB session: 260
+Client disconnected: tFYonrYX5q0mKY67AAA5
+Client connected: dkZDYQMK5MAJx8jVAAA9
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 259
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: dQRYorlAY9dCdC4QAAA_
+Client disconnected: dkZDYQMK5MAJx8jVAAA9
+[Socket] Force disconnected duplicate terminal: V9XHG (dkZDYQMK5MAJx8jVAAA9)
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Created new DB session: 261
+Client disconnected: dQRYorlAY9dCdC4QAAA_
+Client connected: JioiQTD8zeNPHvYjAABD
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 261
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Error editing mill sale: Error: Incorrect integer value: 'Thumula Rajakaruna' for column 'CREATED_BY' at row 1
+    at Packet.asError (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+    at Query.execute (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+    at PoolConnection.handlePacket (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:508:34)
+    at PacketParser.onPacket (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+    at PacketParser.executeStart (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+    at Socket.<anonymous> (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+    at Socket.emit (node:events:507:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5) {
+  code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD',
+  errno: 1366,
+  sqlState: 'HY000',
+  sqlMessage: "Incorrect integer value: 'Thumula Rajakaruna' for column 'CREATED_BY' at row 1",
+  sql: "INSERT INTO mill_inventory_ledger SET `ITEM_ID` = 36, `PLACE_ID` = NULL, `TYPE` = 'IN', `QUANTITY` = '20.00', `BALANCE_AFTER` = -400, `REFERENCE_TYPE` = 'sale_edit_revert', `REFERENCE_ID` = 150, `DATE` = '2026-08-26 10:17:30.419', `NOTES` = 'Edit Revert MIV-20260826-V9XHG-0004', `CREATED_BY` = 'Thumula Rajakaruna'"
+}
+Error editing mill sale: Error: Incorrect integer value: 'Thumula Rajakaruna' for column 'CREATED_BY' at row 1
+    at Packet.asError (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+    at Query.execute (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+    at PoolConnection.handlePacket (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:508:34)
+    at PacketParser.onPacket (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+    at PacketParser.executeStart (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+    at Socket.<anonymous> (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+    at Socket.emit (node:events:507:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5) {
+  code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD',
+  errno: 1366,
+  sqlState: 'HY000',
+  sqlMessage: "Incorrect integer value: 'Thumula Rajakaruna' for column 'CREATED_BY' at row 1",
+  sql: "INSERT INTO mill_inventory_ledger SET `ITEM_ID` = 36, `PLACE_ID` = NULL, `TYPE` = 'IN', `QUANTITY` = '20.00', `BALANCE_AFTER` = -400, `REFERENCE_TYPE` = 'sale_edit_revert', `REFERENCE_ID` = 150, `DATE` = '2026-08-26 10:17:31.091', `NOTES` = 'Edit Revert MIV-20260826-V9XHG-0004', `CREATED_BY` = 'Thumula Rajakaruna'"
+}
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Error editing mill sale: Error: Incorrect integer value: 'Thumula Rajakaruna' for column 'CREATED_BY' at row 1
+    at Packet.asError (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+    at Query.execute (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+    at PoolConnection.handlePacket (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:508:34)
+    at PacketParser.onPacket (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+    at PacketParser.executeStart (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+    at Socket.<anonymous> (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+    at Socket.emit (node:events:507:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5) {
+  code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD',
+  errno: 1366,
+  sqlState: 'HY000',
+  sqlMessage: "Incorrect integer value: 'Thumula Rajakaruna' for column 'CREATED_BY' at row 1",
+  sql: "INSERT INTO mill_inventory_ledger SET `ITEM_ID` = 36, `PLACE_ID` = NULL, `TYPE` = 'IN', `QUANTITY` = '20.00', `BALANCE_AFTER` = -400, `REFERENCE_TYPE` = 'sale_edit_revert', `REFERENCE_ID` = 150, `DATE` = '2026-08-26 10:17:54.447', `NOTES` = 'Edit Revert MIV-20260826-V9XHG-0004', `CREATED_BY` = 'Thumula Rajakaruna'"
+}
+Error editing mill sale: Error: Incorrect integer value: 'Thumula Rajakaruna' for column 'CREATED_BY' at row 1
+    at Packet.asError (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/packets/packet.js:740:17)
+    at Query.execute (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/commands/command.js:29:26)
+    at PoolConnection.handlePacket (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:508:34)
+    at PacketParser.onPacket (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:93:12)
+    at PacketParser.executeStart (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/packet_parser.js:75:16)
+    at Socket.<anonymous> (/Users/thumularajakaruna/Documents/sarind pos local/SarindaWeb/backend/node_modules/mysql2/lib/base/connection.js:100:25)
+    at Socket.emit (node:events:507:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5) {
+  code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD',
+  errno: 1366,
+  sqlState: 'HY000',
+  sqlMessage: "Incorrect integer value: 'Thumula Rajakaruna' for column 'CREATED_BY' at row 1",
+  sql: "INSERT INTO mill_inventory_ledger SET `ITEM_ID` = 36, `PLACE_ID` = NULL, `TYPE` = 'IN', `QUANTITY` = '20.00', `BALANCE_AFTER` = -400, `REFERENCE_TYPE` = 'sale_edit_revert', `REFERENCE_ID` = 150, `DATE` = '2026-08-26 10:18:01.101', `NOTES` = 'Edit Revert MIV-20260826-V9XHG-0004', `CREATED_BY` = 'Thumula Rajakaruna'"
+}
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: h6K-uz-uC4jERtdQAABF
+Client disconnected: JioiQTD8zeNPHvYjAABD
+[Socket] Force disconnected duplicate terminal: V9XHG (JioiQTD8zeNPHvYjAABD)
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Created new DB session: 262
+Client disconnected: h6K-uz-uC4jERtdQAABF
+Client connected: H7qVK8F-icIXLQEgAABJ
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 261
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: H7qVK8F-icIXLQEgAABJ
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: 4mDh0G-sjgoA2pVjAABL
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Created new DB session: 263
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: sPmTPQ6t38GEYokVAABN
+Client disconnected: 4mDh0G-sjgoA2pVjAABL
+[Socket] Force disconnected duplicate terminal: V9XHG (4mDh0G-sjgoA2pVjAABL)
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Created new DB session: 264
+Client disconnected: sPmTPQ6t38GEYokVAABN
+Client connected: i7uwWjEi0HSIhYkBAABR
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 263
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: ANbAOpULv4ibbCrwAABT
+Client disconnected: i7uwWjEi0HSIhYkBAABR
+[Socket] Force disconnected duplicate terminal: V9XHG (i7uwWjEi0HSIhYkBAABR)
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 264
+Client disconnected: ANbAOpULv4ibbCrwAABT
+Client connected: whXq7OLTTwXZiHcuAABX
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 263
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: yUF75LFhM0ryZIWBAAAf
+Client connected: NLV2qloHcvUE6xJ6AABa
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: whXq7OLTTwXZiHcuAABX
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: vuEcP9qu-T5yDL2uAABc
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Created new DB session: 265
+Get all Items request received:
+Get all Items request received:
+Client connected: Dhe1s2JjwHFEXrgqAABf
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: Dhe1s2JjwHFEXrgqAABf
+Client connected: f6ArrRr_uXy0nkX-AABi
+Client disconnected: f6ArrRr_uXy0nkX-AABi
+Client connected: 0x-88N7C4g13QCBUAABl
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: NLV2qloHcvUE6xJ6AABa
+Client connected: b_zJ6ZN1KcQRBS-7AABn
+Client disconnected: b_zJ6ZN1KcQRBS-7AABn
+Client connected: 8lylVostB2qIYVC8AABp
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: 0x-88N7C4g13QCBUAABl
+Client connected: nzExmSxKriWhMSwYAABr
+Client disconnected: nzExmSxKriWhMSwYAABr
+Client disconnected: 8lylVostB2qIYVC8AABp
+Client connected: Nkse9mPVyPwocfewAABu
+Client connected: PlcPWCulB7zJoLCbAABx
+Client disconnected: PlcPWCulB7zJoLCbAABx
+Client connected: NaIVUvfyr6oRQr2VAAB0
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: NaIVUvfyr6oRQr2VAAB0
+Client connected: nI97h8NrbVzYh9IWAAB3
+Client disconnected: nI97h8NrbVzYh9IWAAB3
+Client connected: h7bM9apX_Z29taJJAAB6
+Client connected: KvQV4CJQY7UtaG5yAAB9
+Client connected: DmQ0EGmX7vqCZESIAACA
+Client connected: X9noDm2-X_kcoi2cAACD
+Client disconnected: Nkse9mPVyPwocfewAABu
+Client disconnected: h7bM9apX_Z29taJJAAB6
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: KvQV4CJQY7UtaG5yAAB9
+Client disconnected: DmQ0EGmX7vqCZESIAACA
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: bHTmS2gRDcPZ1wzMAACF
+Client disconnected: bHTmS2gRDcPZ1wzMAACF
+Client connected: MbfhwRsMFzWpQN_BAACI
+Login request received: { user: 'chamika', hasPassword: true, hasPin: false }
+Login request received: { user: 'chamika', hasPassword: true, hasPin: false }
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: X9noDm2-X_kcoi2cAACD
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Client disconnected: MbfhwRsMFzWpQN_BAACI
+Client connected: AhEqccFeF5LwbiHjAACL
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Get all Items request received:
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Get all Items request received:
+Get all Items request received:
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Login request received: { user: 'sarinda', hasPassword: true, hasPin: false }
+Get all Items request received:
+Get all Items request received:
+Client disconnected: AhEqccFeF5LwbiHjAACL
+Client connected: wg4jKaw53RpXyCpxAACQ
+Client connected: OyErNamYrnBTTqL9AACR
+Get all Items request received:
+Get all Items request received:
+Client disconnected: wg4jKaw53RpXyCpxAACQ
+Get all Items request received:
+Get all Items request received:
+Client disconnected: OyErNamYrnBTTqL9AACR
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: fF4sMFZxISWE6M5qAACU
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: fF4sMFZxISWE6M5qAACU
+Client connected: VLkkZEsr--q2-bNTAACX
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Login request received: { user: 'sarinda', hasPassword: true, hasPin: false }
+Client disconnected: VLkkZEsr--q2-bNTAACX
+Client connected: R6vqMeQ1L8LhCArlAACc
+Client connected: 1wwI0JOGNNJPcxD3AACd
+Client disconnected: R6vqMeQ1L8LhCArlAACc
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: Q8V8bk_ui6sRs1dpAACg
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: 1wwI0JOGNNJPcxD3AACd
+Login request received: { user: undefined, hasPassword: true, hasPin: false }
+Get all Items request received:
+Client disconnected: vuEcP9qu-T5yDL2uAABc
+Client connected: JzR4PVKUSy4lzM4bAACj
+[Socket] Terminal Registered: Mill Electron App - V9XHG
+[Socket] Resumed recent DB session: 265
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Login request received: { user: 'thumula', hasPassword: true, hasPin: false }
+Client disconnected: Q8V8bk_ui6sRs1dpAACg
+Client connected: oJ1jXHqRf_3ARlYXAACo
+Client connected: zEE-CRbw10cq0DKjAACp
+Client disconnected: oJ1jXHqRf_3ARlYXAACo
+Client connected: G-RWpcQuEkrRJfg4AACs
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client disconnected: G-RWpcQuEkrRJfg4AACs
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Get all Items request received:
+Client connected: be-WcK1qdR4a_fpaAACv
