@@ -190,8 +190,24 @@ router.post('/api/mill/dispatch/create', async (req, res) => {
                     LORRY_NO,
                     STAFF_NAME
                 };
+                if (req.body.TOTAL_5KG !== undefined) updateFields.TOTAL_5KG = req.body.TOTAL_5KG;
+                if (req.body.TOTAL_10KG !== undefined) updateFields.TOTAL_10KG = req.body.TOTAL_10KG;
+                if (req.body.TOTAL_25KG !== undefined) updateFields.TOTAL_25KG = req.body.TOTAL_25KG;
+                if (req.body.TOTAL_BAGS !== undefined) updateFields.TOTAL_BAGS = req.body.TOTAL_BAGS;
 
-                await queryAsync('UPDATE mill_dispatch_notes SET ? WHERE DISPATCH_ID = ?', [updateFields, existingId]);
+                try {
+                    await queryAsync('UPDATE mill_dispatch_notes SET ? WHERE DISPATCH_ID = ?', [updateFields, existingId]);
+                } catch(err) {
+                    if (err.code === 'ER_BAD_FIELD_ERROR') {
+                        try { await queryAsync('ALTER TABLE mill_dispatch_notes ADD COLUMN TOTAL_5KG INT DEFAULT 0'); } catch(e) {}
+                        try { await queryAsync('ALTER TABLE mill_dispatch_notes ADD COLUMN TOTAL_10KG INT DEFAULT 0'); } catch(e) {}
+                        try { await queryAsync('ALTER TABLE mill_dispatch_notes ADD COLUMN TOTAL_25KG INT DEFAULT 0'); } catch(e) {}
+                        try { await queryAsync('ALTER TABLE mill_dispatch_notes ADD COLUMN TOTAL_BAGS INT DEFAULT 0'); } catch(e) {}
+                        await queryAsync('UPDATE mill_dispatch_notes SET ? WHERE DISPATCH_ID = ?', [updateFields, existingId]);
+                    } else {
+                        throw err;
+                    }
+                }
 
                 // Clear old bill associations & re-link updated bills
                 await queryAsync('UPDATE mill_bills SET DISPATCH_NO = NULL WHERE DISPATCH_NO = ?', [existingNote[0].DISPATCH_NO]);
@@ -225,13 +241,31 @@ router.post('/api/mill/dispatch/create', async (req, res) => {
             STAFF_NAME,
             CREATED_BY: createdById
         };
+        if (req.body.TOTAL_5KG !== undefined) insertRow.TOTAL_5KG = req.body.TOTAL_5KG;
+        if (req.body.TOTAL_10KG !== undefined) insertRow.TOTAL_10KG = req.body.TOTAL_10KG;
+        if (req.body.TOTAL_25KG !== undefined) insertRow.TOTAL_25KG = req.body.TOTAL_25KG;
+        if (req.body.TOTAL_BAGS !== undefined) insertRow.TOTAL_BAGS = req.body.TOTAL_BAGS;
+
         if (req.body.CREATED_DATE) insertRow.CREATED_DATE = new Date(req.body.CREATED_DATE);
         if (DEVICE_ID) insertRow.DEVICE_ID = DEVICE_ID;
         if (CREATED_BY_NAME) insertRow.CREATED_BY_NAME = CREATED_BY_NAME;
 
-        const insertRes = await queryAsync('INSERT INTO mill_dispatch_notes SET ?', insertRow);
-
-        const dispatchId = insertRes.insertId;
+        let dispatchId = null;
+        try {
+            const insertRes = await queryAsync('INSERT INTO mill_dispatch_notes SET ?', insertRow);
+            dispatchId = insertRes.insertId;
+        } catch(err) {
+            if (err.code === 'ER_BAD_FIELD_ERROR') {
+                try { await queryAsync('ALTER TABLE mill_dispatch_notes ADD COLUMN TOTAL_5KG INT DEFAULT 0'); } catch(e) {}
+                try { await queryAsync('ALTER TABLE mill_dispatch_notes ADD COLUMN TOTAL_10KG INT DEFAULT 0'); } catch(e) {}
+                try { await queryAsync('ALTER TABLE mill_dispatch_notes ADD COLUMN TOTAL_25KG INT DEFAULT 0'); } catch(e) {}
+                try { await queryAsync('ALTER TABLE mill_dispatch_notes ADD COLUMN TOTAL_BAGS INT DEFAULT 0'); } catch(e) {}
+                const insertRes = await queryAsync('INSERT INTO mill_dispatch_notes SET ?', insertRow);
+                dispatchId = insertRes.insertId;
+            } else {
+                throw err;
+            }
+        }
 
         for (const ref of allBillRefs) {
             if (!ref) continue;

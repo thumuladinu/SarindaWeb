@@ -1847,11 +1847,19 @@ router.post('/api/weights/getByCode', async (req, res) => {
         }
 
         const row = rows[0];
+        let itemDetails = {};
+        try {
+            itemDetails = typeof row.ITEM_DETAILS === 'string' ? JSON.parse(row.ITEM_DETAILS) : (row.ITEM_DETAILS || {});
+        } catch (e) {
+            console.warn('[WeightGetByCode] Failed to parse ITEM_DETAILS:', e.message);
+            itemDetails = {};
+        }
+
         res.status(200).json({
             success: true,
             result: {
                 ...row,
-                ITEM_DETAILS: row.ITEM_DETAILS ? JSON.parse(row.ITEM_DETAILS) : {}
+                ITEM_DETAILS: itemDetails
             }
         });
     } catch (error) {
@@ -2010,7 +2018,13 @@ router.get('/api/weights/:code', async (req, res) => {
 
         if (Array.isArray(queryResult) && queryResult.length > 0) {
             const record = queryResult[0];
-            const itemDetails = record.ITEM_DETAILS ? JSON.parse(record.ITEM_DETAILS) : {};
+            let itemDetails = {};
+            try {
+                itemDetails = typeof record.ITEM_DETAILS === 'string' ? JSON.parse(record.ITEM_DETAILS) : (record.ITEM_DETAILS || {});
+            } catch (e) {
+                console.warn('[WeightByCodeGET] Failed to parse ITEM_DETAILS:', e.message);
+                itemDetails = {};
+            }
             return res.status(200).json({
                 success: true,
                 measure: {

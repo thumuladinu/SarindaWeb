@@ -119,6 +119,12 @@ router.post('/api/MillgetCustomerDetails', async (req, res) => {
     }
 });
 
+const ensureCustomerDistanceColumn = async () => {
+    try {
+        await pool.query('ALTER TABLE mill_customers ADD COLUMN DISTANCE DECIMAL(10,2) DEFAULT 0');
+    } catch(e) {}
+};
+
 router.post('/api/MilladdCustomer', async (req, res) => {
     //console.log('Add customer request received:', req.body);
 
@@ -129,8 +135,17 @@ router.post('/api/MilladdCustomer', async (req, res) => {
             return res.status(500).json({ success: false, message: 'Internal server error' });
         }
 
-        // Insert the new customer data into the database
-        const insertResult = await pool.query('INSERT INTO mill_customers SET ?', req.body);
+        let insertResult;
+        try {
+            insertResult = await pool.query('INSERT INTO mill_customers SET ?', req.body);
+        } catch (err) {
+            if (err.code === 'ER_BAD_FIELD_ERROR') {
+                await ensureCustomerDistanceColumn();
+                insertResult = await pool.query('INSERT INTO mill_customers SET ?', req.body);
+            } else {
+                throw err;
+            }
+        }
 
         if (insertResult.affectedRows > 0) {
             return res.status(200).json({ success: true, message: 'Customer added successfully' });
@@ -157,11 +172,23 @@ router.post('/api/MillupdateCustomer', async (req, res) => {
         // Extract the customer ID from the request body
         const { CUSTOMER_ID, ...updatedCustomerData } = req.body;
 
-        // Update the customer data in the database
-        const updateResult = await pool.query('UPDATE mill_customers SET ? WHERE CUSTOMER_ID = ?', [
-            updatedCustomerData,
-            CUSTOMER_ID,
-        ]);
+        let updateResult;
+        try {
+            updateResult = await pool.query('UPDATE mill_customers SET ? WHERE CUSTOMER_ID = ?', [
+                updatedCustomerData,
+                CUSTOMER_ID,
+            ]);
+        } catch (err) {
+            if (err.code === 'ER_BAD_FIELD_ERROR') {
+                await ensureCustomerDistanceColumn();
+                updateResult = await pool.query('UPDATE mill_customers SET ? WHERE CUSTOMER_ID = ?', [
+                    updatedCustomerData,
+                    CUSTOMER_ID,
+                ]);
+            } else {
+                throw err;
+            }
+        }
 
         if (updateResult.affectedRows > 0) {
             return res.status(200).json({ success: true, message: 'Customer updated successfully' });
