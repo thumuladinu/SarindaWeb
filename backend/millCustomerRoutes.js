@@ -119,10 +119,12 @@ router.post('/api/MillgetCustomerDetails', async (req, res) => {
     }
 });
 
-const ensureCustomerDistanceColumn = async () => {
-    try {
-        await pool.query('ALTER TABLE mill_customers ADD COLUMN DISTANCE DECIMAL(10,2) DEFAULT 0');
-    } catch(e) {}
+const ensureCustomerExtraColumns = async () => {
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN DISTANCE DECIMAL(10,2) DEFAULT 0'); } catch(e) {}
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN CREDIT_LIMIT DECIMAL(12,2) DEFAULT 0'); } catch(e) {}
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN BANK_DETAILS_JSON TEXT'); } catch(e) {}
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN PHONE_NUMBER VARCHAR(50)'); } catch(e) {}
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN LOCATION VARCHAR(255)'); } catch(e) {}
 };
 
 router.post('/api/MilladdCustomer', async (req, res) => {
@@ -140,7 +142,7 @@ router.post('/api/MilladdCustomer', async (req, res) => {
             insertResult = await pool.query('INSERT INTO mill_customers SET ?', req.body);
         } catch (err) {
             if (err.code === 'ER_BAD_FIELD_ERROR') {
-                await ensureCustomerDistanceColumn();
+                await ensureCustomerExtraColumns();
                 insertResult = await pool.query('INSERT INTO mill_customers SET ?', req.body);
             } else {
                 throw err;
@@ -178,13 +180,25 @@ router.post('/api/MillupdateCustomer', async (req, res) => {
                 updatedCustomerData,
                 CUSTOMER_ID,
             ]);
+            if (updateResult.affectedRows === 0 && updatedCustomerData.NAME) {
+                updateResult = await pool.query('UPDATE mill_customers SET ? WHERE NAME = ?', [
+                    updatedCustomerData,
+                    updatedCustomerData.NAME,
+                ]);
+            }
         } catch (err) {
             if (err.code === 'ER_BAD_FIELD_ERROR') {
-                await ensureCustomerDistanceColumn();
+                await ensureCustomerExtraColumns();
                 updateResult = await pool.query('UPDATE mill_customers SET ? WHERE CUSTOMER_ID = ?', [
                     updatedCustomerData,
                     CUSTOMER_ID,
                 ]);
+                if (updateResult.affectedRows === 0 && updatedCustomerData.NAME) {
+                    updateResult = await pool.query('UPDATE mill_customers SET ? WHERE NAME = ?', [
+                        updatedCustomerData,
+                        updatedCustomerData.NAME,
+                    ]);
+                }
             } else {
                 throw err;
             }
