@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, Component } from 'react';
+import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
     ConfigProvider, theme as antdTheme, App as AntdApp, 
     Dropdown, Avatar, Tooltip, Tag, Modal 
@@ -89,7 +89,7 @@ const Layout = ({ children }) => {
         { key: '/labels', label: 'Bag Labels & Barcodes', icon: <BarcodeOutlined /> },
         { key: '/sales-returns', label: 'Sales Returns', icon: <RollbackOutlined /> },
         { key: '/items', label: 'Mill Items', icon: <AppstoreOutlined /> },
-        { key: '/resources', label: 'Resources (Vehicles & Places)', icon: <TeamOutlined /> },
+        { key: '/resources', label: 'Customers, Staff & Resources', icon: <TeamOutlined /> },
         { type: 'divider' },
         { key: '/settings', label: 'Settings', icon: <SettingOutlined /> },
         { type: 'divider' },
@@ -132,7 +132,18 @@ const Layout = ({ children }) => {
                     {/* Brand Icon & Name (Light Logo Version) */}
                     <Link to="/" className="officer-badge px-3 py-1 rounded-2xl flex items-center gap-2.5 no-underline hover:opacity-95 transition-all shadow-inner bg-white/10 border border-white/20">
                         <div className="w-8 h-8 rounded-xl bg-white p-0.5 flex items-center justify-center overflow-hidden shrink-0 shadow">
-                            <img src="/logo-light.png" alt="Chamika Rice Mill Logo" className="w-full h-full object-contain" />
+                            <img 
+                                src="./logo-light.png" 
+                                alt="Chamika Rice Mill Logo" 
+                                className="w-full h-full object-contain"
+                                onError={(e) => {
+                                    if (e.target.src.startsWith('http') || e.target.src.includes('./')) {
+                                        e.target.src = '/logo-light.png';
+                                    } else {
+                                        e.target.style.display = 'none';
+                                    }
+                                }}
+                            />
                         </div>
                         <div className="text-sm font-black tracking-wider uppercase text-white font-sans">
                             Chamika Rice Mill
@@ -160,11 +171,14 @@ const Layout = ({ children }) => {
                 {/* Right: Connectivity Status, Sync Trigger, User Profile Dropdown */}
                 <div className="flex items-center gap-3">
                     {/* Live Online / Offline Tag */}
-                    <Tooltip title={isOnline ? `Connected to ${syncService.apiBase} (${latency || 0}ms)` : `Offline Mode Active (${syncService.apiBase} unreachable)`}>
-                        <div className={`px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${isOnline ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-400/30' : 'bg-rose-500/30 text-rose-100 border border-rose-400/30'}`}>
-                            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
-                            <span>{isOnline ? `Online ${latency ? `(${latency}ms)` : ''}` : 'Offline'}</span>
-                        </div>
+                    <Tooltip title={isOnline ? `Connected to ${syncService.apiBase}` : `Offline Mode Active (${syncService.apiBase} unreachable)`}>
+                        <Tag 
+                            color={isOnline ? 'success' : 'warning'} 
+                            className="px-2.5 py-1 text-xs font-bold rounded-xl border-0 flex items-center gap-1.5 shadow-sm"
+                        >
+                            {isOnline ? <WifiOutlined /> : <DisconnectOutlined />}
+                            <span>{isOnline ? 'Online' : 'Offline'}</span>
+                        </Tag>
                     </Tooltip>
 
                     {/* Quick Sync Button */}
@@ -175,7 +189,7 @@ const Layout = ({ children }) => {
                         className="officer-badge hover:bg-white/30 active:scale-95 transition-all text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-sm"
                         title="Sync local records with cloud backend"
                     >
-                        <SyncOutlined spin={isSyncing} className={isSyncing ? 'text-amber-300' : ''} />
+                        <SyncOutlined className={isSyncing ? 'text-amber-300' : ''} />
                         <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
                         {pendingCount > 0 && (
                             <span className="bg-amber-400 text-slate-900 px-1.5 py-0.2 text-[10px] font-black rounded-full shadow-sm">
@@ -266,11 +280,90 @@ const AuthenticatedApp = () => {
     );
 };
 
+class ErrorBoundary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error, errorInfo) {
+        console.error('[ErrorBoundary] Caught exception:', error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="p-8 max-w-xl mx-auto my-12 bg-rose-50 border border-rose-200 rounded-3xl text-center space-y-4 shadow-xl">
+                    <h2 className="text-xl font-bold text-rose-800">⚠️ Application View Error</h2>
+                    <p className="text-sm text-rose-600 font-mono bg-white p-3 rounded-xl border border-rose-100 text-left overflow-auto max-h-40">
+                        {this.state.error?.toString() || 'Unknown rendering error'}
+                    </p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all cursor-pointer"
+                    >
+                        🔄 Refresh View
+                    </button>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
 export default function App() {
+    const [updateInfo, setUpdateInfo] = useState(null);
+
     useEffect(() => {
         syncService.startAutoSync();
         syncService.initSocket();
+
+        // 1. Preferred contextBridge API (window.electron)
+        if (window.electron) {
+            try {
+                console.log('[App] Initializing auto-updates via window.electron bridge...');
+                if (window.electron.initAutoUpdates) {
+                    window.electron.initAutoUpdates().catch(() => {});
+                }
+                if (window.electron.onUpdateDownloaded) {
+                    window.electron.onUpdateDownloaded((event, info) => {
+                        console.log('[App] Update downloaded signal received:', info);
+                        setUpdateInfo(info || {});
+                    });
+                }
+            } catch (e) {
+                console.error('[App] Error in window.electron bridge:', e);
+            }
+        } 
+        // 2. Fallback for nodeIntegration environments (window.require)
+        else if (typeof window !== 'undefined' && window.require) {
+            try {
+                const { ipcRenderer } = window.require('electron');
+                ipcRenderer.invoke('init-auto-updates').catch(() => {});
+
+                ipcRenderer.on('update_downloaded', (event, info) => {
+                    setUpdateInfo(info || {});
+                });
+            } catch (e) {
+                console.log('[App] Not running in Electron environment');
+            }
+        }
     }, []);
+
+    const handleRestartAndInstall = () => {
+        if (window.electron?.restartApp) {
+            window.electron.restartApp();
+        } else if (typeof window !== 'undefined' && window.require) {
+            try {
+                const { ipcRenderer } = window.require('electron');
+                ipcRenderer.send('restart_app');
+            } catch (e) {}
+        }
+    };
 
     return (
         <ConfigProvider
@@ -284,9 +377,33 @@ export default function App() {
             }}
         >
             <AntdApp>
-                <AuthProvider>
-                    <AuthenticatedApp />
-                </AuthProvider>
+                <ErrorBoundary>
+                    <AuthProvider>
+                        <AuthenticatedApp />
+                    </AuthProvider>
+                </ErrorBoundary>
+                
+                {/* Auto Update Available Modal */}
+                <Modal
+                    title={<span className="text-blue-600 font-bold text-lg">🚀 New Version Ready to Install</span>}
+                    open={!!updateInfo}
+                    onOk={handleRestartAndInstall}
+                    onCancel={() => setUpdateInfo(null)}
+                    okText="Restart & Update Now"
+                    cancelText="Later"
+                    okButtonProps={{ className: '!bg-blue-600 hover:!bg-blue-700 font-bold rounded-xl h-10' }}
+                    cancelButtonProps={{ className: 'rounded-xl h-10' }}
+                    className="rounded-2xl"
+                >
+                    <div className="py-2 space-y-2">
+                        <p className="text-gray-700 dark:text-gray-200">
+                            A new update <strong>({updateInfo?.version || 'Latest'})</strong> has been silently downloaded.
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            Click <strong>"Restart & Update Now"</strong> to install the latest version without losing any offline data or settings.
+                        </p>
+                    </div>
+                </Modal>
             </AntdApp>
         </ConfigProvider>
     );

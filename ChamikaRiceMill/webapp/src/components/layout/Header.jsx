@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { SunOutlined, MoonOutlined, LogoutOutlined, BellOutlined, CheckCircleOutlined, CloseCircleOutlined, RightOutlined, ClockCircleOutlined, AlertOutlined } from '@ant-design/icons';
+import { SunOutlined, MoonOutlined, LogoutOutlined, BellOutlined, CheckCircleOutlined, CloseCircleOutlined, RightOutlined, ClockCircleOutlined, AlertOutlined, CodeOutlined } from '@ant-design/icons';
 import { Dropdown, Button, message, Badge, Popover, Tag, Spin, Drawer } from 'antd';
 import { useTheme } from '../ui/ThemeProvider';
 import Cookies from 'js-cookie';
@@ -63,6 +63,8 @@ export default function Header() {
     const userPhoto = userData.PHOTO || null;
     const userInitial = userName.charAt(0).toUpperCase();
 
+    const isDevRole = userRole.toLowerCase() === 'dev' || userRole.toLowerCase().includes('dev');
+
     const handleLogout = () => {
         Cookies.remove('millUser', { path: '/' });
         Cookies.remove('millUser');
@@ -98,7 +100,7 @@ export default function Header() {
         } else if (diffDays === 0) {
             return { 
                 type: 'DUE_TODAY', 
-                label: 'Due Today!', 
+                label: 'Due Today', 
                 color: 'warning', 
                 canAction: true, 
                 order: 2 
@@ -143,6 +145,15 @@ export default function Header() {
             ),
             disabled: true,
         },
+        ...(isDevRole ? [
+            { type: 'divider' },
+            {
+                key: 'dev-tools',
+                icon: <CodeOutlined className="text-blue-500" />,
+                label: 'Dev Tools Console',
+                onClick: () => navigate('/dev-tools')
+            }
+        ] : []),
         { type: 'divider' },
         {
             key: 'logout',
@@ -264,6 +275,17 @@ export default function Header() {
 
             {/* Right Actions */}
             <div className="flex items-center gap-2 md:gap-4">
+                {/* Dev Tools Quick Button (DEV Role Only) */}
+                {isDevRole && (
+                    <button
+                        onClick={() => navigate('/dev-tools')}
+                        title="Dev Tools Console"
+                        className="w-10 h-10 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 flex items-center justify-center transition-all active:scale-95 border border-blue-500/20"
+                    >
+                        <CodeOutlined className="text-xl" />
+                    </button>
+                )}
+
                 {/* Cheque Notifications Bell - Desktop Popover */}
                 <div className="hidden md:block">
                     <Popover content={notificationContent} trigger="click" placement="bottomRight">
@@ -292,7 +314,6 @@ export default function Header() {
                         placement="bottom"
                         onClose={() => setMobileNotifDrawer(false)}
                         open={mobileNotifDrawer}
-                        height="auto"
                         closeIcon={null}
                         styles={{
                             wrapper: { boxShadow: 'none' },

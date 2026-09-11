@@ -4,10 +4,84 @@ const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
 // Check if running in dev mode
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const distIndexPath = path.join(__dirname, 'dist', 'index.html');
 
 let mainWindow;
+
+// Configure auto-updater
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoRunAppAfterInstall = true;
+
+try {
+    autoUpdater.setFeedURL({
+        provider: 'github',
+        owner: 'thumuladinu',
+        repo: 'chamika-mill-releases',
+    });
+} catch (e) {
+    console.warn('[AutoUpdater] Failed to set feed URL:', e.message);
+}
+
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking for updates...');
+    mainWindow?.webContents.send('checking_for_update');
+});
+autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdater] Update available:', info?.version);
+    mainWindow?.webContents.send('update_available', info);
+});
+autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdater] App is up to date:', info?.version);
+    mainWindow?.webContents.send('update_not_available', info);
+});
+autoUpdater.on('download-progress', (progress) => {
+    console.log(`[AutoUpdater] Download progress: ${Math.round(progress?.percent || 0)}%`);
+    mainWindow?.webContents.send('download_progress', progress);
+});
+autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdater] Update downloaded, ready to install');
+    mainWindow?.webContents.send('update_downloaded', info);
+});
+autoUpdater.on('error', (error) => {
+    console.error('[AutoUpdater] Error:', error?.message || error);
+    mainWindow?.webContents.send('update_error', error?.message || String(error));
+});
+
+function checkForUpdates() {
+    if (isDev) {
+        console.log('[AutoUpdater] Skipping update check in dev mode');
+        mainWindow?.webContents.send('update_not_available', { version: app.getVersion(), isDev: true });
+        return;
+    }
+    try {
+        console.log('[AutoUpdater] Executing checkForUpdatesAndNotify...');
+        mainWindow?.webContents.send('checking_for_update');
+        autoUpdater.checkForUpdatesAndNotify().catch(err => {
+            console.log('[AutoUpdater] Update check failed:', err.message);
+            mainWindow?.webContents.send('update_error', err.message);
+        });
+    } catch (error) {
+        console.error('[AutoUpdater] Error checking for updates:', error);
+        mainWindow?.webContents.send('update_error', error?.message || String(error));
+    }
+}
+
+// IPC handler to manually trigger auto-update check from renderer
+ipcMain.handle('init-auto-updates', () => {
+    if (!isDev) {
+        console.log('[AutoUpdater] Initializing auto-update check from IPC renderer...');
+        checkForUpdates();
+        return true;
+    }
+    return false;
+});
+
+ipcMain.on('restart_app', () => {
+    autoUpdater.quitAndInstall(false, true);
+});
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -45,7 +119,7 @@ function createWindow() {
     });
 
     // Load the app: preference to built dist/index.html unless explicitly in NODE_ENV=development without built files
-    if (isDev && !fs.existsSync(distIndexPath)) {
+    if (process.env.NODE_ENV === 'development' && !fs.existsSync(distIndexPath)) {
         mainWindow.loadURL('http://localhost:5181');
     } else if (fs.existsSync(distIndexPath)) {
         mainWindow.loadFile(distIndexPath);
@@ -56,16 +130,18 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => {
         mainWindow.maximize();
         mainWindow.show();
+        
+        // Trigger update check when window is visible
+        if (!isDev) {
+            setTimeout(() => {
+                checkForUpdates();
+            }, 2000);
+        }
     });
 
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
-
-    // Check for updates
-    if (!isDev) {
-        autoUpdater.checkForUpdatesAndNotify();
-    }
 }
 
 app.whenReady().then(() => {
@@ -115,10 +191,11 @@ ipcMain.handle('silent-print', async (event, htmlContent, printerName, options =
         });
 
         const isLabel = Boolean(options.isLabel || options.pageSize === '60mm 40mm');
-        const pageSizeCss = isLabel ? '60mm 40mm' : (options.pageSize || 'auto');
+        const pageSizeCss = isLabel ? '60mm 40mm' : (options.pageSize || (options.landscape ? '11in 8.5in' : 'auto'));
         const marginCss = isLabel ? '0mm' : (options.margin || '4mm');
 
-        const fullHtml = `
+        const isFullDoc = htmlContent.trim().toLowerCase().startsWith('<!doctype') || htmlContent.trim().toLowerCase().startsWith('<html');
+        const fullHtml = isFullDoc ? htmlContent : `
             <!DOCTYPE html>
             <html>
             <head>
@@ -169,13 +246,14 @@ ipcMain.handle('silent-print', async (event, htmlContent, printerName, options =
                 }
 
                 const deviceName = targetPrinter ? targetPrinter.name : '';
-                console.log('[Electron] Silent printing to printer:', deviceName || 'System Default', '| isLabel:', isLabel);
+                console.log('[Electron] Silent printing to printer:', deviceName || 'System Default', '| isLabel:', isLabel, '| landscape:', Boolean(options.landscape));
 
                 const printSettings = {
                     silent: true,
                     printBackground: true,
                     deviceName: deviceName,
                     color: true,
+                    landscape: Boolean(options.landscape),
                     margins: { marginType: isLabel ? 'none' : (options.marginType || 'printableArea') }
                 };
 
@@ -197,33 +275,5 @@ ipcMain.handle('silent-print', async (event, htmlContent, printerName, options =
     });
 });
 
-// Auto-updater configuration & events
-autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.autoRunAppAfterInstall = true;
 
-autoUpdater.on('checking-for-update', () => {
-    console.log('[AutoUpdater] Checking for updates...');
-});
-autoUpdater.on('update-available', (info) => {
-    console.log('[AutoUpdater] Update available:', info?.version);
-    mainWindow?.webContents.send('update_available', info);
-});
-autoUpdater.on('update-not-available', (info) => {
-    console.log('[AutoUpdater] App is up to date:', info?.version);
-});
-autoUpdater.on('download-progress', (progress) => {
-    console.log(`[AutoUpdater] Download progress: ${Math.round(progress?.percent || 0)}%`);
-});
-autoUpdater.on('update-downloaded', (info) => {
-    console.log('[AutoUpdater] Update downloaded, will install on app restart');
-    mainWindow?.webContents.send('update_downloaded', info);
-});
-autoUpdater.on('error', (error) => {
-    console.error('[AutoUpdater] Error:', error);
-});
-
-ipcMain.on('restart_app', () => {
-    autoUpdater.quitAndInstall(false, true);
-});
 

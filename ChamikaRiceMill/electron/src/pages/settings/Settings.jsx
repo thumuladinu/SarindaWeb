@@ -15,6 +15,7 @@ import axios from 'axios';
 import db from '../../services/db';
 import syncService, { getStoredApiBase } from '../../services/syncService';
 import printService from '../../services/printService';
+import { getTerminalDeviceCode, initTerminalDeviceCode } from '../../utils/terminalHelper';
 
 export default function Settings() {
     const [activeTab, setActiveTab] = useState('sync');
@@ -25,12 +26,29 @@ export default function Settings() {
     const [lastSync, setLastSync] = useState(syncService.lastSyncTime);
     const [pendingInfo, setPendingInfo] = useState({ total: 0, bills: 0, dispatch: 0, inwards: 0, returns: 0 });
 
+    // Software Version & Terminal Code State
+    const [appVersion, setAppVersion] = useState('1.0.8');
+    const [terminalCode, setTerminalCode] = useState(getTerminalDeviceCode());
+    const [updateState, setUpdateState] = useState({ status: 'idle', message: '', percent: 0, newVersion: '' });
+
     // Item mappings state
     const [mappingLoading, setMappingLoading] = useState(false);
     const [savingMapping, setSavingMapping] = useState(false);
     const [storeItems, setStoreItems] = useState([]);
     const [millItems, setMillItems] = useState([]);
     const [mappings, setMappings] = useState({});
+
+    // Mill Profile Header Settings state
+    const [millNameState, setMillNameState] = useState(localStorage.getItem('mill_name') || 'CHAMIKA RICE MILLS');
+    const [millAddrState, setMillAddrState] = useState(localStorage.getItem('mill_address') || 'Sooriyawewa');
+    const [millPhoneState, setMillPhoneState] = useState(localStorage.getItem('mill_phone') || '071-234 5678');
+
+    const handleSaveMillHeader = () => {
+        localStorage.setItem('mill_name', millNameState);
+        localStorage.setItem('mill_address', millAddrState);
+        localStorage.setItem('mill_phone', millPhoneState);
+        message.success('Mill Header, Address & Phone settings saved!');
+    };
 
     // Dual Printer & Auto-Print state
     const [autoPrint, setAutoPrint] = useState(printService.isAutoPrintEnabled());
@@ -45,6 +63,40 @@ export default function Settings() {
         loadStatus();
         fetchMappings();
         loadPrinters();
+
+        // Initialize permanent terminal device code
+        initTerminalDeviceCode().then(code => setTerminalCode(code));
+
+        // Fetch installed app version
+        if (window.electron?.getAppVersion) {
+            window.electron.getAppVersion().then(v => {
+                if (v) setAppVersion(v);
+            }).catch(() => {});
+        }
+
+        // Listen for updater events
+        if (window.electron) {
+            window.electron.onCheckingForUpdate?.(() => {
+                setUpdateState({ status: 'checking', message: 'Checking GitHub releases for updates...', percent: 0 });
+            });
+            window.electron.onUpdateAvailable?.((_, info) => {
+                setUpdateState({ status: 'available', message: `New update available: v${info?.version || ''}. Downloading in background...`, newVersion: info?.version, percent: 0 });
+            });
+            window.electron.onUpdateNotAvailable?.((_, info) => {
+                const msg = info?.isDev ? 'App is running in development mode. Auto-updates active on built desktop app.' : 'You are running the latest software version.';
+                setUpdateState({ status: 'latest', message: msg, percent: 0 });
+            });
+            window.electron.onDownloadProgress?.((_, progress) => {
+                const pct = Math.round(progress?.percent || 0);
+                setUpdateState(prev => ({ ...prev, status: 'downloading', message: `Downloading update... (${pct}%)`, percent: pct }));
+            });
+            window.electron.onUpdateDownloaded?.((_, info) => {
+                setUpdateState({ status: 'downloaded', message: `Update v${info?.version || ''} downloaded successfully! Click 'Restart & Install' to complete update.`, newVersion: info?.version, percent: 100 });
+            });
+            window.electron.onUpdateError?.((_, err) => {
+                setUpdateState({ status: 'error', message: `Update check error: ${err}`, percent: 0 });
+            });
+        }
 
 
         const unsub = syncService.subscribe((event, data) => {
@@ -82,6 +134,23 @@ export default function Settings() {
         }
     };
 
+    const handleManualCheckForUpdates = () => {
+        setUpdateState({ status: 'checking', message: 'Connecting to GitHub Releases...', percent: 0 });
+        if (window.electron?.initAutoUpdates) {
+            window.electron.initAutoUpdates().catch(err => {
+                setUpdateState({ status: 'error', message: err?.message || 'Failed to check updates', percent: 0 });
+            });
+        } else {
+            setUpdateState({ status: 'latest', message: 'Auto-update check is active on built desktop application.', percent: 0 });
+        }
+    };
+
+    const handleRestartApp = () => {
+        if (window.electron?.restartApp) {
+            window.electron.restartApp();
+        }
+    };
+
     const handleToggleAutoPrint = (checked) => {
         setAutoPrint(checked);
         printService.setAutoPrintEnabled(checked);
@@ -91,7 +160,7 @@ export default function Settings() {
     const handleSelectBillPrinter = (value) => {
         setBillPrinter(value);
         printService.setBillPrinter(value);
-        message.success(`A5 Bill Printer set to: ${value || 'System Default'}`);
+        message.success(`A4/A5 Bill Printer set to: ${value || 'System Default'}`);
     };
 
     const handleSelectLabelPrinter = (value) => {
@@ -105,7 +174,7 @@ export default function Settings() {
         try {
             const res = await printService.testPrintBill(billPrinter);
             if (res && res.success) {
-                message.success(`Test receipt sent to A5 Bill printer "${res.printer || billPrinter || 'System Default'}" successfully!`);
+                message.success(`Test receipt sent to A4/A5 Bill printer "${res.printer || billPrinter || 'System Default'}" successfully!`);
             } else {
                 message.info('Test receipt sent to bill printer.');
             }
@@ -411,7 +480,7 @@ export default function Settings() {
                         extra={
                             <Button
                                 type="primary"
-                                icon={<SyncOutlined spin={isSyncing} />}
+                                icon={<SyncOutlined />}
                                 onClick={handleForceSync}
                                 loading={isSyncing}
                                 className="bg-blue-600 hover:bg-blue-700 font-bold rounded-xl"
@@ -474,6 +543,71 @@ export default function Settings() {
                                 Purge 30-Day Old Cache
                             </Button>
                         </div>
+                    </Card>
+
+                    {/* Application Information & Version Center Card */}
+                    <Card 
+                        className="shadow-sm border-slate-200 rounded-2xl mt-4"
+                        title={
+                            <span className="font-black text-slate-800 flex items-center gap-2">
+                                <SettingOutlined className="text-blue-600" />
+                                Software Version & Device Info
+                            </span>
+                        }
+                        extra={
+                            <Space>
+                                {updateState.status === 'downloaded' ? (
+                                    <Button
+                                        type="primary"
+                                        icon={<CheckOutlined />}
+                                        onClick={handleRestartApp}
+                                        className="bg-emerald-600 hover:bg-emerald-700 font-bold rounded-xl shadow"
+                                    >
+                                        Restart & Install Update
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        icon={<ReloadOutlined />}
+                                        onClick={handleManualCheckForUpdates}
+                                        loading={updateState.status === 'checking' || updateState.status === 'downloading'}
+                                        className="rounded-xl font-semibold"
+                                    >
+                                        Check for Updates
+                                    </Button>
+                                )}
+                            </Space>
+                        }
+                    >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Current Software Version</div>
+                                    <div className="text-xl font-black text-slate-800 mt-0.5">v{appVersion}</div>
+                                </div>
+                                <Tag color="blue" className="text-xs font-bold px-3 py-1 rounded-lg m-0">Installed</Tag>
+                            </div>
+
+                            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Permanent Terminal Device Code</div>
+                                    <div className="text-xl font-black text-blue-600 font-mono mt-0.5">{terminalCode}</div>
+                                </div>
+                                <Tag color="purple" className="text-xs font-bold px-3 py-1 rounded-lg font-mono m-0">Permanent</Tag>
+                            </div>
+                        </div>
+
+                        {updateState.message && (
+                            <Alert
+                                type={
+                                    updateState.status === 'downloaded' ? 'success' :
+                                    updateState.status === 'available' || updateState.status === 'downloading' ? 'warning' :
+                                    updateState.status === 'error' ? 'error' : 'info'
+                                }
+                                showIcon
+                                message={updateState.message}
+                                className="rounded-xl font-medium"
+                            />
+                        )}
                     </Card>
                 </div>
             )
@@ -543,13 +677,68 @@ export default function Settings() {
             ),
             children: (
                 <div className="space-y-6 pt-2">
+                    {/* Mill Profile Header Settings Card */}
+                    <Card 
+                        title={<span className="font-bold text-slate-800 flex items-center gap-2"><FileTextOutlined className="text-blue-600" /> Mill Business Header & Bill Print Settings</span>}
+                        className="shadow-sm border-slate-200/80 rounded-2xl overflow-hidden mb-6"
+                    >
+                        <div className="space-y-4">
+                            <Alert
+                                type="info"
+                                showIcon
+                                message={<span className="font-bold text-blue-900">Printed Bill Header Details</span>}
+                                description="Configure your mill business name, address, and phone numbers that appear at the top header of sales bills."
+                            />
+                            <Row gutter={[16, 16]}>
+                                <Col span={24} md={8}>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">Mill Business Name</label>
+                                    <Input
+                                        size="large"
+                                        value={millNameState}
+                                        onChange={e => setMillNameState(e.target.value)}
+                                        placeholder="e.g. CHAMIKA RICE MILLS"
+                                    />
+                                </Col>
+                                <Col span={24} md={8}>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">Mill Address / Location</label>
+                                    <Input
+                                        size="large"
+                                        value={millAddrState}
+                                        onChange={e => setMillAddrState(e.target.value)}
+                                        placeholder="e.g. Sooriyawewa"
+                                    />
+                                </Col>
+                                <Col span={24} md={8}>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">Mill Telephone Number(s)</label>
+                                    <Input
+                                        size="large"
+                                        value={millPhoneState}
+                                        onChange={e => setMillPhoneState(e.target.value)}
+                                        placeholder="e.g. 071-234 5678"
+                                    />
+                                </Col>
+                            </Row>
+                            <div className="flex justify-end pt-2">
+                                <Button 
+                                    type="primary" 
+                                    icon={<SaveOutlined />} 
+                                    onClick={handleSaveMillHeader}
+                                    className="!bg-blue-600 font-bold"
+                                >
+                                    Save Header Details
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+
+                    {/* Hardware Printer Settings */}
                     <Card 
                         className="shadow-sm border-slate-200 rounded-2xl overflow-hidden"
                         title={
                             <div className="flex items-center justify-between">
                                 <span className="flex items-center gap-2 font-black text-slate-800">
                                     <PrinterOutlined className="text-blue-600" />
-                                    Dual Dedicated Printer Configuration (A5 Bills & 60x40mm Barcodes)
+                                    Dual Dedicated Printer Configuration (A4/A5 Bills & 60x40mm Barcodes)
                                 </span>
                                 <Tag 
                                     color={autoPrint ? 'success' : 'default'} 
@@ -573,7 +762,7 @@ export default function Settings() {
                                         )}
                                     </div>
                                     <div className="text-xs text-slate-500 max-w-xl">
-                                        When enabled, sales bills, quick POS orders, and dispatch gate passes route silently to your <strong>A5 Bill Printer</strong>, while bag barcode labels route directly to your <strong>60x40mm Barcode Printer</strong> without opening print dialogs.
+                                        When enabled, sales bills, quick POS orders, and dispatch gate passes route silently to your <strong>A4/A5 Bill Printer</strong>, while bag barcode labels route directly to your <strong>60x40mm Barcode Printer</strong> without opening print dialogs.
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -597,13 +786,13 @@ export default function Settings() {
 
                             {/* Dual Printer Selector Grid */}
                             <Row gutter={[16, 16]}>
-                                {/* Printer 1: A5 Bill Printer */}
+                                {/* Printer 1: A4/A5 Bill Printer */}
                                 <Col span={24} md={12}>
                                     <div className="p-5 bg-white border border-blue-100 rounded-xl shadow-sm space-y-4 h-full flex flex-col justify-between">
                                         <div>
                                             <div className="flex items-center gap-2 font-bold text-slate-800 text-sm mb-1">
                                                 <FileTextOutlined className="text-blue-600 text-base" />
-                                                <span>1. Bill & Document Printer (A5 Size Pages)</span>
+                                                <span>1. Bill & Document Printer (A4 / A5 Pages)</span>
                                             </div>
                                             <p className="text-xs text-slate-500 mb-3">
                                                 Target printer for Sales Invoices, Quick POS Receipts, and Dispatch Gate Passes.
@@ -613,7 +802,7 @@ export default function Settings() {
                                                 size="large"
                                                 value={billPrinter || ''}
                                                 onChange={handleSelectBillPrinter}
-                                                placeholder="Select A5 Bill printer"
+                                                placeholder="Select A4/A5 Bill printer"
                                             >
                                                 <Select.Option value="">
                                                     <div className="flex items-center justify-between">
@@ -635,7 +824,7 @@ export default function Settings() {
                                             </Select>
                                         </div>
                                         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                                            <span className="text-[11px] text-slate-400 font-medium">Page Size: A5 Portrait</span>
+                                            <span className="text-[11px] text-slate-400 font-medium">Page Size: A4 / A5 Scalable</span>
                                             <Button 
                                                 type="primary" 
                                                 size="small"
@@ -712,7 +901,7 @@ export default function Settings() {
                                     message={<span className="font-bold text-emerald-900">Direct Auto-Printing Mode Active</span>}
                                     description={
                                         <div className="text-xs text-emerald-800 space-y-1 mt-1">
-                                            <div>• <strong>Bills, POS Receipts & Gate Passes (A5):</strong> Automatically sent to <strong>{billPrinter || 'System Default Printer'}</strong>.</div>
+                                            <div>• <strong>Bills, POS Receipts & Gate Passes (A4/A5):</strong> Automatically sent to <strong>{billPrinter || 'System Default Printer'}</strong>.</div>
                                             <div>• <strong>Bag Barcode Stickers (60x40mm):</strong> Automatically sent to <strong>{labelPrinter || 'System Default Printer'}</strong>.</div>
                                         </div>
                                     }

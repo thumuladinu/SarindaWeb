@@ -27,20 +27,23 @@ const defaultConfigState = {
     laborCost: 1.10,        // Rs per kg
     otherCost: 0,           // Rs per kg
     distanceKm: 100,        // km
-    fuelCostPerKm: 0.05,    // Rs per kg per km
+    fuelCostPerKm: 150,     // Rs per km
+    loadSizeKg: 10000,      // Total Load Size in kg (e.g. 10,000 kg lorry load)
+    selectedCustomerId: null
 };
 
 export default function PriceCalculator() {
     const [calc, setCalc] = useState(() => {
         try {
             const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-            return saved ? JSON.parse(saved) : defaultConfigState;
+            return saved ? { ...defaultConfigState, ...JSON.parse(saved) } : defaultConfigState;
         } catch {
             return defaultConfigState;
         }
     });
 
     const [itemsList, setItemsList] = useState([]);
+    const [customersList, setCustomersList] = useState([]);
     const [saveModalVisible, setSaveModalVisible] = useState(false);
     const [saveSubmitting, setSaveSubmitting] = useState(false);
 
@@ -58,12 +61,16 @@ export default function PriceCalculator() {
         }
     }, [calc]);
 
-    // Fetch finished items catalog for saving prices
+    // Fetch finished items catalog and customers for calculator
     useEffect(() => {
         (async () => {
             try {
-                const list = await db.items.toArray().catch(() => []);
+                const [list, custs] = await Promise.all([
+                    db.items.toArray().catch(() => []),
+                    db.customers.toArray().catch(() => [])
+                ]);
                 setItemsList(list || []);
+                setCustomersList(custs || []);
 
                 const outputs = (list || []).filter(item => {
                     const cat = String(item.CATEGORY || item.category || '').toLowerCase();
@@ -73,14 +80,29 @@ export default function PriceCalculator() {
 
                 if (outputs.length > 0) {
                     setSelectedRiceItemId(outputs[0].ITEM_ID);
-                } else if (list.length > 0) {
+                } else if (list && list.length > 0) {
                     setSelectedRiceItemId(list[0].ITEM_ID);
                 }
             } catch (e) {
-                console.error('Error loading items for calculator:', e);
+                console.error('Error loading items/customers for calculator:', e);
             }
         })();
     }, []);
+
+    const handleCustomerSelect = (custId) => {
+        updateCalc('selectedCustomerId', custId);
+        if (!custId) return;
+        const cust = customersList.find(c => String(c.CUSTOMER_ID) === String(custId));
+        if (cust) {
+            const dist = Number(cust.DISTANCE || cust.DISTANCE_KM || 0);
+            if (dist > 0) {
+                updateCalc('distanceKm', dist);
+                message.info(`Loaded ${cust.NAME}'s distance: ${dist} km`);
+            } else {
+                message.warning(`${cust.NAME} has no saved distance.`);
+            }
+        }
+    };
 
     const updateCalc = (field, val) => {
         setCalc(prev => ({
@@ -132,8 +154,14 @@ export default function PriceCalculator() {
 
         // 6. Transport & Delivered Cost
         const distanceKm = parseFloat(calc.distanceKm || 0);
-        const fuelRate = parseFloat(calc.fuelCostPerKm || 0);
-        const transportCostPerKg = distanceKm * fuelRate;
+        const fuelRatePerKm = parseFloat(calc.fuelCostPerKm || 0);
+        const loadSizeKg = parseFloat(calc.loadSizeKg || 10000);
+
+        // Total Lorry Trip Transport / Fuel Cost
+        const totalTripFuelCost = distanceKm * fuelRatePerKm;
+
+        // Transport Cost per 1kg = Total Trip Fuel Cost / Load Size (kg)
+        const transportCostPerKg = loadSizeKg > 0 ? (totalTripFuelCost / loadSizeKg) : 0;
         const finalCostPerKg = exMillCostPerKg + transportCostPerKg;
 
         // ─── Side-by-Side Specific Varieties Math ────────────────
@@ -162,6 +190,7 @@ export default function PriceCalculator() {
             rawHalCostPerKg,
             totalExpensesPerKg,
             exMillCostPerKg,
+            totalTripFuelCost,
             transportCostPerKg,
             finalCostPerKg,
 
@@ -366,13 +395,50 @@ export default function PriceCalculator() {
                     {/* Step 3: Transport & Logistics */}
                     <Card title={<span className="font-bold text-purple-600 dark:text-purple-400">Step 3: Logistics & Transport Rate</span>} className="shadow-sm">
                         <Row gutter={[12, 12]}>
-                            <Col xs={24} sm={12}>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1">Distance (km)</label>
-                                <InputNumber className="w-full" value={calc.distanceKm} onChange={v => updateCalc('distanceKm', v)} />
+                            <Col xs={24}>
+                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Select Customer (Auto-fills Distance)</label>
+                                <Select
+                                    showSearch
+                                    allowClear
+                                    placeholder="Select a customer to load distance..."
+                                    className="w-full"
+                                    value={calc.selectedCustomerId || undefined}
+                                    onChange={handleCustomerSelect}
+                                    optionFilterProp="label"
+                                >
+                                    {customersList.map(c => (
+                                        <Option key={c.CUSTOMER_ID} value={c.CUSTOMER_ID} label={c.NAME}>
+                                            👤 {c.NAME} ({(c.DISTANCE || c.DISTANCE_KM || 0)} km)
+                                        </Option>
+                                    ))}
+                                </Select>
                             </Col>
+
                             <Col xs={24} sm={12}>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1">Fuel / Logistics Rate (Rs/kg/km)</label>
-                                <InputNumber prefix="Rs." className="w-full" step={0.01} value={calc.fuelCostPerKm} onChange={v => updateCalc('fuelCostPerKm', v)} />
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Distance to Customer (km)</label>
+                                <InputNumber className="w-full" min={0} value={calc.distanceKm} onChange={v => updateCalc('distanceKm', v)} />
+                            </Col>
+
+                            <Col xs={24} sm={12}>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Lorry Fuel / Trip Rate (Rs / km)</label>
+                                <InputNumber prefix="Rs." className="w-full" min={0} value={calc.fuelCostPerKm} onChange={v => updateCalc('fuelCostPerKm', v)} />
+                            </Col>
+
+                            <Col xs={24} sm={12}>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Lorry Total Load Weight (kg)</label>
+                                <InputNumber className="w-full" min={1} value={calc.loadSizeKg || 10000} onChange={v => updateCalc('loadSizeKg', v)} suffix="kg" />
+                            </Col>
+
+                            <Col xs={24} sm={12}>
+                                <div className="bg-purple-50 dark:bg-purple-950/40 p-2.5 rounded-xl border border-purple-100 dark:border-purple-900/50 space-y-1">
+                                    <div className="text-[11px] font-bold text-purple-900 dark:text-purple-300">Total Trip Fuel Cost:</div>
+                                    <div className="text-sm font-black font-mono text-purple-700 dark:text-purple-300">
+                                        Rs. {fmt(mathResults.totalTripFuelCost)}
+                                    </div>
+                                    <div className="text-[10px] text-purple-600 dark:text-purple-400">
+                                        ({calc.distanceKm || 0}km × Rs.{calc.fuelCostPerKm || 0}/km) ÷ {(calc.loadSizeKg || 10000).toLocaleString()}kg = <strong>Rs. {fmt(mathResults.transportCostPerKg)} / kg</strong>
+                                    </div>
+                                </div>
                             </Col>
                         </Row>
                     </Card>

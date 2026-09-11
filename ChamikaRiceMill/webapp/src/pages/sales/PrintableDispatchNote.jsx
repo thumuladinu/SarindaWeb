@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
+import { Spin } from 'antd';
+import { formatSLDateTime } from '../../utils/helpers';
 import { getTerminalDeviceCode, getCurrentUserName } from '../../utils/terminalHelper';
 
 export default function PrintableDispatchNote() {
@@ -63,7 +65,7 @@ export default function PrintableDispatchNote() {
         fontSize: '10px', fontFamily: F, height: '18px', textAlign: 'center', ...ex
     });
 
-    const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB') : '-';
+    const fmtDate = d => d ? formatSLDateTime(d, note).dateStr : '-';
     const fmt = v => {
         const n = parseFloat(v);
         return isNaN(n) || n === 0 ? '' : n.toLocaleString('en-US', { minimumFractionDigits: 2 });

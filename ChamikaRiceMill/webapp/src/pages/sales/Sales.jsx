@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, Space, Tag, message, Typography, Popconfirm, Tooltip, Drawer, Modal, Form, DatePicker, Input, Select } from 'antd';
+import { Table, Button, Space, Tag, message, Typography, Popconfirm, Tooltip, Drawer, Modal, Form, DatePicker, Input, InputNumber, Select } from 'antd';
 import { PlusOutlined, PrinterOutlined, EditOutlined, FileTextOutlined, CheckCircleOutlined, SyncOutlined, DeleteOutlined, SendOutlined, SearchOutlined, BarcodeOutlined, UnlockOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -43,6 +43,12 @@ export default function Sales() {
             const response = await axios.get('/api/mill/sales/list', { withCredentials: true });
             if (response.data.success) {
                 const data = Array.isArray(response.data.result) ? response.data.result : [];
+                data.sort((a, b) => {
+                    const timeA = new Date(a.CREATED_DATE || a.DATE || 0).getTime();
+                    const timeB = new Date(b.CREATED_DATE || b.DATE || 0).getTime();
+                    if (timeB !== timeA) return timeB - timeA;
+                    return (b.BILL_ID || 0) - (a.BILL_ID || 0);
+                });
                 setSales(data);
                 setFilteredSales(data);
             }
@@ -137,6 +143,40 @@ export default function Sales() {
         window.open(printUrl, '_blank', 'width=850,height=900,toolbar=0,menubar=0');
     };
 
+    const handleOpenDispatchModal = () => {
+        if (selectedRowKeys.length === 0) {
+            message.warning('Please select at least one sales bill first');
+            return;
+        }
+        let b5 = 0, b10 = 0, b25 = 0;
+        const selectedBills = sales.filter(s => selectedRowKeys.includes(s.BILL_ID));
+        selectedBills.forEach(b => {
+            let items = b.ITEMS || b.ITEMS_JSON || [];
+            if (typeof items === 'string') {
+                try { items = JSON.parse(items); } catch(e) { items = []; }
+            }
+            if (Array.isArray(items)) {
+                items.forEach(i => {
+                    const w = Number(i.BAG_WEIGHT || i.bagWeight || i.WEIGHT || i.weight || 0);
+                    let qty = Number(i.BAG_COUNT || i.bagCount || i.QTY || i.qty || 0);
+                    if (!qty && w > 0 && i.QUANTITY) qty = Number(i.QUANTITY) / w;
+                    if (w === 5) b5 += qty;
+                    else if (w === 10) b10 += qty;
+                    else if (w === 25) b25 += qty;
+                });
+            }
+        });
+        const bTotal = b5 + b10 + b25;
+        dispatchForm.setFieldsValue({
+            DATE: dayjs(),
+            TOTAL_5KG: b5,
+            TOTAL_10KG: b10,
+            TOTAL_25KG: b25,
+            TOTAL_BAGS: bTotal
+        });
+        setDispatchModalVisible(true);
+    };
+
     const handleCreateDispatchNote = async (values) => {
         setCreatingDispatch(true);
         try {
@@ -148,6 +188,10 @@ export default function Sales() {
                 DRIVER_NAME: values.DRIVER_NAME,
                 LORRY_NO: values.LORRY_NO,
                 STAFF_NAME: values.STAFF_NAME,
+                TOTAL_5KG: values.TOTAL_5KG !== undefined ? Number(values.TOTAL_5KG) : undefined,
+                TOTAL_10KG: values.TOTAL_10KG !== undefined ? Number(values.TOTAL_10KG) : undefined,
+                TOTAL_25KG: values.TOTAL_25KG !== undefined ? Number(values.TOTAL_25KG) : undefined,
+                TOTAL_BAGS: values.TOTAL_BAGS !== undefined ? Number(values.TOTAL_BAGS) : undefined,
                 DEVICE_ID: terminalCode,
                 CREATED_BY: userName,
                 CREATED_BY_NAME: userName
@@ -159,12 +203,7 @@ export default function Sales() {
                 setSelectedRowKeys([]);
                 dispatchForm.resetFields();
 
-                // Open auto-print window
-                if (res.data.dispatchId) {
-                    window.open(`/print-dispatch/${res.data.dispatchId}`, '_blank', 'width=850,height=900,toolbar=0,menubar=0');
-                }
-
-                // Redirect automatically to Dispatch Notes page
+                // Redirect automatically to Dispatch Notes page without opening auto-print window
                 navigate('/dispatch');
             } else {
                 message.error(res.data.message || 'Failed to create dispatch note');
@@ -385,10 +424,7 @@ export default function Sales() {
                             type="primary" 
                             className="!bg-indigo-600 hover:!bg-indigo-700 h-10 rounded-xl font-medium shadow-md"
                             icon={<SendOutlined />} 
-                            onClick={() => {
-                                dispatchForm.setFieldsValue({ DATE: dayjs() });
-                                setDispatchModalVisible(true);
-                            }}
+                            onClick={handleOpenDispatchModal}
                         >
                             Dispatch Note ({selectedRowKeys.length})
                         </Button>
@@ -510,6 +546,17 @@ export default function Sales() {
                                         <>
                                             <Button 
                                                 size="small"
+                                                icon={<EditOutlined />} 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleEditClick(record);
+                                                }}
+                                                className="rounded-xl !text-amber-500 font-medium"
+                                            >
+                                                Edit
+                                            </Button>
+                                            <Button 
+                                                size="small"
                                                 type="primary" 
                                                 icon={<CheckCircleOutlined />} 
                                                 disabled={!!record.DISPATCH_ID}
@@ -521,15 +568,6 @@ export default function Sales() {
                                             >
                                                 Settle
                                             </Button>
-                                            <Button 
-                                                size="small"
-                                                icon={<EditOutlined />} 
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleEditClick(record);
-                                                }}
-                                                className="rounded-xl !text-amber-500"
-                                            />
                                             <Popconfirm
                                                 title="Delete this sale?"
                                                 description="Inventory will be reverted."
@@ -598,7 +636,7 @@ export default function Sales() {
             <Drawer
                 title="Edit Printed Bill"
                 placement="right"
-                size="large"
+                width="85vw"
                 onClose={() => setEditDrawerVisible(false)}
                 open={editDrawerVisible}
                 destroyOnClose
@@ -622,7 +660,21 @@ export default function Sales() {
                 footer={null}
                 destroyOnClose
             >
-                <Form layout="vertical" form={dispatchForm} onFinish={handleCreateDispatchNote}>
+                <Form 
+                    layout="vertical" 
+                    form={dispatchForm} 
+                    onFinish={handleCreateDispatchNote}
+                    onValuesChange={(changedValues, allValues) => {
+                        if ('TOTAL_5KG' in changedValues || 'TOTAL_10KG' in changedValues || 'TOTAL_25KG' in changedValues) {
+                            const n5 = Number(allValues.TOTAL_5KG || 0);
+                            const n10 = Number(allValues.TOTAL_10KG || 0);
+                            const n25 = Number(allValues.TOTAL_25KG || 0);
+                            dispatchForm.setFieldsValue({
+                                TOTAL_BAGS: n5 + n10 + n25
+                            });
+                        }
+                    }}
+                >
                     <Form.Item name="DATE" label="Dispatch Date" rules={[{ required: true }]}>
                         <DatePicker className="w-full" />
                     </Form.Item>
@@ -635,6 +687,27 @@ export default function Sales() {
                     <Form.Item name="STAFF_NAME" label="Staff Name (Helper)">
                         <Input placeholder="Enter staff name" />
                     </Form.Item>
+
+                    {/* BAG COUNTS SUMMARY SECTION */}
+                    <div className="bg-slate-50 dark:bg-zinc-900/60 p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 mb-4 space-y-2">
+                        <div className="font-bold text-xs text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                            📦 Dispatch Bag Counts to Print
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                            <Form.Item label="5 kg Bags" name="TOTAL_5KG" className="!mb-0">
+                                <InputNumber min={0} className="w-full" placeholder="0" />
+                            </Form.Item>
+                            <Form.Item label="10 kg Bags" name="TOTAL_10KG" className="!mb-0">
+                                <InputNumber min={0} className="w-full" placeholder="0" />
+                            </Form.Item>
+                            <Form.Item label="25 kg Bags" name="TOTAL_25KG" className="!mb-0">
+                                <InputNumber min={0} className="w-full" placeholder="0" />
+                            </Form.Item>
+                            <Form.Item label="Total Bags" name="TOTAL_BAGS" className="!mb-0">
+                                <InputNumber min={0} className="w-full font-bold text-blue-600" placeholder="0" />
+                            </Form.Item>
+                        </div>
+                    </div>
                     
                     <div className="flex justify-end gap-2 mt-6">
                         <Button onClick={() => setDispatchModalVisible(false)}>Cancel</Button>

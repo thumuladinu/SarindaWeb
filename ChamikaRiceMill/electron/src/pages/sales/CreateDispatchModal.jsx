@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, DatePicker, Select, Button, message } from 'antd';
+import { Modal, Form, DatePicker, Select, InputNumber, Button, message } from 'antd';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import db from '../../services/db';
 import syncService from '../../services/syncService';
+import printService from '../../services/printService';
 import { getTerminalDeviceCode, getCurrentUserName } from '../../utils/terminalHelper';
 
 export default function CreateDispatchModal({ visible, onClose, selectedBills, onSuccess }) {
+    const navigate = useNavigate();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const [vehicles, setVehicles] = useState([]);
@@ -14,9 +17,41 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
     useEffect(() => {
         if (visible) {
             loadDropdowns();
-            form.setFieldsValue({
-                DATE: dayjs()
-            });
+            const currentVals = form.getFieldsValue();
+            const hasBagValues = currentVals.TOTAL_5KG !== undefined && currentVals.TOTAL_5KG !== null;
+            if (!hasBagValues) {
+                let b5 = 0, b10 = 0, b25 = 0;
+                if (Array.isArray(selectedBills)) {
+                    selectedBills.forEach(b => {
+                        let items = b.ITEMS || b.ITEMS_JSON || [];
+                        if (typeof items === 'string') {
+                            try { items = JSON.parse(items); } catch(e) { items = []; }
+                        }
+                        if (Array.isArray(items)) {
+                            items.forEach(i => {
+                                const w = Number(i.BAG_WEIGHT || i.bagWeight || i.WEIGHT || i.weight || 0);
+                                let qty = Number(i.BAG_COUNT || i.bagCount || i.QTY || i.qty || 0);
+                                if (!qty && w > 0 && i.QUANTITY) {
+                                    qty = Number(i.QUANTITY) / w;
+                                }
+                                if (w === 5) b5 += qty;
+                                else if (w === 10) b10 += qty;
+                                else if (w === 25) b25 += qty;
+                            });
+                        }
+                    });
+                }
+                const bTotal = b5 + b10 + b25;
+                form.setFieldsValue({
+                    DATE: dayjs(),
+                    TOTAL_5KG: b5,
+                    TOTAL_10KG: b10,
+                    TOTAL_25KG: b25,
+                    TOTAL_BAGS: bTotal
+                });
+            }
+        } else {
+            form.resetFields();
         }
     }, [visible]);
 
@@ -36,6 +71,35 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
         }
     };
 
+    const handleValuesChange = (changedValues, allValues) => {
+        if ('TOTAL_5KG' in changedValues || 'TOTAL_10KG' in changedValues || 'TOTAL_25KG' in changedValues) {
+            const n5 = Number(allValues.TOTAL_5KG || 0);
+            const n10 = Number(allValues.TOTAL_10KG || 0);
+            const n25 = Number(allValues.TOTAL_25KG || 0);
+            form.setFieldsValue({
+                TOTAL_BAGS: n5 + n10 + n25
+            });
+        }
+    };
+
+    const generateSequentialDispatchNo = async (terminalCode) => {
+        const todayStr = dayjs().format('YYYYMMDD');
+        const prefix = `MDN-${todayStr}-${terminalCode}-`;
+        const allNotes = await db.dispatch_notes.toArray();
+        let maxSeq = 0;
+        allNotes.forEach(n => {
+            if (n.DISPATCH_NO && n.DISPATCH_NO.startsWith(prefix)) {
+                const parts = n.DISPATCH_NO.split('-');
+                const last = parseInt(parts[parts.length - 1], 10);
+                if (!isNaN(last) && last > maxSeq) {
+                    maxSeq = last;
+                }
+            }
+        });
+        const nextSeq = maxSeq + 1;
+        return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+    };
+
     const handleFinish = async (values) => {
         if (!selectedBills || selectedBills.length === 0) {
             message.error('No sales bills selected');
@@ -45,19 +109,27 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
         setLoading(true);
         try {
             const billIds = selectedBills.map(b => b.BILL_ID || b.LOCAL_ID);
+            const invoiceNos = selectedBills.map(b => b.INVOICE_NO).filter(Boolean);
             const dateStr = values.DATE ? values.DATE.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD');
             const terminalCode = getTerminalDeviceCode();
             const userName = getCurrentUserName();
-            const dispatchNo = `MDN-${dayjs().format('YYYYMMDD')}-${terminalCode}-${Math.floor(100 + Math.random() * 900)}`;
+            const dispatchNo = await generateSequentialDispatchNo(terminalCode);
+
+            const driverNameStr = Array.isArray(values.DRIVER_NAME) ? values.DRIVER_NAME.join(', ') : (values.DRIVER_NAME || 'Main Driver');
 
             const payload = {
                 DISPATCH_NO: dispatchNo,
                 BILL_IDS_JSON: billIds,
+                INVOICE_NOS_JSON: invoiceNos,
                 DATE: dateStr,
                 CREATED_DATE: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-                DRIVER_NAME: values.DRIVER_NAME || 'Main Driver',
+                DRIVER_NAME: driverNameStr,
                 LORRY_NO: values.LORRY_NO,
                 STAFF_NAME: values.STAFF_NAME || 'Officer',
+                TOTAL_5KG: values.TOTAL_5KG !== undefined ? Number(values.TOTAL_5KG) : undefined,
+                TOTAL_10KG: values.TOTAL_10KG !== undefined ? Number(values.TOTAL_10KG) : undefined,
+                TOTAL_25KG: values.TOTAL_25KG !== undefined ? Number(values.TOTAL_25KG) : undefined,
+                TOTAL_BAGS: values.TOTAL_BAGS !== undefined ? Number(values.TOTAL_BAGS) : undefined,
                 STATUS: 'PENDING',
                 BILLS_COUNT: selectedBills.length,
                 DEVICE_ID: terminalCode,
@@ -67,11 +139,13 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
             };
 
             const localDispatchId = await db.dispatch_notes.add(payload);
+            const createdNote = { ...payload, LOCAL_ID: localDispatchId };
 
-            // Update sales bills locally with DISPATCH_ID
+            // Update sales bills locally with DISPATCH_ID & DISPATCH_NO
             for (const b of selectedBills) {
                 await db.sales_bills.update(b.LOCAL_ID, {
                     DISPATCH_ID: localDispatchId,
+                    DISPATCH_NO: dispatchNo,
                     IS_SYNCED: 0
                 });
             }
@@ -80,6 +154,9 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
             form.resetFields();
             if (onSuccess) onSuccess();
             onClose();
+
+            // Automatically navigate to Dispatch Notes page without auto-printing
+            navigate('/dispatch-notes');
 
             if (syncService.isOnline) {
                 syncService.syncAll();
@@ -100,7 +177,7 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
             footer={null}
             destroyOnClose
         >
-            <Form form={form} layout="vertical" onFinish={handleFinish}>
+            <Form form={form} layout="vertical" onFinish={handleFinish} onValuesChange={handleValuesChange}>
                 <Form.Item label="Dispatch Date" name="DATE" rules={[{ required: true }]}>
                     <DatePicker className="w-full" format="YYYY-MM-DD" />
                 </Form.Item>
@@ -144,6 +221,27 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
                         ))}
                     </Select>
                 </Form.Item>
+
+                {/* BAG COUNTS SUMMARY SECTION */}
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 mb-4 space-y-2">
+                    <div className="font-bold text-xs text-slate-700 uppercase tracking-wider mb-1">
+                        📦 Dispatch Bag Counts to Print
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                        <Form.Item label="5 kg Bags" name="TOTAL_5KG" className="!mb-0">
+                            <InputNumber min={0} className="w-full" placeholder="0" />
+                        </Form.Item>
+                        <Form.Item label="10 kg Bags" name="TOTAL_10KG" className="!mb-0">
+                            <InputNumber min={0} className="w-full" placeholder="0" />
+                        </Form.Item>
+                        <Form.Item label="25 kg Bags" name="TOTAL_25KG" className="!mb-0">
+                            <InputNumber min={0} className="w-full" placeholder="0" />
+                        </Form.Item>
+                        <Form.Item label="Total Bags" name="TOTAL_BAGS" className="!mb-0">
+                            <InputNumber min={0} className="w-full font-bold text-blue-600" placeholder="0" />
+                        </Form.Item>
+                    </div>
+                </div>
 
                 <div className="flex justify-end gap-2 pt-2">
                     <Button onClick={onClose}>Cancel</Button>

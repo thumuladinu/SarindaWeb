@@ -29,6 +29,39 @@ export const toSLDateDisplay = (utcDate) => {
     return dayjs.utc(utcDate).tz(SL_TIMEZONE).format('MMM DD, YYYY');
 };
 
+export const formatSLDateTime = (rawDate, record = {}) => {
+    let dateVal = rawDate;
+    if (!dateVal || (typeof dateVal === 'string' && dateVal.length <= 10)) {
+        dateVal = record?.CREATED_DATE || record?.CREATED_AT || record?.TIMESTAMP || record?.DATE || rawDate;
+    }
+
+    const addedBy = record?.ADDED_BY || record?.CREATED_BY_NAME || record?.ADDED_BY_NAME || record?.CASHIER_NAME || record?.USER_NAME || record?.RECEIVED_BY || record?.STAFF_NAME;
+
+    if (!dateVal) return { dateStr: '-', timeStr: '-', addedBy };
+
+    let d;
+    if (typeof dateVal === 'string') {
+        const str = dateVal.trim();
+        if (str.endsWith('Z') || str.endsWith('z')) {
+            d = dayjs(str).add(5, 'hour').add(30, 'minute');
+        } else {
+            d = dayjs(str);
+        }
+    } else {
+        d = dayjs(dateVal);
+    }
+
+    if (!d.isValid()) {
+        d = dayjs();
+    }
+
+    return {
+        dateStr: d.format('YYYY-MM-DD'),
+        timeStr: d.format('hh:mm A'),
+        addedBy
+    };
+};
+
 // Get current date in SL timezone (for default form values)
 export const getSLToday = () => {
     return dayjs().tz(SL_TIMEZONE).format('YYYY-MM-DD');

@@ -22,12 +22,13 @@ import {
     DownOutlined,
     UpOutlined,
     DollarOutlined,
-    ClockCircleOutlined
+    ClockCircleOutlined,
+    CodeOutlined
 } from '@ant-design/icons';
 import { Button } from 'antd';
 import { getUserRoles } from '../../utils/helpers';
 
-const NAV_CATEGORIES = [
+const getNavCategories = (isDevRole) => [
     {
         category: 'DAILY OPERATIONS',
         items: [
@@ -59,6 +60,7 @@ const NAV_CATEGORIES = [
             { label: 'Staff & Personnel', path: '/staff', icon: <IdcardOutlined /> },
             { label: 'Places / Sources', path: '/places', icon: <EnvironmentOutlined /> },
             { label: 'Settings', path: '/settings', icon: <SettingOutlined /> },
+            ...(isDevRole ? [{ label: 'Dev Tools', path: '/dev-tools', icon: <CodeOutlined /> }] : [])
         ]
     }
 ];
@@ -69,6 +71,18 @@ export default function Sidebar() {
     const navRef = useRef(null);
     const [canScrollUp, setCanScrollUp] = useState(false);
     const [canScrollDown, setCanScrollDown] = useState(false);
+
+    const userCookie = Cookies.get('millUser');
+    let userRole = '';
+    try {
+        if (userCookie) {
+            const parsed = JSON.parse(userCookie);
+            userRole = (parsed.ROLE || parsed.role || '').toLowerCase();
+        }
+    } catch(e) {}
+
+    const isDevRole = userRole === 'dev' || userRole.includes('dev');
+    const NAV_CATEGORIES = getNavCategories(isDevRole);
 
     const checkScroll = () => {
         if (navRef.current) {
@@ -83,9 +97,6 @@ export default function Sidebar() {
         window.addEventListener('resize', checkScroll);
         return () => window.removeEventListener('resize', checkScroll);
     }, []);
-
-    const userCookie = Cookies.get('millUser');
-    const userRole = userCookie ? JSON.parse(userCookie).ROLE?.toLowerCase() : '';
 
     return (
         <>

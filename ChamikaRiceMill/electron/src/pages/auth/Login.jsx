@@ -205,7 +205,7 @@ export default function Login() {
                     className="px-3 py-1 text-xs font-bold rounded-xl shadow-lg border-0 flex items-center gap-1.5"
                 >
                     {isOnline ? <WifiOutlined /> : <DisconnectOutlined />}
-                    <span>{isOnline ? `Server Online (${latency || 0}ms)` : 'Offline Ready'}</span>
+                    <span>{isOnline ? 'Online' : 'Offline Ready'}</span>
                 </Tag>
                 
                 {isOnline && (
@@ -216,7 +216,7 @@ export default function Login() {
                             disabled={syncingStaff}
                             className="bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-xl text-xs font-bold border border-white/20 transition-all cursor-pointer flex items-center gap-1"
                         >
-                            <SyncOutlined spin={syncingStaff} />
+                            <SyncOutlined />
                             <span>Sync Users</span>
                         </button>
                     </Tooltip>
@@ -230,7 +230,18 @@ export default function Login() {
                 {/* Header Branding (Light Version Logo) */}
                 <div className="text-center mb-5">
                     <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white p-2 shadow-xl ring-1 ring-slate-200 mb-2 overflow-hidden">
-                        <img src="/logo-light.png" alt="Chamika Rice Mill Logo" className="w-full h-full object-contain" />
+                        <img 
+                            src="./logo-light.png" 
+                            alt="Chamika Rice Mill Logo" 
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                                if (e.target.src.startsWith('http') || e.target.src.includes('./')) {
+                                    e.target.src = '/logo-light.png';
+                                } else {
+                                    e.target.style.display = 'none';
+                                }
+                            }}
+                        />
                     </div>
                     <h1 className="text-2xl font-black text-slate-800 tracking-tight m-0">
                         Chamika Rice Mill

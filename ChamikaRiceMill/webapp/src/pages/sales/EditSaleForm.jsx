@@ -64,7 +64,7 @@ export default function EditSaleForm({ billId, onSuccess, onCancel }) {
                 form.setFieldsValue({
                     DATE: moment(data.DATE),
                     BATCH_NO: data.BATCH_NO,
-                    CUSTOMER_ID: data.CUSTOMER_ID,
+                    CUSTOMER_ID: data.CUSTOMER_ID || (data.CUSTOMER_NAME && data.CUSTOMER_NAME !== 'Walk-in Customer' ? data.CUSTOMER_NAME : null),
                     DISCOUNT: data.DISCOUNT,
                     items: printedItems.map(item => ({
                         ITEM_ID: item.ITEM_ID,
@@ -146,11 +146,15 @@ export default function EditSaleForm({ billId, onSuccess, onCancel }) {
                 createdBy = JSON.parse(userCookie).USER_ID;
             }
 
+            const custVal = values.CUSTOMER_ID;
+            const customerObj = customers.find(c => String(c.CUSTOMER_ID) === String(custVal) || String(c.NAME).toLowerCase() === String(custVal).toLowerCase());
+
             const payload = {
                 BILL_ID: billId,
                 INVOICE_NO: billData.INVOICE_NO, // keep original
                 BATCH_NO: values.BATCH_NO,
-                CUSTOMER_ID: values.CUSTOMER_ID,
+                CUSTOMER_ID: customerObj ? customerObj.CUSTOMER_ID : (custVal && !isNaN(Number(custVal)) ? Number(custVal) : null),
+                CUSTOMER_NAME: customerObj ? customerObj.NAME : (typeof custVal === 'string' && custVal ? custVal : 'Walk-in Customer'),
                 TOTAL_AMOUNT: totalAmount,
                 DISCOUNT: discount,
                 NET_AMOUNT: netAmount,
@@ -202,11 +206,15 @@ export default function EditSaleForm({ billId, onSuccess, onCancel }) {
                         <DatePicker className="w-full" format="YYYY-MM-DD" />
                     </Form.Item>
                     
+                    <Form.Item label="Invoice No">
+                        <Input value={billData?.INVOICE_NO} disabled className="font-mono bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold" />
+                    </Form.Item>
+
                     <Form.Item
                         name="BATCH_NO"
                         label="Batch No"
                     >
-                        <Input placeholder="Optional" />
+                        <Input disabled className="font-mono bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300" placeholder="Batch No" />
                     </Form.Item>
                     
                     <Form.Item
@@ -345,8 +353,55 @@ export default function EditSaleForm({ billId, onSuccess, onCancel }) {
 
             <div className="pt-4 mt-4 border-t border-gray-200 dark:border-white/10 flex justify-end gap-3 shrink-0 bg-white dark:bg-[#141414]">
                 <Button onClick={onCancel}>Cancel</Button>
-                <Button type="primary" htmlType="submit" loading={submitting}>
+                <Button 
+                    type="default" 
+                    htmlType="submit" 
+                    loading={submitting}
+                    className="border-amber-500 text-amber-600 font-medium"
+                >
                     Update Sale
+                </Button>
+                <Button 
+                    type="primary" 
+                    loading={submitting}
+                    onClick={async () => {
+                        try {
+                            const values = await form.validateFields();
+                            setSubmitting(true);
+                            const userCookie = Cookies.get('millUser');
+                            let createdBy = null;
+                            if (userCookie) {
+                                createdBy = JSON.parse(userCookie).USER_ID;
+                            }
+                            const payload = {
+                                BILL_ID: billId,
+                                INVOICE_NO: billData.INVOICE_NO,
+                                BATCH_NO: values.BATCH_NO,
+                                CUSTOMER_ID: values.CUSTOMER_ID,
+                                TOTAL_AMOUNT: totalAmount,
+                                DISCOUNT: discount,
+                                NET_AMOUNT: netAmount,
+                                DATE: values.DATE.format('YYYY-MM-DD'),
+                                ITEMS: values.items.filter(i => i && i.ITEM_ID && i.QUANTITY && i.TOTAL_PRICE),
+                                CREATED_BY: createdBy
+                            };
+                            const response = await axios.post('/api/mill/sales/edit', payload, { withCredentials: true });
+                            if (response.data.success) {
+                                message.success('Sale updated successfully! Opening print window...');
+                                window.open(`/print-bill/${billId}`, '_blank', 'width=850,height=900,toolbar=0,menubar=0');
+                                if (onSuccess) onSuccess();
+                            } else {
+                                message.error(response.data.message || 'Failed to update sale');
+                            }
+                        } catch (err) {
+                            console.error('Error saving and printing edited bill:', err);
+                        } finally {
+                            setSubmitting(false);
+                        }
+                    }}
+                    className="!bg-blue-600 font-bold"
+                >
+                    Save & Re-print
                 </Button>
             </div>
         </Form>

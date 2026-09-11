@@ -5,14 +5,16 @@ import {
 } from 'antd';
 import { 
     CarOutlined, PlusOutlined, PrinterOutlined, SyncOutlined, 
-    CheckCircleOutlined, DeleteOutlined, EyeOutlined, LockOutlined 
+    CheckCircleOutlined, DeleteOutlined, EyeOutlined, LockOutlined, EditOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import db from '../../services/db';
 import syncService from '../../services/syncService';
+import { getTerminalDeviceCode, getCurrentUserName, formatSLDateTime } from '../../utils/terminalHelper';
 import printService from '../../services/printService';
 import PrintableDispatchNote from './PrintableDispatchNote';
 import SettleDispatchModal from './SettleDispatchModal';
+import EditDispatchModal from './EditDispatchModal';
 
 const { RangePicker } = DatePicker;
 
@@ -38,6 +40,10 @@ export default function DispatchNotes() {
     const [settleNoteRecord, setSettleNoteRecord] = useState(null);
     const [settleReadOnly, setSettleReadOnly] = useState(false);
 
+    // Edit Modal state
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editNoteRecord, setEditNoteRecord] = useState(null);
+
     useEffect(() => {
         loadData();
         const unsub = syncService.subscribe((event) => {
@@ -52,12 +58,32 @@ export default function DispatchNotes() {
         try {
             setLoading(true);
             const [noteList, vehList, sList] = await Promise.all([
-                db.dispatch_notes.orderBy('DATE').reverse().toArray(),
+                db.dispatch_notes.toArray(),
                 db.vehicles.toArray(),
                 db.staff.toArray()
             ]);
-            setNotes(noteList || []);
-            setFilteredNotes(noteList || []);
+
+            const sorted = (noteList || []).sort((a, b) => {
+                const dateA = a.CREATED_DATE || a.CREATED_AT || a.DATE || '';
+                const dateB = b.CREATED_DATE || b.CREATED_AT || b.DATE || '';
+
+                if (dateA && dateB && dateA !== dateB) {
+                    return dateB.localeCompare(dateA);
+                }
+
+                const noA = a.DISPATCH_NO || '';
+                const noB = b.DISPATCH_NO || '';
+                if (noA && noB && noA !== noB) {
+                    return noB.localeCompare(noA);
+                }
+
+                const idA = Number(a.LOCAL_ID || a.DISPATCH_ID || 0);
+                const idB = Number(b.LOCAL_ID || b.DISPATCH_ID || 0);
+                return idB - idA;
+            });
+
+            setNotes(sorted);
+            setFilteredNotes(sorted);
             setVehicles(vehList || []);
             setStaffList(sList || []);
         } catch (err) {
@@ -99,25 +125,59 @@ export default function DispatchNotes() {
     const handlePrint = async (record) => {
         setSelectedNote(record);
         try {
-            const billIds = record.BILL_IDS_JSON || [];
+            const allBills = await db.sales_bills.toArray();
             let bills = [];
-            if (billIds.length > 0) {
-                bills = await db.sales_bills.where('LOCAL_ID').anyOf(billIds).toArray();
-                if (bills.length === 0) {
-                    bills = await db.sales_bills.where('BILL_ID').anyOf(billIds).toArray();
+            
+            // Priority 1: Match by global INVOICE_NOS_JSON array
+            let invNos = record.INVOICE_NOS_JSON || record.INVOICE_NOS || [];
+            if (typeof invNos === 'string') {
+                try { invNos = JSON.parse(invNos); } catch(e) { invNos = invNos.split(',').map(s => s.trim()); }
+            }
+            if (Array.isArray(invNos) && invNos.length > 0) {
+                const cleanInvNos = invNos.map(s => String(s).trim()).filter(Boolean);
+                bills = allBills.filter(b => b.INVOICE_NO && cleanInvNos.includes(String(b.INVOICE_NO).trim()));
+            }
+
+            // Priority 2: Match by DISPATCH_NO column on sales_bills
+            if (bills.length === 0 && record.DISPATCH_NO) {
+                bills = allBills.filter(b => b.DISPATCH_NO && String(b.DISPATCH_NO) === String(record.DISPATCH_NO));
+            }
+
+            // Priority 3: Match by legacy DISPATCH_ID column on sales_bills
+            if (bills.length === 0 && (record.DISPATCH_ID || record.LOCAL_ID)) {
+                const noteDispatchId = record.DISPATCH_ID || record.LOCAL_ID;
+                bills = allBills.filter(b => b.DISPATCH_ID && (String(b.DISPATCH_ID) === String(noteDispatchId) || String(b.DISPATCH_ID) === String(record.LOCAL_ID)));
+            }
+            
+            // Priority 4: Match by BILL_ID (server ID) or LOCAL_ID
+            if (bills.length === 0) {
+                let billIds = record.BILL_IDS_JSON || record.BILL_IDS || [];
+                if (typeof billIds === 'string') {
+                    try { billIds = JSON.parse(billIds); } catch(e) { billIds = billIds.split(',').map(s => s.trim()); }
+                }
+                if (Array.isArray(billIds) && billIds.length > 0) {
+                    const numericIds = billIds.map(i => Number(i)).filter(i => !isNaN(i));
+                    const matchedByBillId = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
+                    if (matchedByBillId.length > 0) {
+                        bills = matchedByBillId;
+                    } else {
+                        bills = allBills.filter(b => b.LOCAL_ID && numericIds.includes(Number(b.LOCAL_ID)));
+                    }
                 }
             }
             setLinkedBills(bills);
 
-            if (printService.isAutoPrintEnabled()) {
-                printService.printDispatchNote(record, bills);
-                message.success(`Auto-printing Gate Pass ${record.DISPATCH_NO || ''} to ${printService.getBillPrinter() || 'Default A5 Bill Printer'}...`);
+            const isAuto = printService.isAutoPrintEnabled();
+            if (isAuto) {
+                await printService.printDispatchNote(record, bills, { forceSilent: true });
+                message.success(`Silent printed Gate Pass ${record.DISPATCH_NO || ''}`);
             } else {
-                setPrintModal(true);
+                // Open system print window directly without intermediate modal
+                await printService.printDispatchNote(record, bills, { forceSilent: false });
             }
         } catch (e) {
-            console.error('Error loading linked bills for print:', e);
-            setPrintModal(true);
+            console.error('Error printing dispatch note:', e);
+            message.error('Failed to print Gate Pass');
         }
     };
 
@@ -159,11 +219,15 @@ export default function DispatchNotes() {
             render: (val, r) => (
                 <div>
                     <div className="font-bold text-slate-800 font-mono text-xs">{val || `DSP-${r.LOCAL_ID}`}</div>
-                    <div className="text-[10px] text-slate-400">
-                        {dayjs(r.DATE || r.CREATED_DATE).format('YYYY-MM-DD')}
-                    </div>
                 </div>
             )
+        },
+        {
+            title: 'Date',
+            dataIndex: 'DATE',
+            key: 'DATE',
+            width: 110,
+            render: val => val ? dayjs(val).format('YYYY-MM-DD') : '-'
         },
         {
             title: 'Lorry / Vehicle',
@@ -187,11 +251,43 @@ export default function DispatchNotes() {
             title: 'Bills Loaded',
             key: 'billsCount',
             align: 'center',
-            render: (_, r) => (
-                <Tag color="blue" className="font-bold">
-                    {(r.BILL_IDS_JSON?.length || r.BILLS_COUNT || 0)} Bills
-                </Tag>
-            )
+            render: (_, r) => {
+                let count = 0;
+                if (r.BILL_IDS_JSON) {
+                    let ids = r.BILL_IDS_JSON;
+                    if (typeof ids === 'string') {
+                        try { ids = JSON.parse(ids); } catch(e) { ids = ids ? ids.split(',').filter(Boolean) : []; }
+                    }
+                    if (Array.isArray(ids)) count = ids.length;
+                }
+                if (!count && r.BILLS_COUNT) {
+                    count = r.BILLS_COUNT;
+                }
+                return (
+                    <Tag color={count > 0 ? "blue" : "default"} className="font-bold">
+                        {count} Bills
+                    </Tag>
+                );
+            }
+        },
+        {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 150,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-700 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             title: 'Actions',
@@ -213,17 +309,29 @@ export default function DispatchNotes() {
                             />
                         </Tooltip>
                     ) : (
-                        <Tooltip title="Settle Dispatch Note & Bills">
-                            <Button 
-                                size="small" 
-                                type="primary" 
-                                className="!bg-emerald-600 hover:!bg-emerald-700 font-bold" 
-                                icon={<CheckCircleOutlined />} 
-                                onClick={() => handleOpenSettleModal(r, false)}
-                            >
-                                Settle
-                            </Button>
-                        </Tooltip>
+                        <>
+                            <Tooltip title="Edit Dispatch Note">
+                                <Button 
+                                    size="small" 
+                                    icon={<EditOutlined />} 
+                                    onClick={() => {
+                                        setEditNoteRecord(r);
+                                        setEditModalOpen(true);
+                                    }} 
+                                />
+                            </Tooltip>
+                            <Tooltip title="Settle Dispatch Note &amp; Bills">
+                                <Button 
+                                    size="small" 
+                                    type="primary" 
+                                    className="!bg-emerald-600 hover:!bg-emerald-700 font-bold" 
+                                    icon={<CheckCircleOutlined />} 
+                                    onClick={() => handleOpenSettleModal(r, false)}
+                                >
+                                    Settle
+                                </Button>
+                            </Tooltip>
+                        </>
                     )}
 
                     <Popconfirm title="Delete this dispatch note?" onConfirm={() => handleDelete(r)}>
@@ -319,6 +427,14 @@ export default function DispatchNotes() {
                 noteRecord={settleNoteRecord}
                 readOnly={settleReadOnly}
                 onClose={() => setSettleModalOpen(false)}
+                onSuccess={loadData}
+            />
+
+            {/* Edit Dispatch Modal */}
+            <EditDispatchModal
+                visible={editModalOpen}
+                record={editNoteRecord}
+                onClose={() => setEditModalOpen(false)}
                 onSuccess={loadData}
             />
         </div>

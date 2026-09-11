@@ -13,9 +13,11 @@ import dayjs from 'dayjs';
 import db from '../../services/db';
 import syncService from '../../services/syncService';
 import printService from '../../services/printService';
+import { getTerminalDeviceCode, getCurrentUserName, formatSLDateTime } from '../../utils/terminalHelper';
 
 import AddSaleForm from './AddSaleForm';
 import SettleSaleForm from './SettleSaleForm';
+import EditSaleForm from './EditSaleForm';
 import ViewSaleModal from './ViewSaleModal';
 import PrintableBill from './PrintableBill';
 import CreateDispatchModal from './CreateDispatchModal';
@@ -41,6 +43,7 @@ export default function Sales() {
 
     // Drawers & Modals
     const [settleDrawerVisible, setSettleDrawerVisible] = useState(false);
+    const [editDrawerVisible, setEditDrawerVisible] = useState(false);
     const [viewModalVisible, setViewModalVisible] = useState(false);
     const [printModalVisible, setPrintModalVisible] = useState(false);
     const [dispatchModalVisible, setDispatchModalVisible] = useState(false);
@@ -60,7 +63,13 @@ export default function Sales() {
     const loadSales = async () => {
         try {
             setLoading(true);
-            const bills = await db.sales_bills.orderBy('DATE').reverse().toArray();
+            const bills = await db.sales_bills.toArray();
+            bills.sort((a, b) => {
+                const timeA = new Date(a.CREATED_DATE || a.CREATED_AT || a.DATE || 0).getTime();
+                const timeB = new Date(b.CREATED_DATE || b.CREATED_AT || b.DATE || 0).getTime();
+                if (timeB !== timeA) return timeB - timeA;
+                return (b.LOCAL_ID || b.BILL_ID || 0) - (a.LOCAL_ID || a.BILL_ID || 0);
+            });
             setSales(bills || []);
             setFilteredSales(bills || []);
         } catch (e) {
@@ -78,9 +87,9 @@ export default function Sales() {
             if (statusFilter === 'SETTLED') {
                 temp = temp.filter(s => s.IS_SETTLED === 1);
             } else if (statusFilter === 'DISPATCH') {
-                temp = temp.filter(s => !!s.DISPATCH_ID);
+                temp = temp.filter(s => !!s.DISPATCH_NO || !!s.DISPATCH_ID);
             } else if (statusFilter === 'PENDING') {
-                temp = temp.filter(s => !s.IS_SETTLED && !s.DISPATCH_ID);
+                temp = temp.filter(s => !s.IS_SETTLED && !s.DISPATCH_NO && !s.DISPATCH_ID);
             }
         }
 
@@ -117,12 +126,10 @@ export default function Sales() {
     };
 
     const handlePrintClick = (record) => {
-        if (printService.isAutoPrintEnabled()) {
-            printService.printBill(record);
-            message.success(`Auto-printing bill #${record.INVOICE_NO} to ${printService.getBillPrinter() || 'Default A5 Bill Printer'}...`);
-        } else {
-            setSelectedSale(record);
-            setPrintModalVisible(true);
+        const isAuto = printService.isAutoPrintEnabled();
+        printService.printBill(record, { forceSilent: isAuto });
+        if (isAuto) {
+            message.success(`Silent printed bill #${record.INVOICE_NO}`);
         }
     };
 
@@ -136,6 +143,11 @@ export default function Sales() {
         setSettleDrawerVisible(true);
     };
 
+    const handleEditClick = (record) => {
+        setSelectedSale(record);
+        setEditDrawerVisible(true);
+    };
+
     const rowSelection = {
         selectedRowKeys,
         onChange: (keys, rows) => {
@@ -143,7 +155,7 @@ export default function Sales() {
             setSelectedRows(rows);
         },
         getCheckboxProps: (record) => ({
-            disabled: record.IS_SETTLED === 1 || !!record.DISPATCH_ID,
+            disabled: record.IS_SETTLED === 1 || !!record.DISPATCH_NO || !!record.DISPATCH_ID,
         }),
     };
 
@@ -154,7 +166,7 @@ export default function Sales() {
             width: 110,
             render: (_, r) => {
                 if (r.IS_SETTLED === 1) return <Tag color="success">SETTLED</Tag>;
-                if (r.DISPATCH_ID) return <Tag color="processing">DISPATCH</Tag>;
+                if (r.DISPATCH_NO || r.DISPATCH_ID) return <Tag color="processing">DISPATCH</Tag>;
                 return <Tag color="warning">PENDING</Tag>;
             }
         },
@@ -175,7 +187,7 @@ export default function Sales() {
             dataIndex: 'DATE',
             key: 'DATE',
             width: 110,
-            render: val => <span className="text-xs text-gray-600">{dayjs(val).format('YYYY-MM-DD')}</span>
+            render: val => val ? dayjs(val).format('YYYY-MM-DD') : '-'
         },
         {
             title: 'Customer',
@@ -205,10 +217,29 @@ export default function Sales() {
             }
         },
         {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 150,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-700 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+        },
+        {
             title: 'Actions',
             key: 'actions',
             align: 'center',
-            width: 180,
+            width: 240,
             render: (_, r) => (
                 <Space size="small">
                     <Tooltip title="Print Bag Labels">
@@ -219,6 +250,16 @@ export default function Sales() {
                     </Tooltip>
                     <Tooltip title="Print Official Bill">
                         <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintClick(r)} />
+                    </Tooltip>
+                    <Tooltip title="Edit Bill Data">
+                        <Button 
+                            size="small" 
+                            icon={<EditOutlined />} 
+                            className="!text-amber-600 border-amber-300 font-medium"
+                            onClick={() => handleEditClick(r)} 
+                        >
+                            Edit
+                        </Button>
                     </Tooltip>
                     {!r.IS_SETTLED ? (
                         <Tooltip title="Settle Bill (Add Handwritten Extras)">
@@ -257,12 +298,8 @@ export default function Sales() {
                             loadSales();
                         }}
                         onPrintBill={(bill) => {
-                            if (printService.isAutoPrintEnabled()) {
-                                printService.printBill(bill, { forceSilent: true });
-                            } else {
-                                setSelectedSale(bill);
-                                setPrintModalVisible(true);
-                            }
+                            const isAuto = printService.isAutoPrintEnabled();
+                            printService.printBill(bill, { forceSilent: isAuto });
                         }}
                     />
                 </div>
@@ -273,7 +310,7 @@ export default function Sales() {
             label: (
                 <span className="font-bold text-sm flex items-center gap-2 px-2 py-1">
                     <HistoryOutlined className="text-slate-600" />
-                    Recent Bills & Dispatch
+                    Recent Sales Bills
                     <Badge count={sales.length} overflowCount={999} className="ml-1" />
                 </span>
             ),
@@ -343,7 +380,6 @@ export default function Sales() {
                             loading={loading}
                             pagination={{ pageSize: 15 }}
                             size="small"
-                            scroll={{ x: 'max-content' }}
                         />
                     </Card>
                 </div>
@@ -371,7 +407,7 @@ export default function Sales() {
                         onClick={() => setActiveTab('history')}
                         className="font-bold !text-slate-700"
                     >
-                        View Bills History ({sales.length})
+                        View Sales Bills ({sales.length})
                     </Button>
                 )}
                 {activeTab === 'history' && (
@@ -399,7 +435,7 @@ export default function Sales() {
 
             {/* Settle Sale Drawer */}
             <Drawer
-                title={<span className="font-bold text-slate-800">💰 Settle Bill: #{selectedSale?.INVOICE_NO}</span>}
+                title="Settle Bill (Add Handwritten Items)"
                 placement="right"
                 width={720}
                 onClose={() => setSettleDrawerVisible(false)}
@@ -416,6 +452,28 @@ export default function Sales() {
                 />
             </Drawer>
 
+            {/* Edit Printed Bill Drawer */}
+            <Drawer
+                title="Edit Printed Bill"
+                placement="right"
+                width="85vw"
+                onClose={() => setEditDrawerVisible(false)}
+                open={editDrawerVisible}
+                destroyOnClose
+            >
+                {selectedSale && (
+                    <EditSaleForm
+                        billRecord={selectedSale}
+                        billId={selectedSale.BILL_ID || selectedSale.LOCAL_ID}
+                        onSuccess={() => {
+                            setEditDrawerVisible(false);
+                            loadSales();
+                        }}
+                        onCancel={() => setEditDrawerVisible(false)}
+                    />
+                )}
+            </Drawer>
+
             {/* View Sale Modal */}
             <ViewSaleModal
                 visible={viewModalVisible}
@@ -423,8 +481,8 @@ export default function Sales() {
                 bill={selectedSale}
                 onPrint={(bill) => {
                     setViewModalVisible(false);
-                    setSelectedSale(bill);
-                    setPrintModalVisible(true);
+                    const isAuto = printService.isAutoPrintEnabled();
+                    printService.printBill(bill, { forceSilent: isAuto });
                 }}
             />
 

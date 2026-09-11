@@ -11,7 +11,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import db from '../../services/db';
 import syncService from '../../services/syncService';
-import { getTerminalDeviceCode, getCurrentUserName } from '../../utils/terminalHelper';
+import { getTerminalDeviceCode, getCurrentUserName, formatSLDateTime } from '../../utils/terminalHelper';
 
 export default function StockInward() {
     const [activeTab, setActiveTab] = useState('create');
@@ -156,7 +156,7 @@ export default function StockInward() {
                 VEHICLE_NO: values.vehicleNo || '',
                 DRIVER_NAME: values.driverName || '',
                 NOTES: values.notes || '',
-                DATE: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+                DATE: dayjs().toISOString(),
                 STORE_TRANSFER_ID: values.transferId || null,
                 IS_SYNCED: 0
             };
@@ -203,7 +203,8 @@ export default function StockInward() {
             title: 'Date',
             dataIndex: 'DATE',
             key: 'DATE',
-            render: val => <span className="text-xs text-gray-600">{dayjs(val).format('YYYY-MM-DD HH:mm')}</span>
+            width: 110,
+            render: val => val ? dayjs(val).format('YYYY-MM-DD') : '-'
         },
         {
             title: 'Item Description',
@@ -253,6 +254,25 @@ export default function StockInward() {
                     <Tag color="blue" className="font-semibold text-[11px]">💧 Wet ({pct}%)</Tag>
                 ) : (
                     <Tag color="gold" className="font-semibold text-[11px]">☀️ Dry</Tag>
+                );
+            }
+        },
+        {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 160,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-700 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
                 );
             }
         },

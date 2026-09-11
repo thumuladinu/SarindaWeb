@@ -1,0 +1,4 @@
+provider: github
+owner: thumuladinu
+repo: chamika-mill-releases
+updaterCacheDirName: chamika-mill-updater

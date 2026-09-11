@@ -1,0 +1,482 @@
+
+> chamika-rice-mill@1.1.8 dev
+> vite
+
+Re-optimizing dependencies because lockfile has changed
+
+  VITE v5.4.21  ready in 575 ms
+
+  ➜  Local:   http://localhost:5181/
+  ➜  Network: use --host to expose
+2:53:56 PM [vite] hmr update /src/pages/resources/Resources.jsx, /src/index.css
+2:54:05 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx
+2:54:12 PM [vite] hmr update /src/App.jsx, /src/index.css
+3:04:53 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx
+3:07:59 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:15:16 PM [vite] hmr update /src/pages/sales/CreateDispatchModal.jsx, /src/index.css
+3:17:48 PM [vite] hmr update /src/pages/sales/CreateDispatchModal.jsx, /src/index.css
+3:19:25 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:19:32 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:19:41 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:19:57 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:24:31 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:27:52 PM [vite] hmr update /src/App.jsx, /src/index.css
+3:28:08 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:32:55 PM [vite] hmr update /src/pages/sales/EditSaleForm.jsx, /src/index.css
+3:33:41 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:35:47 PM [vite] hmr update /src/App.jsx, /src/index.css
+3:36:24 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+3:40:49 PM [vite] hmr update /src/pages/sales/EditSaleForm.jsx, /src/index.css
+3:40:58 PM [vite] hmr update /src/pages/sales/EditSaleForm.jsx, /src/index.css
+3:45:52 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+3:45:53 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+3:45:53 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+3:46:30 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+3:46:30 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+3:46:30 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+3:47:14 PM [vite] hmr update /src/pages/sales/EditSaleForm.jsx, /src/index.css
+3:50:04 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+3:50:14 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+3:50:14 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+3:56:38 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+3:57:00 PM [vite] hmr update /src/pages/dispatch/DispatchNotes.jsx, /src/index.css
+3:57:37 PM [vite] hmr update /src/pages/dispatch/SettleDispatchModal.jsx, /src/index.css
+3:58:25 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+3:59:02 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+4:01:05 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+4:01:28 PM [vite] hmr update /src/pages/sales/PrintableBill.jsx, /src/index.css
+4:01:28 PM [vite] Internal server error: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (230:20)
+
+  228 |                             <hr style={dhr} />
+  229 |                         </div>
+> 230 |                     </div>
+      |                     ^
+  231 |                 ) : (
+  232 |                     // ─── BULK LORRY DISPATCH BILL ────────
+  233 |                     <div style={{ fontFamily: F, fontSize: '10px', lineHeight: '1.35' }}>
+  Plugin: vite:react-babel
+  File: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx:230:20
+  228|                              <hr style={dhr} />
+  229|                          </div>
+  230|                      </div>
+     |                      ^
+  231|                  ) : (
+  232|                      // ─── BULK LORRY DISPATCH BILL ────────
+      at constructor (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:365:19)
+      at JSXParserMixin.raise (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:6616:19)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4754:18)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12510:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11692:28)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11348:23)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4776:20)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10908:30)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10902:17)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at JSXParserMixin.parseExpressionBase (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10801:23)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:17)
+      at JSXParserMixin.jsxParseExpressionContainer (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4644:31)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4723:36)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+4:01:28 PM [vite] Internal server error: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (230:20)
+
+  228 |                             <hr style={dhr} />
+  229 |                         </div>
+> 230 |                     </div>
+      |                     ^
+  231 |                 ) : (
+  232 |                     // ─── BULK LORRY DISPATCH BILL ────────
+  233 |                     <div style={{ fontFamily: F, fontSize: '10px', lineHeight: '1.35' }}>
+  Plugin: vite:react-babel
+  File: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx:230:20
+  228|                              <hr style={dhr} />
+  229|                          </div>
+  230|                      </div>
+     |                      ^
+  231|                  ) : (
+  232|                      // ─── BULK LORRY DISPATCH BILL ────────
+      at constructor (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:365:19)
+      at JSXParserMixin.raise (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:6616:19)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4754:18)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12510:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11692:28)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11348:23)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4776:20)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10908:30)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10902:17)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at JSXParserMixin.parseExpressionBase (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10801:23)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:17)
+      at JSXParserMixin.jsxParseExpressionContainer (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4644:31)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4723:36)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+4:01:50 PM [vite] hmr update /src/pages/sales/PrintableBill.jsx, /src/index.css
+4:01:50 PM [vite] Internal server error: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (230:20)
+
+  228 |                             <hr style={dhr} />
+  229 |                         </div>
+> 230 |                     </div>
+      |                     ^
+  231 |                 ) : (
+  232 |                     // ─── BULK LORRY DISPATCH BILL ────────
+  233 |                     <div style={{ fontFamily: F, fontSize: '10px', lineHeight: '1.35' }}>
+  Plugin: vite:react-babel
+  File: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx:230:20
+  228|                              <hr style={dhr} />
+  229|                          </div>
+  230|                      </div>
+     |                      ^
+  231|                  ) : (
+  232|                      // ─── BULK LORRY DISPATCH BILL ────────
+      at constructor (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:365:19)
+      at JSXParserMixin.raise (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:6616:19)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4754:18)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12510:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11692:28)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11348:23)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4776:20)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10908:30)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10902:17)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at JSXParserMixin.parseExpressionBase (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10801:23)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:17)
+      at JSXParserMixin.jsxParseExpressionContainer (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4644:31)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4723:36)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+4:01:50 PM [vite] Internal server error: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (230:20)
+
+  228 |                             <hr style={dhr} />
+  229 |                         </div>
+> 230 |                     </div>
+      |                     ^
+  231 |                 ) : (
+  232 |                     // ─── BULK LORRY DISPATCH BILL ────────
+  233 |                     <div style={{ fontFamily: F, fontSize: '10px', lineHeight: '1.35' }}>
+  Plugin: vite:react-babel
+  File: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx:230:20
+  228|                              <hr style={dhr} />
+  229|                          </div>
+  230|                      </div>
+     |                      ^
+  231|                  ) : (
+  232|                      // ─── BULK LORRY DISPATCH BILL ────────
+      at constructor (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:365:19)
+      at JSXParserMixin.raise (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:6616:19)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4754:18)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12510:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11692:28)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11348:23)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4776:20)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10908:30)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10902:17)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at JSXParserMixin.parseExpressionBase (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10801:23)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:17)
+      at JSXParserMixin.jsxParseExpressionContainer (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4644:31)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4723:36)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+4:01:59 PM [vite] hmr update /src/pages/sales/PrintableBill.jsx, /src/index.css
+4:02:06 PM [vite] hmr update /src/pages/sales/PrintableBill.jsx, /src/index.css
+4:04:18 PM [vite] hmr update /src/index.css, /src/App.jsx, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx, /src/pages/sales/ViewSaleModal.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx
+4:04:19 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:04:19 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:04:28 PM [vite] hmr update /src/pages/sales/CreateDispatchModal.jsx, /src/index.css
+4:04:36 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+4:04:37 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:04:37 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:05:01 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+4:05:10 PM [vite] hmr update /src/pages/dispatch/DispatchNotes.jsx, /src/index.css
+4:05:19 PM [vite] hmr update /src/pages/dispatch/SettleDispatchModal.jsx, /src/index.css
+4:05:27 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+4:05:34 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+4:11:11 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+4:11:19 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+4:11:31 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+4:11:43 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+4:11:58 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+4:12:17 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+4:12:27 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+4:40:02 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+4:40:02 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:40:02 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:46:17 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+4:46:17 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:46:17 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:48:38 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+4:48:39 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:48:39 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:51:01 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+4:51:02 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:51:02 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:53:30 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+4:53:30 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:53:30 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:56:40 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+4:56:41 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:56:41 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:58:30 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+4:58:31 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+4:58:31 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+4:59:57 PM [vite] hmr update /src/pages/dispatch/DispatchNotes.jsx, /src/index.css
+5:02:51 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+5:02:52 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+5:02:52 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+5:11:26 PM [vite] hmr update /src/pages/sales/PrintableBill.jsx, /src/index.css
+5:13:10 PM [vite] hmr update /src/pages/sales/PrintableBill.jsx, /src/index.css
+5:13:10 PM [vite] Internal server error: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx: Unterminated JSX contents. (432:18)
+
+  430 |                     </div>
+  431 |                 )}
+> 432 |             </div>
+      |                   ^
+  433 |     );
+  434 | }
+  435 |
+  Plugin: vite:react-babel
+  File: /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/src/pages/sales/PrintableBill.jsx:432:18
+  430|                      </div>
+  431|                  )}
+  432|              </div>
+     |                    ^
+  433|      );
+  434|  }
+      at constructor (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:365:19)
+      at JSXParserMixin.raise (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:6616:19)
+      at JSXParserMixin.jsxReadToken (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4460:20)
+      at JSXParserMixin.getTokenFromCode (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4786:12)
+      at JSXParserMixin.nextToken (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:5799:10)
+      at JSXParserMixin.next (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:5709:10)
+      at JSXParserMixin.eat (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:5713:12)
+      at JSXParserMixin.expect (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:6915:15)
+      at JSXParserMixin.jsxParseClosingElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4692:10)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4707:37)
+      at JSXParserMixin.jsxParseElementAt (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4710:32)
+      at JSXParserMixin.jsxParseElement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4761:17)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4771:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12443:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10817:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12510:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11692:28)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11348:23)
+      at JSXParserMixin.parseExprAtom (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:4776:20)
+      at JSXParserMixin.parseExprSubscripts (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11098:23)
+      at JSXParserMixin.parseUpdate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11083:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:11063:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10916:61)
+      at JSXParserMixin.parseExprOps (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10921:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10898:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10848:21)
+      at JSXParserMixin.parseExpressionBase (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10801:23)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:39
+      at JSXParserMixin.allowInAnd (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12438:16)
+      at JSXParserMixin.parseExpression (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:10797:17)
+      at JSXParserMixin.parseReturnStatement (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:13159:28)
+      at JSXParserMixin.parseStatementContent (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12815:21)
+      at JSXParserMixin.parseStatementLike (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12784:17)
+      at JSXParserMixin.parseStatementListItem (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12764:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:13333:61)
+      at JSXParserMixin.parseBlockBody (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:13326:10)
+      at JSXParserMixin.parseBlock (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:13314:10)
+      at JSXParserMixin.parseFunctionBody (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12117:24)
+      at JSXParserMixin.parseFunctionBodyAndFinish (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12103:10)
+      at /Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:13462:12
+      at JSXParserMixin.withSmartMixTopicForbiddingContext (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:12420:14)
+      at JSXParserMixin.parseFunction (/Users/thumularajakaruna/Documents/sarind pos local/ChamikaRiceMill/electron/node_modules/@babel/parser/lib/index.js:13461:10)
+5:13:16 PM [vite] hmr update /src/pages/sales/PrintableBill.jsx, /src/index.css
+5:16:03 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+5:16:10 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+5:18:05 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+5:20:00 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+5:20:00 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+5:20:00 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+5:22:05 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+5:22:24 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+5:34:01 PM [vite] hmr update /src/index.css, /src/App.jsx, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx, /src/pages/sales/ViewSaleModal.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx
+5:34:01 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+5:34:01 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+5:34:41 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+5:34:42 PM [vite] hmr invalidate /src/context/AuthContext.jsx Could not Fast Refresh ("default" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+5:34:42 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/auth/Login.jsx
+5:35:12 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+5:35:56 PM [vite] hmr update /src/pages/dispatch/DispatchNotes.jsx, /src/index.css
+5:36:11 PM [vite] hmr update /src/pages/dispatch/SettleDispatchModal.jsx, /src/index.css
+5:45:01 PM [vite] hmr update /src/pages/sales/CreateDispatchModal.jsx, /src/index.css
+5:45:08 PM [vite] hmr update /src/pages/sales/Sales.jsx, /src/index.css
+5:45:28 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+5:50:00 PM [vite] page reload release/win-unpacked/LICENSES.chromium.html
+5:50:01 PM [vite] page reload release/win-unpacked/LICENSES.chromium.html
+5:50:01 PM [vite] page reload release/win-unpacked/LICENSES.chromium.html
+2:13:09 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+2:13:14 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+2:13:24 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+2:19:21 PM [vite] hmr update /src/pages/sales/CreateDispatchModal.jsx, /src/index.css
+2:19:33 PM [vite] hmr update /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/settings/Settings.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/sales/PrintableBill.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/PrintableDispatchNote.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/pages/sales/EditSaleForm.jsx
+2:19:46 PM [vite] hmr update /src/pages/dispatch/PrintableDispatchNote.jsx, /src/index.css
+2:21:48 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+2:23:23 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+2:25:29 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+2:29:21 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+2:31:30 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+2:31:37 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+2:36:41 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+2:39:30 PM [vite] hmr update /src/pages/dispatch/EditDispatchModal.jsx, /src/index.css
+2:44:56 PM [vite] page reload release/win-unpacked/LICENSES.chromium.html
+2:44:56 PM [vite] page reload release/win-unpacked/LICENSES.chromium.html
+1:05:54 PM [vite] hmr update /src/App.jsx, /src/index.css, /src/pages/sales/Sales.jsx, /src/pages/dispatch/DispatchNotes.jsx, /src/pages/stock-inward/StockInward.jsx, /src/pages/pos/QuickPOS.jsx, /src/pages/auth/Login.jsx, /src/pages/calculator/PriceCalculator.jsx, /src/pages/settings/Settings.jsx, /src/pages/resources/Resources.jsx, /src/context/AuthContext.jsx, /src/pages/expenses/Expenses.jsx, /src/pages/labels/BagLabels.jsx, /src/pages/items/Items.jsx, /src/pages/returns/SalesReturns.jsx, /src/pages/sales/SettleSaleForm.jsx, /src/pages/sales/AddSaleForm.jsx, /src/pages/sales/CreateDispatchModal.jsx, /src/pages/dispatch/SettleDispatchModal.jsx, /src/pages/dispatch/EditDispatchModal.jsx, /src/components/items/VariationsManager.jsx, /src/pages/sales/EditSaleForm.jsx
+1:06:10 PM [vite] hmr update /src/pages/resources/Resources.jsx, /src/index.css
+1:06:17 PM [vite] hmr update /src/pages/resources/Resources.jsx, /src/index.css
+1:06:22 PM [vite] hmr update /src/pages/resources/Resources.jsx, /src/index.css
+1:06:29 PM [vite] hmr update /src/pages/resources/Resources.jsx, /src/index.css
+1:09:10 PM [vite] hmr update /src/pages/calculator/PriceCalculator.jsx, /src/index.css
+1:10:02 PM [vite] hmr update /src/pages/calculator/PriceCalculator.jsx, /src/index.css
+1:10:47 PM [vite] hmr update /src/pages/calculator/PriceCalculator.jsx, /src/index.css
+1:12:51 PM [vite] page reload release/win-unpacked/LICENSES.chromium.html
+1:12:51 PM [vite] page reload release/win-unpacked/LICENSES.chromium.html
+1:12:51 PM [vite] page reload release/win-unpacked/LICENSES.chromium.html

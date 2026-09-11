@@ -3,6 +3,7 @@ import { Modal, Descriptions, Table, Tag, Typography, Divider, Row, Col, Button 
 import { PrinterOutlined, BarcodeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
+import { formatSLDateTime } from '../../utils/terminalHelper';
 
 const { Title, Text } = Typography;
 
@@ -70,7 +71,12 @@ export default function ViewSaleModal({ visible, onClose, bill, onPrint }) {
                 <Descriptions bordered size="small" column={{ xs: 1, sm: 2, md: 3 }}>
                     <Descriptions.Item label="Invoice No"><strong className="font-mono text-blue-900">{bill.INVOICE_NO}</strong></Descriptions.Item>
                     <Descriptions.Item label="Batch No">{bill.BATCH_NO || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="Date">{dayjs(bill.DATE).format('YYYY-MM-DD')}</Descriptions.Item>
+                    <Descriptions.Item label="Date / Time">
+                        {formatSLDateTime(bill.DATE, bill).dateStr} ({formatSLDateTime(bill.DATE, bill).timeStr})
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Billed By">
+                        {formatSLDateTime(bill.DATE, bill).addedBy || 'Cashier'}
+                    </Descriptions.Item>
                     <Descriptions.Item label="Customer">{bill.CUSTOMER_NAME || 'Walk-in Customer'}</Descriptions.Item>
                     <Descriptions.Item label="Phone">{bill.CUSTOMER_PHONE || '-'}</Descriptions.Item>
                     <Descriptions.Item label="Status">

@@ -11,22 +11,38 @@ const SL_TIMEZONE = 'Asia/Colombo';
 // Convert UTC date to SL display string
 export const toSLTime = (utcDate) => {
     if (!utcDate) return '';
-    return dayjs.utc(utcDate).tz(SL_TIMEZONE).format('YYYY-MM-DD HH:mm:ss');
+    const str = String(utcDate).trim();
+    if (str.endsWith('Z') || str.endsWith('z')) {
+        return dayjs(str).add(5, 'hour').add(30, 'minute').format('YYYY-MM-DD HH:mm:ss');
+    }
+    return dayjs(str).format('YYYY-MM-DD HH:mm:ss');
 };
 
 export const toSLDate = (utcDate) => {
     if (!utcDate) return '';
-    return dayjs.utc(utcDate).tz(SL_TIMEZONE).format('YYYY-MM-DD');
+    const str = String(utcDate).trim();
+    if (str.endsWith('Z') || str.endsWith('z')) {
+        return dayjs(str).add(5, 'hour').add(30, 'minute').format('YYYY-MM-DD');
+    }
+    return dayjs(str).format('YYYY-MM-DD');
 };
 
 export const toSLTimeShort = (utcDate) => {
     if (!utcDate) return '';
-    return dayjs.utc(utcDate).tz(SL_TIMEZONE).format('MMM DD, HH:mm');
+    const str = String(utcDate).trim();
+    if (str.endsWith('Z') || str.endsWith('z')) {
+        return dayjs(str).add(5, 'hour').add(30, 'minute').format('MMM DD, HH:mm');
+    }
+    return dayjs(str).format('MMM DD, HH:mm');
 };
 
 export const toSLDateDisplay = (utcDate) => {
     if (!utcDate) return '';
-    return dayjs.utc(utcDate).tz(SL_TIMEZONE).format('MMM DD, YYYY');
+    const str = String(utcDate).trim();
+    if (str.endsWith('Z') || str.endsWith('z')) {
+        return dayjs(str).add(5, 'hour').add(30, 'minute').format('MMM DD, YYYY');
+    }
+    return dayjs(str).format('MMM DD, YYYY');
 };
 
 export const formatSLDateTime = (rawDate, record = {}) => {
@@ -42,21 +58,9 @@ export const formatSLDateTime = (rawDate, record = {}) => {
     let d;
     if (typeof dateVal === 'string') {
         const str = dateVal.trim();
-        // Case A: Explicit ISO string with UTC indicator (ends with 'Z' or 'z')
+        // Add 5:30 ONLY if string explicitly ends with 'Z' or 'z' (UTC string from server)
         if (str.endsWith('Z') || str.endsWith('z')) {
-            d = dayjs(str).tz(SL_TIMEZONE);
-        }
-        // Case B: ISO string with explicit timezone offset (e.g. +05:30 or -04:00)
-        else if (str.includes('+') || (str.includes('T') && (str.includes('+0') || str.includes('-0')))) {
-            d = dayjs(str).tz(SL_TIMEZONE);
-        }
-        // Case C: ISO string without offset (e.g. "2026-08-15T05:34:00")
-        else if (str.includes('T')) {
-            d = dayjs.utc(str).tz(SL_TIMEZONE);
-        }
-        // Case D: MySQL UTC datetime string "YYYY-MM-DD HH:mm:ss" (e.g. "2026-08-15 05:34:00" from production server running UTC 00:00)
-        else if (str.match(/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}/)) {
-            d = dayjs.utc(str).tz(SL_TIMEZONE);
+            d = dayjs(str).add(5, 'hour').add(30, 'minute');
         } else {
             d = dayjs(str);
         }
@@ -64,14 +68,18 @@ export const formatSLDateTime = (rawDate, record = {}) => {
         d = dayjs(dateVal);
     }
 
+    if (!d.isValid()) {
+        d = dayjs();
+    }
+
     // Fallback: If time was 00:00:00 (e.g. date-only string) AND record has CREATED_AT/CREATED_DATE with actual time
-    if (d.isValid() && d.hour() === 0 && d.minute() === 0 && d.second() === 0) {
+    if (d.hour() === 0 && d.minute() === 0 && d.second() === 0) {
         const alt = record?.CREATED_DATE || record?.CREATED_AT || record?.TIMESTAMP;
         if (alt && alt !== dateVal) {
             const altStr = typeof alt === 'string' ? alt.trim() : '';
-            let altD = (altStr.endsWith('Z') || altStr.endsWith('z') || altStr.includes('T'))
-                ? dayjs(altStr).tz(SL_TIMEZONE)
-                : dayjs.utc(altStr).tz(SL_TIMEZONE);
+            let altD = (altStr.endsWith('Z') || altStr.endsWith('z'))
+                ? dayjs(altStr).add(5, 'hour').add(30, 'minute')
+                : dayjs(altStr);
             if (altD.isValid() && (altD.hour() !== 0 || altD.minute() !== 0)) {
                 d = altD;
             }

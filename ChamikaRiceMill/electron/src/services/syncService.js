@@ -114,19 +114,212 @@ class SyncService {
             this.socket.on('connect', () => {
                 console.log('[SyncService] Mill Electron Socket Connected! ID:', this.socket.id);
                 sendRegister();
+                this.setupDevSocketHandlers();
             });
 
             this.socket.on('reconnect', () => {
                 console.log('[SyncService] Mill Electron Socket Reconnected!');
                 sendRegister();
+                this.setupDevSocketHandlers();
             });
 
             if (this.socket.connected) {
                 sendRegister();
+                this.setupDevSocketHandlers();
             }
         } catch (e) {
             console.warn('[SyncService] Socket init error:', e);
         }
+    }
+
+    setupDevSocketHandlers() {
+        if (!this.socket) return;
+
+        // Clean previous listeners to prevent duplicates
+        this.socket.off('dev:get_idb_summary');
+        this.socket.off('dev:get_idb_records');
+        this.socket.off('dev:update_idb_record');
+        this.socket.off('dev:delete_idb_record');
+        this.socket.off('dev:clear_store');
+        this.socket.off('dev:trigger_force_sync');
+
+        // 1. Get complete storage tree (All Dexie IndexedDB tables + LocalStorage keys)
+        this.socket.on('dev:get_idb_summary', async (data) => {
+            const { reqId } = data || {};
+            try {
+                const tables = db.tables || [];
+                const idbStores = [];
+                for (const t of tables) {
+                    const count = await t.count().catch(() => 0);
+                    idbStores.push({ name: t.name, count, pk: t.schema.primKey.name });
+                }
+
+                const lsKeys = [];
+                if (typeof localStorage !== 'undefined') {
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        lsKeys.push({ key, value: localStorage.getItem(key) });
+                    }
+                }
+
+                this.socket.emit('dev:idb_response', {
+                    reqId,
+                    success: true,
+                    result: {
+                        terminalId: getTerminalDeviceCode(),
+                        dbName: db.name || 'ChamikaRiceMillDB',
+                        idbStores,
+                        localStorageKeys: lsKeys
+                    }
+                });
+            } catch (e) {
+                this.socket.emit('dev:idb_response', { reqId, success: false, message: e.message });
+            }
+        });
+
+        // 2. Fetch records from dynamic IndexedDB store or LocalStorage
+        this.socket.on('dev:get_idb_records', async (data) => {
+            const { reqId, store, isLocalStorage, limit } = data || {};
+            try {
+                if (isLocalStorage) {
+                    const items = [];
+                    if (typeof localStorage !== 'undefined') {
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const key = localStorage.key(i);
+                            items.push({ KEY: key, VALUE: localStorage.getItem(key) });
+                        }
+                    }
+                    return this.socket.emit('dev:idb_response', { reqId, success: true, result: items, pk: 'KEY' });
+                }
+
+                const table = db.table(store);
+                if (!table) {
+                    return this.socket.emit('dev:idb_response', { reqId, success: false, message: `Store '${store}' not found in IndexedDB` });
+                }
+
+                let records = (limit && Number(limit) > 0) ? await table.limit(Number(limit)).toArray() : await table.toArray();
+                const pk = table.schema.primKey.name || 'LOCAL_ID';
+
+                // Sort newest records first (CREATED_DATE / DATE / PK descending)
+                records.sort((a, b) => {
+                    const valA = a.CREATED_DATE || a.CREATED_AT || a.DATE || a.CREATED_TIME || a[pk] || 0;
+                    const valB = b.CREATED_DATE || b.CREATED_AT || b.DATE || b.CREATED_TIME || b[pk] || 0;
+
+                    if (typeof valA === 'string' && typeof valB === 'string') {
+                        return valB.localeCompare(valA);
+                    }
+                    return (Number(valB) || 0) - (Number(valA) || 0);
+                });
+
+                this.socket.emit('dev:idb_response', { reqId, success: true, result: records, pk });
+            } catch (e) {
+                this.socket.emit('dev:idb_response', { reqId, success: false, message: e.message });
+            }
+        });
+
+        // 3. Update/Edit record in terminal IndexedDB or LocalStorage
+        this.socket.on('dev:update_idb_record', async (data) => {
+            const { reqId, store, isLocalStorage, key, updates } = data || {};
+            try {
+                if (isLocalStorage) {
+                    if (typeof localStorage !== 'undefined') {
+                        localStorage.setItem(key, typeof updates.VALUE === 'string' ? updates.VALUE : JSON.stringify(updates.VALUE));
+                    }
+                    return this.socket.emit('dev:idb_response', { reqId, success: true, message: `LocalStorage key '${key}' updated` });
+                }
+
+                const table = db.table(store);
+                if (!table) return this.socket.emit('dev:idb_response', { reqId, success: false, message: `Store '${store}' not found` });
+
+                const pkValue = isNaN(Number(key)) ? key : Number(key);
+                await table.update(pkValue, updates);
+
+                // Notify UI components to reload data
+                this.notify('syncComplete', { timestamp: new Date().toISOString() });
+
+                this.socket.emit('dev:idb_response', {
+                    reqId,
+                    success: true,
+                    message: `Terminal IndexedDB store '${store}' record #${key} updated`
+                });
+            } catch (e) {
+                this.socket.emit('dev:idb_response', { reqId, success: false, message: e.message });
+            }
+        });
+
+        // 4. Delete record or bulk delete records from terminal IndexedDB or LocalStorage
+        this.socket.on('dev:delete_idb_record', async (data) => {
+            const { reqId, store, isLocalStorage, key, keys } = data || {};
+            try {
+                const targetKeys = keys && Array.isArray(keys) ? keys : (key ? [key] : []);
+                if (targetKeys.length === 0) {
+                    return this.socket.emit('dev:idb_response', { reqId, success: false, message: 'No keys specified for deletion' });
+                }
+
+                if (isLocalStorage) {
+                    if (typeof localStorage !== 'undefined') {
+                        targetKeys.forEach(k => localStorage.removeItem(k));
+                    }
+                    return this.socket.emit('dev:idb_response', { reqId, success: true, message: `${targetKeys.length} LocalStorage keys deleted` });
+                }
+
+                const table = db.table(store);
+                if (!table) return this.socket.emit('dev:idb_response', { reqId, success: false, message: `Store '${store}' not found` });
+
+                const formattedKeys = targetKeys.map(k => (isNaN(Number(k)) ? k : Number(k)));
+                await table.bulkDelete(formattedKeys);
+
+                // Notify UI components to reload data
+                this.notify('syncComplete', { timestamp: new Date().toISOString() });
+
+                this.socket.emit('dev:idb_response', {
+                    reqId,
+                    success: true,
+                    message: `${formattedKeys.length} records deleted from store '${store}'`
+                });
+            } catch (e) {
+                this.socket.emit('dev:idb_response', { reqId, success: false, message: e.message });
+            }
+        });
+
+        // 4.5. Clear entire store from terminal IndexedDB
+        this.socket.on('dev:clear_store', async (data) => {
+            const { reqId, store, isLocalStorage } = data || {};
+            try {
+                if (isLocalStorage) {
+                    if (typeof localStorage !== 'undefined') localStorage.clear();
+                    return this.socket.emit('dev:idb_response', { reqId, success: true, message: `LocalStorage cleared` });
+                }
+
+                const table = db.table(store);
+                if (!table) return this.socket.emit('dev:idb_response', { reqId, success: false, message: `Store '${store}' not found` });
+
+                await table.clear();
+
+                // Notify UI components to reload data
+                this.notify('syncComplete', { timestamp: new Date().toISOString() });
+
+                this.socket.emit('dev:idb_response', { reqId, success: true, message: `Store '${store}' cleared entirely` });
+            } catch (e) {
+                this.socket.emit('dev:idb_response', { reqId, success: false, message: e.message });
+            }
+        });
+
+        // 5. Remote Force Sync Trigger
+        this.socket.on('dev:trigger_force_sync', async (data) => {
+            const { reqId } = data || {};
+            try {
+                const pushRes = await this.pushPendingSales();
+                this.socket.emit('dev:idb_response', {
+                    reqId,
+                    success: true,
+                    message: `Force sync executed on terminal ${getTerminalDeviceCode()}`,
+                    result: pushRes
+                });
+            } catch (e) {
+                this.socket.emit('dev:idb_response', { reqId, success: false, message: e.message });
+            }
+        });
     }
 
     get apiBase() {
@@ -343,7 +536,7 @@ class SyncService {
         const pending = await db.sales_bills.where('IS_SYNCED').equals(0).toArray();
         for (const bill of pending) {
             try {
-                if (bill.IS_SETTLED_UPDATE) {
+                if (bill.IS_SETTLED_UPDATE && bill.BILL_ID) {
                     // Push Settlement
                     const res = await axios.post(`${baseUrl}/api/mill/sales/settle`, {
                         BILL_ID: bill.BILL_ID,
@@ -356,42 +549,113 @@ class SyncService {
                         CHEQUES: bill.CHEQUES || []
                     }, { timeout: 8000 });
 
-                    if (res.data.success) {
+                    if (res.data && res.data.success) {
                         await db.sales_bills.update(bill.LOCAL_ID, {
                             IS_SETTLED: 1,
                             IS_SETTLED_UPDATE: false,
                             IS_SYNCED: 1
                         });
                     }
+                } else if (bill.IS_EDIT_PENDING && bill.BILL_ID) {
+                    // Push Edit Sale
+                    let rawItems = bill.ITEMS || bill.ITEMS_JSON || [];
+                    if (typeof rawItems === 'string') {
+                        try { rawItems = JSON.parse(rawItems); } catch(e) { rawItems = []; }
+                    }
+                    if (!Array.isArray(rawItems)) rawItems = [];
+
+                    const billDateStr = (bill.DATE && dayjs(bill.DATE).isValid()) 
+                        ? dayjs(bill.DATE).format('YYYY-MM-DD') 
+                        : ((bill.CREATED_DATE && dayjs(bill.CREATED_DATE).isValid()) ? dayjs(bill.CREATED_DATE).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
+
+                    const res = await axios.post(`${baseUrl}/api/mill/sales/edit`, {
+                        BILL_ID: bill.BILL_ID,
+                        INVOICE_NO: bill.INVOICE_NO,
+                        BATCH_NO: bill.BATCH_NO || null,
+                        CUSTOMER_ID: (bill.CUSTOMER_ID && !isNaN(Number(bill.CUSTOMER_ID))) ? Number(bill.CUSTOMER_ID) : null,
+                        CUSTOMER_NAME: bill.CUSTOMER_NAME,
+                        CUSTOMER_PHONE: bill.CUSTOMER_PHONE,
+                        CUSTOMER_ADDRESS: bill.CUSTOMER_ADDRESS,
+                        VEHICLE_NO: bill.VEHICLE_NO || bill.LORRY_NO || '',
+                        DRIVER_NAME: bill.DRIVER_NAME || '',
+                        TOTAL_AMOUNT: Number(bill.TOTAL_AMOUNT || 0),
+                        PRINTED_SUB_TOTAL: Number(bill.PRINTED_SUB_TOTAL || 0),
+                        NET_AMOUNT: Number(bill.NET_AMOUNT || 0),
+                        FINAL_AMOUNT: Number(bill.FINAL_AMOUNT || 0),
+                        DISCOUNT: Number(bill.DISCOUNT || 0),
+                        DATE: billDateStr,
+                        ITEMS: rawItems,
+                        CREATED_BY: bill.CREATED_BY_NAME || getCurrentUserName()
+                    }, { timeout: 8000 });
+
+                    if (res.data && res.data.success) {
+                        await db.sales_bills.update(bill.LOCAL_ID, {
+                            IS_EDIT_PENDING: false,
+                            IS_SYNCED: 1
+                        });
+                    }
                 } else {
                     // Push New Sale
+                    let rawItems = bill.ITEMS || bill.ITEMS_JSON || [];
+                    if (typeof rawItems === 'string') {
+                        try { rawItems = JSON.parse(rawItems); } catch(e) { rawItems = []; }
+                    }
+                    if (!Array.isArray(rawItems)) rawItems = [];
+
+                    const billDateStr = (bill.DATE && dayjs(bill.DATE).isValid()) 
+                        ? dayjs(bill.DATE).format('YYYY-MM-DD') 
+                        : ((bill.CREATED_DATE && dayjs(bill.CREATED_DATE).isValid()) ? dayjs(bill.CREATED_DATE).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
+
                     const res = await axios.post(`${baseUrl}/api/mill/sales/add`, {
-                        CUSTOMER_ID: bill.CUSTOMER_ID || null,
-                        BATCH_NO: bill.BATCH_NO,
-                        DATE: dayjs(bill.DATE).format('YYYY-MM-DD'),
-                        TOTAL_AMOUNT: bill.TOTAL_AMOUNT,
-                        PRINTED_SUB_TOTAL: bill.PRINTED_SUB_TOTAL || bill.TOTAL_AMOUNT,
-                        NET_AMOUNT: bill.NET_AMOUNT || bill.TOTAL_AMOUNT,
-                        FINAL_AMOUNT: bill.FINAL_AMOUNT || bill.TOTAL_AMOUNT,
-                        DISCOUNT: bill.DISCOUNT || 0,
+                        INVOICE_NO: bill.INVOICE_NO,
+                        CUSTOMER_ID: (bill.CUSTOMER_ID && !isNaN(Number(bill.CUSTOMER_ID))) ? Number(bill.CUSTOMER_ID) : null,
+                        BATCH_NO: bill.BATCH_NO || null,
+                        DATE: billDateStr,
+                        CREATED_DATE: bill.CREATED_DATE || bill.CREATED_AT || dayjs().toISOString(),
+                        TOTAL_AMOUNT: (bill.TOTAL_AMOUNT !== undefined && bill.TOTAL_AMOUNT !== null) ? Number(bill.TOTAL_AMOUNT) : 0,
+                        PRINTED_SUB_TOTAL: (bill.PRINTED_SUB_TOTAL !== undefined && bill.PRINTED_SUB_TOTAL !== null) ? Number(bill.PRINTED_SUB_TOTAL) : 0,
+                        NET_AMOUNT: (bill.NET_AMOUNT !== undefined && bill.NET_AMOUNT !== null) ? Number(bill.NET_AMOUNT) : 0,
+                        FINAL_AMOUNT: (bill.FINAL_AMOUNT !== undefined && bill.FINAL_AMOUNT !== null) ? Number(bill.FINAL_AMOUNT) : 0,
+                        DISCOUNT: Number(bill.DISCOUNT || 0),
                         PAYMENT_METHOD: bill.PAYMENT_METHOD || 'cash',
-                        IS_SETTLED: bill.IS_SETTLED || 0,
+                        IS_SETTLED: (bill.IS_SETTLED !== undefined && bill.IS_SETTLED !== null) ? Number(bill.IS_SETTLED) : 0,
                         REMARK: bill.REMARK || null,
                         DEVICE_ID: bill.DEVICE_ID || getTerminalDeviceCode(),
                         CREATED_BY_NAME: bill.CREATED_BY_NAME || bill.ADDED_BY || getCurrentUserName(),
-                        ITEMS: bill.ITEMS_JSON || bill.ITEMS || []
+                        ITEMS: rawItems
                     }, { timeout: 8000 });
 
-                    if (res.data.success) {
+                    if (res.data && res.data.success) {
+                        const newBillId = res.data.billId;
                         await db.sales_bills.update(bill.LOCAL_ID, {
-                            BILL_ID: res.data.billId,
+                            BILL_ID: newBillId,
                             INVOICE_NO: res.data.invoiceNo || bill.INVOICE_NO,
                             IS_SYNCED: 1
                         });
+
+                        if (bill.IS_SETTLED_UPDATE && newBillId) {
+                            try {
+                                await axios.post(`${baseUrl}/api/mill/sales/settle`, {
+                                    BILL_ID: newBillId,
+                                    PAYMENT_METHOD: bill.PAYMENT_METHOD || 'cash',
+                                    PAID_AMOUNT: bill.PAID_AMOUNT || bill.FINAL_AMOUNT,
+                                    DISCOUNT: bill.DISCOUNT || 0,
+                                    FINAL_AMOUNT: bill.FINAL_AMOUNT,
+                                    HANDWRITTEN_SUB_TOTAL: bill.HANDWRITTEN_SUB_TOTAL || 0,
+                                    ITEMS: bill.HANDWRITTEN_ITEMS || [],
+                                    CHEQUES: bill.CHEQUES || []
+                                }, { timeout: 8000 });
+                                await db.sales_bills.update(bill.LOCAL_ID, { IS_SETTLED_UPDATE: false });
+                            } catch(e) { console.warn('Secondary settlement push failed:', e.message); }
+                        }
                     }
                 }
             } catch (err) {
                 console.error(`Failed to push sale #${bill.INVOICE_NO || bill.LOCAL_ID}:`, err.message);
+                if (err.response && err.response.status === 401) {
+                    console.warn('Push paused: Unauthorized (401)');
+                    break;
+                }
             }
         }
     }
@@ -400,27 +664,49 @@ class SyncService {
         const pending = await db.dispatch_notes.where('IS_SYNCED').equals(0).toArray();
         for (const note of pending) {
             try {
-                const billIds = note.BILL_IDS_JSON || [];
+                let billIds = note.BILL_IDS_JSON || [];
+                if (typeof billIds === 'string') {
+                    try { billIds = JSON.parse(billIds); } catch(e) { billIds = billIds.split(',').map(s => s.trim()); }
+                }
+                if (!Array.isArray(billIds)) billIds = [];
+
+                let invoiceNos = note.INVOICE_NOS_JSON || [];
+                if (typeof invoiceNos === 'string') {
+                    try { invoiceNos = JSON.parse(invoiceNos); } catch(e) { invoiceNos = invoiceNos.split(',').map(s => s.trim()); }
+                }
+                if (!Array.isArray(invoiceNos)) invoiceNos = [];
+
                 const res = await axios.post(`${baseUrl}/api/mill/dispatch/create`, {
+                    DISPATCH_NO: note.DISPATCH_NO,
                     BILL_IDS: billIds,
+                    INVOICE_NOS: invoiceNos,
                     DATE: dayjs(note.DATE).format('YYYY-MM-DD'),
+                    CREATED_DATE: note.CREATED_DATE || note.CREATED_AT || dayjs().toISOString(),
                     DRIVER_NAME: note.DRIVER_NAME || 'Main Driver',
                     LORRY_NO: note.LORRY_NO || note.VEHICLE_NO || 'Mill Lorry',
                     STAFF_NAME: note.STAFF_NAME || 'Officer',
+                    TOTAL_5KG: note.TOTAL_5KG,
+                    TOTAL_10KG: note.TOTAL_10KG,
+                    TOTAL_25KG: note.TOTAL_25KG,
+                    TOTAL_BAGS: note.TOTAL_BAGS,
                     DEVICE_ID: note.DEVICE_ID || getTerminalDeviceCode(),
                     CREATED_BY: note.ADDED_BY || note.CREATED_BY_NAME || getCurrentUserName(),
                     CREATED_BY_NAME: note.CREATED_BY_NAME || note.ADDED_BY || getCurrentUserName()
                 }, { timeout: 8000 });
 
-                if (res.data.success) {
+                if (res.data && res.data.success) {
                     await db.dispatch_notes.update(note.LOCAL_ID, {
                         DISPATCH_ID: res.data.dispatchId,
-                        DISPATCH_NO: res.data.dispatchNo,
+                        DISPATCH_NO: res.data.dispatchNo || note.DISPATCH_NO,
                         IS_SYNCED: 1
                     });
                 }
             } catch (err) {
                 console.error(`Failed to push dispatch note #${note.LOCAL_ID}:`, err.message);
+                if (err.response && err.response.status === 401) {
+                    console.warn('Push dispatch paused: Unauthorized (401)');
+                    break;
+                }
             }
         }
     }
@@ -441,7 +727,8 @@ class SyncService {
                     VEHICLE_NO: inward.VEHICLE_NO || '',
                     DRIVER_NAME: inward.DRIVER_NAME || '',
                     SUPPLIER_ID: inward.SUPPLIER_ID || null,
-                    DATE: dayjs(inward.DATE).format('YYYY-MM-DD HH:mm:ss'),
+                    DATE: dayjs(inward.DATE).format('YYYY-MM-DD'),
+                    CREATED_DATE: inward.CREATED_DATE || inward.CREATED_AT || dayjs().toISOString(),
                     NOTES: inward.NOTES || ''
                 }, { timeout: 8000 });
 
@@ -494,6 +781,7 @@ class SyncService {
                         REFUND_METHOD: ret.REFUND_TYPE || ret.REFUND_METHOD || 'cash',
                         REASON: ret.REASON || '',
                         DATE: dayjs(ret.DATE).format('YYYY-MM-DD'),
+                        CREATED_DATE: ret.CREATED_DATE || ret.CREATED_AT || dayjs().toISOString(),
                         ITEMS: returnItems
                     }, { timeout: 8000 });
 
@@ -531,9 +819,12 @@ class SyncService {
             }
             if (custRes.data?.success && Array.isArray(custRes.data.result)) {
                 await db.customers.clear();
-                await db.customers.bulkPut(custRes.data.result.map(c => ({
+                await db.customers.bulkPut(custRes.data.result.filter(c => c && c.CUSTOMER_ID).map(c => ({
                     ...c,
-                    PHONE: c.PHONE_NUMBER || c.PHONE
+                    DISTANCE: Number(c.DISTANCE || c.DISTANCE_KM || 0),
+                    PHONE: c.PHONE_NUMBER || c.PHONE,
+                    LOCATION: c.LOCATION || c.ADDRESS,
+                    BANK_DETAILS_JSON: typeof c.BANK_DETAILS_JSON === 'object' ? JSON.stringify(c.BANK_DETAILS_JSON) : (c.BANK_DETAILS_JSON || null)
                 })));
             }
             if (vehRes.data?.success && Array.isArray(vehRes.data.result)) {
@@ -570,15 +861,21 @@ class SyncService {
             const res = await axios.get(`${baseUrl}/api/mill/sales/list`, { timeout: 8000 });
             if (res.data?.success && Array.isArray(res.data.result)) {
                 for (const bill of res.data.result) {
-                    const existing = await db.sales_bills.where('BILL_ID').equals(bill.BILL_ID).first();
+                    if (!bill || !bill.INVOICE_NO) continue;
+                    const existing = await db.sales_bills.where('INVOICE_NO').equals(bill.INVOICE_NO).first();
+                    const cleanPayload = { ...bill };
+                    delete cleanPayload.LOCAL_ID;
                     if (existing) {
+                        if (existing.IS_SYNCED === 0 || existing.IS_EDIT_PENDING) {
+                            continue; // Do not overwrite unsynced local edits
+                        }
                         await db.sales_bills.update(existing.LOCAL_ID, {
-                            ...bill,
+                            ...cleanPayload,
                             IS_SYNCED: 1
                         });
                     } else {
                         await db.sales_bills.add({
-                            ...bill,
+                            ...cleanPayload,
                             IS_SYNCED: 1
                         });
                     }
@@ -595,15 +892,21 @@ class SyncService {
             const res = await axios.get(`${baseUrl}/api/mill/dispatch/list`, { timeout: 8000 });
             if (res.data?.success && Array.isArray(res.data.result)) {
                 for (const note of res.data.result) {
-                    const existing = await db.dispatch_notes.where('DISPATCH_ID').equals(note.DISPATCH_ID).first();
+                    if (!note || !note.DISPATCH_NO) continue;
+                    const existing = await db.dispatch_notes.where('DISPATCH_NO').equals(note.DISPATCH_NO).first();
+                    const cleanPayload = { ...note };
+                    delete cleanPayload.LOCAL_ID;
                     if (existing) {
+                        if (existing.IS_SYNCED === 0 || existing.IS_EDIT_PENDING) {
+                            continue; // Do not overwrite unsynced local edits
+                        }
                         await db.dispatch_notes.update(existing.LOCAL_ID, {
-                            ...note,
+                            ...cleanPayload,
                             IS_SYNCED: 1
                         });
                     } else {
                         await db.dispatch_notes.add({
-                            ...note,
+                            ...cleanPayload,
                             IS_SYNCED: 1
                         });
                     }
@@ -620,15 +923,21 @@ class SyncService {
             const res = await axios.post(`${baseUrl}/api/mill/inward/list`, {}, { timeout: 8000 });
             if (res.data?.success && Array.isArray(res.data.result)) {
                 for (const inward of res.data.result) {
+                    if (!inward || !inward.INWARD_ID) continue;
                     const existing = await db.stock_inwards.where('INWARD_ID').equals(inward.INWARD_ID).first();
+                    const cleanPayload = { ...inward };
+                    delete cleanPayload.LOCAL_ID;
                     if (existing) {
+                        if (existing.IS_SYNCED === 0 || existing.IS_EDIT_PENDING) {
+                            continue; // Do not overwrite unsynced local edits
+                        }
                         await db.stock_inwards.update(existing.LOCAL_ID, {
-                            ...inward,
+                            ...cleanPayload,
                             IS_SYNCED: 1
                         });
                     } else {
                         await db.stock_inwards.add({
-                            ...inward,
+                            ...cleanPayload,
                             IS_SYNCED: 1
                         });
                     }
@@ -645,15 +954,18 @@ class SyncService {
             const res = await axios.get(`${baseUrl}/api/mill/returns/list`, { timeout: 8000 });
             if (res.data?.success && Array.isArray(res.data.result)) {
                 for (const ret of res.data.result) {
+                    if (!ret || !ret.RETURN_ID) continue;
                     const existing = await db.sales_returns.where('RETURN_ID').equals(ret.RETURN_ID).first();
+                    const cleanPayload = { ...ret };
+                    delete cleanPayload.LOCAL_ID;
                     if (existing) {
                         await db.sales_returns.update(existing.LOCAL_ID, {
-                            ...ret,
+                            ...cleanPayload,
                             IS_SYNCED: 1
                         });
                     } else {
                         await db.sales_returns.add({
-                            ...ret,
+                            ...cleanPayload,
                             IS_SYNCED: 1
                         });
                     }
@@ -692,7 +1004,8 @@ class SyncService {
                         PAYMENT_METHOD: exp.PAYMENT_METHOD || 'cash',
                         PAID_TO: exp.PAID_TO || null,
                         REF_NO: exp.REF_NO || null,
-                        DATE: exp.DATE ? dayjs(exp.DATE).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
+                        DATE: exp.DATE ? dayjs(exp.DATE).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+                        CREATED_DATE: exp.CREATED_DATE || exp.CREATED_AT || dayjs().toISOString(),
                         NOTES: exp.NOTES || null,
                         DEVICE_ID: exp.DEVICE_ID || 'ELECTRON'
                     }, { timeout: 8000 });

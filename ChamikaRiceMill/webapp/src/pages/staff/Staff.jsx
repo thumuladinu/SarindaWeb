@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Input, Form, Modal, Popconfirm, Tag, Select, App, Card, Tooltip, Space, Upload } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, UserOutlined, KeyOutlined, LockOutlined, SafetyOutlined, CheckCircleOutlined, UploadOutlined, PhoneOutlined, TeamOutlined, IdcardOutlined } from '@ant-design/icons';
+import { Table, Button, Input, Form, Modal, Popconfirm, Tag, Select, App, Card, Tooltip, Space, Upload, Drawer, Row, Col, Typography } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, UserOutlined, KeyOutlined, LockOutlined, SafetyOutlined, CheckCircleOutlined, UploadOutlined, PhoneOutlined, TeamOutlined, IdcardOutlined, EyeOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import dayjs from 'dayjs';
+
+const { Text } = Typography;
 
 const STAFF_ROLES = [
     { value: 'officer', label: 'Officer / Admin 👨‍💼', color: 'purple' },
@@ -23,6 +26,31 @@ export default function Staff() {
     const [editingStaff, setEditingStaff] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [profileImageBase64, setProfileImageBase64] = useState(null);
+
+    // Staff Quick View Drawer State
+    const [viewDrawerVisible, setViewDrawerVisible] = useState(false);
+    const [selectedStaff, setSelectedStaff] = useState(null);
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [staffSummary, setStaffSummary] = useState(null);
+
+    const handleQuickViewStaff = async (record) => {
+        setSelectedStaff(record);
+        setStaffSummary(null);
+        setViewDrawerVisible(true);
+        setSummaryLoading(true);
+
+        try {
+            const res = await axios.post('/api/MillgetStaffSummary', { STAFF_ID: record.STAFF_ID, NAME: record.NAME, USERNAME: record.USERNAME }, { withCredentials: true });
+            if (res.data.success) {
+                setStaffSummary(res.data);
+            }
+        } catch (e) {
+            console.error('Error fetching staff summary:', e);
+            message.error('Failed to load staff summary metrics');
+        } finally {
+            setSummaryLoading(false);
+        }
+    };
 
     const [form] = Form.useForm();
 
@@ -254,25 +282,24 @@ export default function Staff() {
             align: 'right',
             render: (_, record) => (
                 <Space>
-                    <Tooltip title="Edit Staff & Credentials">
-                        <Button 
-                            size="small" 
-                            icon={<EditOutlined />} 
-                            onClick={() => handleOpenEdit(record)} 
-                            className="rounded-lg text-purple-600 border-purple-200 hover:border-purple-400 hover:text-purple-700"
-                        >
-                            Edit
+                    <Tooltip title="View Bills & Performance Stats">
+                        <Button icon={<EyeOutlined />} type="primary" ghost onClick={() => handleQuickViewStaff(record)}>
+                            View
                         </Button>
                     </Tooltip>
+                    <Tooltip title="Edit Profile & Credentials">
+                        <Button icon={<EditOutlined />} onClick={() => handleOpenEdit(record)} />
+                    </Tooltip>
                     <Popconfirm
-                        title="Delete staff member?"
+                        title={`Delete ${record.NAME}?`}
+                        description="This member will be deactivated from system."
                         onConfirm={() => handleDelete(record.STAFF_ID)}
-                        okText="Yes"
-                        cancelText="No"
+                        okText="Yes, Delete"
+                        cancelText="Cancel"
                         okButtonProps={{ danger: true }}
                     >
                         <Tooltip title="Delete">
-                            <Button size="small" danger icon={<DeleteOutlined />} className="rounded-lg" />
+                            <Button danger icon={<DeleteOutlined />} />
                         </Tooltip>
                     </Popconfirm>
                 </Space>
@@ -487,6 +514,94 @@ export default function Staff() {
                     </div>
                 </Form>
             </Modal>
+
+            {/* Staff Quick View Drawer */}
+            <Drawer
+                title={<span className="font-bold text-slate-800">🔍 Staff Member Summary & Performance: {selectedStaff?.NAME}</span>}
+                placement="right"
+                width={650}
+                onClose={() => setViewDrawerVisible(false)}
+                open={viewDrawerVisible}
+                destroyOnClose
+            >
+                {summaryLoading ? (
+                    <div className="p-8 text-center text-slate-500 font-bold">Loading performance metrics...</div>
+                ) : (
+                    <div className="space-y-5">
+                        {/* PROFILE CARD */}
+                        <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white p-4 rounded-2xl shadow-md space-y-3">
+                            <div className="flex items-center gap-4">
+                                <UserAvatar src={selectedStaff?.PROFILE_IMAGE || selectedStaff?.PHOTO} name={selectedStaff?.NAME} size="w-14 h-14 text-xl" />
+                                <div>
+                                    <div className="text-xl font-bold">{selectedStaff?.NAME}</div>
+                                    <div className="text-xs text-purple-200 flex items-center gap-2 mt-1">
+                                        <Tag color="purple" className="font-bold uppercase text-[10px]">
+                                            {selectedStaff?.ROLE || 'Staff'}
+                                        </Tag>
+                                        <span>•</span>
+                                        <PhoneOutlined /> {selectedStaff?.PHONE_NUMBER || 'No phone'}
+                                        {selectedStaff?.USERNAME && (
+                                            <>
+                                                <span>•</span>
+                                                <span className="font-mono text-purple-300">@{selectedStaff.USERNAME}</span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* METRICS STAT CARDS */}
+                        <Row gutter={[12, 12]}>
+                            <Col span={8}>
+                                <Card className="!bg-blue-50/70 border-blue-200 text-center">
+                                    <div className="text-xs text-blue-800 font-semibold uppercase tracking-wider">Bills Created</div>
+                                    <div className="text-xl font-bold text-blue-900 mt-1">{staffSummary?.billsCount || 0}</div>
+                                    <div className="text-[11px] text-blue-600 font-mono mt-0.5">
+                                        Rs. {Number(staffSummary?.totalBillsAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </div>
+                                </Card>
+                            </Col>
+                            <Col span={8}>
+                                <Card className="!bg-amber-50/70 border-amber-200 text-center">
+                                    <div className="text-xs text-amber-800 font-semibold uppercase tracking-wider">Credit Managed</div>
+                                    <div className="text-xl font-bold text-amber-900 mt-1 font-mono">
+                                        Rs. {Number(staffSummary?.totalCreditAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </div>
+                                </Card>
+                            </Col>
+                            <Col span={8}>
+                                <Card className="!bg-purple-50/70 border-purple-200 text-center">
+                                    <div className="text-xs text-purple-800 font-semibold uppercase tracking-wider">Cheques Collected</div>
+                                    <div className="text-xl font-bold text-purple-900 mt-1 font-mono">
+                                        Rs. {Number(staffSummary?.totalChequesAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    <div className="text-[11px] text-purple-600 mt-0.5">{staffSummary?.cheques?.length || 0} Cheques</div>
+                                </Card>
+                            </Col>
+                        </Row>
+
+                        {/* BILLS CREATED BY STAFF TABLE */}
+                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                            <div className="font-bold text-xs text-slate-700 uppercase tracking-wider">
+                                📜 Sales Bills Created by {selectedStaff?.NAME} ({staffSummary?.bills?.length || 0})
+                            </div>
+                            <Table
+                                columns={[
+                                    { title: 'Invoice No', dataIndex: 'INVOICE_NO', key: 'INVOICE_NO', render: (val, r) => <span className="font-mono font-bold text-xs">{val || `#${r.BILL_ID}`}</span> },
+                                    { title: 'Customer', dataIndex: 'CUSTOMER_NAME', key: 'CUSTOMER_NAME', render: val => val || 'Walk-in' },
+                                    { title: 'Amount', dataIndex: 'FINAL_AMOUNT', key: 'FINAL_AMOUNT', align: 'right', render: (val, r) => <span className="font-mono text-emerald-600 font-bold">Rs. {Number(val || r.NET_AMOUNT || r.TOTAL_AMOUNT || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span> },
+                                    { title: 'Status', dataIndex: 'IS_SETTLED', key: 'IS_SETTLED', align: 'center', render: val => Number(val) === 1 ? <Tag color="success">SETTLED</Tag> : <Tag color="warning">CREDIT</Tag> }
+                                ]}
+                                dataSource={staffSummary?.bills || []}
+                                rowKey="BILL_ID"
+                                pagination={{ pageSize: 5 }}
+                                size="small"
+                            />
+                        </div>
+                    </div>
+                )}
+            </Drawer>
         </div>
     );
 }

@@ -124,8 +124,64 @@ export default function Settings() {
         }
     ];
 
+    const [millName, setMillName] = useState(localStorage.getItem('mill_name') || 'CHAMIKA RICE MILLS');
+    const [millAddr, setMillAddr] = useState(localStorage.getItem('mill_address') || 'Sooriyawewa');
+    const [millPhone, setMillPhone] = useState(localStorage.getItem('mill_phone') || '071-234 5678');
+
+    const handleSaveHeader = () => {
+        localStorage.setItem('mill_name', millName);
+        localStorage.setItem('mill_address', millAddr);
+        localStorage.setItem('mill_phone', millPhone);
+        message.success('Mill Bill Header & Address details saved!');
+    };
+
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
+            {/* Mill Header & Address Details Card */}
+            <div className="bg-zinc-900/80 p-5 rounded-2xl border border-white/10 space-y-4">
+                <div>
+                    <h3 className="text-base font-bold text-white m-0">Mill Bill Header & Address Settings</h3>
+                    <p className="text-xs text-gray-400 m-0 mt-0.5">Configure company name, location address, and phone numbers printed on sales bills.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-xs text-gray-300 font-bold mb-1">Mill Name</label>
+                        <input
+                            type="text"
+                            value={millName}
+                            onChange={e => setMillName(e.target.value)}
+                            className="w-full bg-zinc-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                            placeholder="CHAMIKA RICE MILLS"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs text-gray-300 font-bold mb-1">Mill Address / Location</label>
+                        <input
+                            type="text"
+                            value={millAddr}
+                            onChange={e => setMillAddr(e.target.value)}
+                            className="w-full bg-zinc-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                            placeholder="Sooriyawewa"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs text-gray-300 font-bold mb-1">Telephone Number(s)</label>
+                        <input
+                            type="text"
+                            value={millPhone}
+                            onChange={e => setMillPhone(e.target.value)}
+                            className="w-full bg-zinc-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                            placeholder="071-234 5678"
+                        />
+                    </div>
+                </div>
+                <div className="flex justify-end pt-2">
+                    <Button type="primary" icon={<SaveOutlined />} onClick={handleSaveHeader} className="rounded-xl font-bold">
+                        Save Header Details
+                    </Button>
+                </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-zinc-900/60 p-4 rounded-2xl border border-white/10">
                 <div>
                     <h3 className="text-base font-bold text-white m-0">Store to Mill Item Mapping</h3>

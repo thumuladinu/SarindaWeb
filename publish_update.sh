@@ -61,6 +61,22 @@ fi
 # ----------------------------
 # 2. Git & Code Deployment
 # ----------------------------
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+OUTER_CHAMIKA_DIR="$(dirname "$SCRIPT_DIR")/ChamikaRiceMill"
+
+if [ -d "$OUTER_CHAMIKA_DIR" ]; then
+    echo -e "\n${YELLOW}Syncing latest ChamikaRiceMill webapp & local features into repository...${NC}"
+    rsync -av --delete \
+        --exclude="node_modules" \
+        --exclude="dist" \
+        --exclude=".git" \
+        --exclude="release" \
+        --exclude="build" \
+        --exclude=".DS_Store" \
+        "$OUTER_CHAMIKA_DIR/" "$SCRIPT_DIR/ChamikaRiceMill/"
+    echo -e "${GREEN}✔ ChamikaRiceMill webapp synced into repo!${NC}"
+fi
+
 echo -e "\n${YELLOW}[2/2] Publishing Code Changes...${NC}"
 
 read -p "Enter commit message (default: 'chore: update app'): " commit_msg

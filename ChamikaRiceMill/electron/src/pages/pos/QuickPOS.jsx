@@ -196,12 +196,11 @@ export default function QuickPOS() {
             const finalBill = { ...billPayload, LOCAL_ID: localId, ITEMS: cart, CHEQUES: cheques };
 
             if (printService.isAutoPrintEnabled()) {
-                printService.printBill(finalBill);
-                message.success(`Sale completed! Auto-printed bill #${billPayload.INVOICE_NO} to ${printService.getBillPrinter() || 'Default A5 Bill Printer'}`);
+                printService.printBill(finalBill, { forceSilent: true });
+                message.success(`Sale completed! Silent printed bill #${billPayload.INVOICE_NO}`);
             } else {
                 message.success('Direct Sale Completed Successfully!');
-                setPrintedBill(finalBill);
-                setPrintModal(true);
+                printService.printBill(finalBill, { forceSilent: false });
             }
 
             clearCart();

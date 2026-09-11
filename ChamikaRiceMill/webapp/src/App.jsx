@@ -21,6 +21,7 @@ import SalesReturns from './pages/sales/SalesReturns';
 import Expenses from './pages/expenses/Expenses';
 import BagLabels from './pages/labels/BagLabels';
 import TimeTracker from './pages/time-tracker/TimeTracker';
+import DevTools from './pages/dev/DevTools';
 import Cookies from 'js-cookie';
 import { hasAnyRole } from './utils/helpers';
 import { io } from 'socket.io-client';
@@ -117,6 +118,7 @@ function App() {
                 <Route path="/cheques" element={<Cheques />} />
                 <Route path="/time-tracker" element={<TimeTracker />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/dev-tools" element={<DevTools />} />
             </Route>
 
             {/* Fallback */}

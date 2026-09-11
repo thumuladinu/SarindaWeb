@@ -4,6 +4,16 @@ import syncService from './syncService';
 
 const DEFAULT_STAFF = [
     {
+        STAFF_ID: 100,
+        USERNAME: 'thumula',
+        NAME: 'Thumula Rajakaruna',
+        ROLE: 'officer',
+        PIN: '1234',
+        PASSWORD: '123',
+        PHONE_NUMBER: '',
+        IS_ACTIVE: 1
+    },
+    {
         STAFF_ID: 2,
         USERNAME: 'chamika',
         NAME: 'chamika bandranayake',
@@ -298,18 +308,27 @@ class AuthService {
         if (!isValid && syncService.isOnline) {
             try {
                 const baseUrl = syncService.apiBase;
-                const onlineRes = await axios.post(`${baseUrl}/api/login`, {
-                    username: targetUser.USERNAME || username,
-                    password: cleanCred,
-                    pin: cleanCred
-                }, { timeout: 4000 }).catch(() => null);
+                if (isPin) {
+                    const pinRes = await axios.post(`${baseUrl}/api/mill/staff/pin-login`, {
+                        PIN: cleanCred
+                    }, { timeout: 4000 }).catch(() => null);
 
-                if (onlineRes?.data?.success || onlineRes?.data?.user) {
-                    isValid = true;
-                    if (isPin) targetUser.PIN = cleanCred;
-                    else targetUser.PASSWORD = cleanCred;
-                    // Update cache asynchronously
-                    db.staff.put(targetUser).catch(() => {});
+                    if (pinRes?.data?.success && pinRes?.data?.user) {
+                        isValid = true;
+                        targetUser.PIN = cleanCred;
+                        db.staff.put(targetUser).catch(() => {});
+                    }
+                } else {
+                    const onlineRes = await axios.post(`${baseUrl}/api/login`, {
+                        username: targetUser.USERNAME || username,
+                        password: cleanCred
+                    }, { timeout: 4000 }).catch(() => null);
+
+                    if (onlineRes?.data?.success || onlineRes?.data?.user) {
+                        isValid = true;
+                        targetUser.PASSWORD = cleanCred;
+                        db.staff.put(targetUser).catch(() => {});
+                    }
                 }
             } catch (e) {
                 console.warn('[AuthService] Online auth check error:', e);

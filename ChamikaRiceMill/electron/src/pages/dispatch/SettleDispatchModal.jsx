@@ -96,17 +96,45 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
 
             // If bills not loaded from backend, load from Dexie IndexedDB
             if (loadedBills.length === 0) {
-                const billIds = noteRecord.BILL_IDS_JSON || [];
+                const allBills = await db.sales_bills.toArray();
                 let localBills = [];
-                if (billIds.length > 0) {
-                    localBills = await db.sales_bills.where('LOCAL_ID').anyOf(billIds).toArray();
-                    if (localBills.length === 0) {
-                        localBills = await db.sales_bills.where('BILL_ID').anyOf(billIds).toArray();
-                    }
+                
+                // Priority 1: Match by global INVOICE_NOS_JSON array
+                let invNos = noteRecord.INVOICE_NOS_JSON || noteRecord.INVOICE_NOS || [];
+                if (typeof invNos === 'string') {
+                    try { invNos = JSON.parse(invNos); } catch(e) { invNos = invNos.split(',').map(s => s.trim()); }
+                }
+                if (Array.isArray(invNos) && invNos.length > 0) {
+                    const cleanInvNos = invNos.map(s => String(s).trim()).filter(Boolean);
+                    localBills = allBills.filter(b => b.INVOICE_NO && cleanInvNos.includes(String(b.INVOICE_NO).trim()));
                 }
 
+                // Priority 2: Match by DISPATCH_NO column on sales_bills
+                if (localBills.length === 0 && noteRecord.DISPATCH_NO) {
+                    localBills = allBills.filter(b => b.DISPATCH_NO && String(b.DISPATCH_NO) === String(noteRecord.DISPATCH_NO));
+                }
+
+                // Priority 3: Match by legacy DISPATCH_ID column on sales_bills
+                if (localBills.length === 0 && (noteRecord.DISPATCH_ID || noteRecord.LOCAL_ID)) {
+                    const noteDispatchId = noteRecord.DISPATCH_ID || noteRecord.LOCAL_ID;
+                    localBills = allBills.filter(b => b.DISPATCH_ID && (String(b.DISPATCH_ID) === String(noteDispatchId) || String(b.DISPATCH_ID) === String(noteRecord.LOCAL_ID)));
+                }
+                
+                // Priority 3: Match by BILL_ID (server ID) or LOCAL_ID
                 if (localBills.length === 0) {
-                    localBills = await db.sales_bills.toArray();
+                    let billIds = noteRecord.BILL_IDS_JSON || noteRecord.BILL_IDS || [];
+                    if (typeof billIds === 'string') {
+                        try { billIds = JSON.parse(billIds); } catch(e) { billIds = billIds.split(',').map(s => s.trim()); }
+                    }
+                    if (Array.isArray(billIds) && billIds.length > 0) {
+                        const numericIds = billIds.map(i => Number(i)).filter(i => !isNaN(i));
+                        const matchedByBillId = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
+                        if (matchedByBillId.length > 0) {
+                            localBills = matchedByBillId;
+                        } else {
+                            localBills = allBills.filter(b => b.LOCAL_ID && numericIds.includes(Number(b.LOCAL_ID)));
+                        }
+                    }
                 }
 
                 // Attach customer name if missing

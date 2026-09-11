@@ -13,7 +13,7 @@ import axios from 'axios';
 import db from '../../services/db';
 import syncService from '../../services/syncService';
 import { decodeBatchEAN13, batchToUniqueCode } from '../../utils/labelUtils';
-import { getTerminalDeviceCode, getCurrentUserName } from '../../utils/terminalHelper';
+import { getTerminalDeviceCode, getCurrentUserName, formatSLDateTime } from '../../utils/terminalHelper';
 
 const { Option } = Select;
 
@@ -349,7 +349,7 @@ export default function SalesReturns() {
                 REFUND_AMOUNT: values.REFUND_AMOUNT || totalRefund,
                 REFUND_METHOD: values.REFUND_METHOD || 'cash',
                 REASON: values.REASON || null,
-                DATE: values.DATE ? values.DATE.format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
+                DATE: values.DATE ? dayjs(values.DATE).hour(dayjs().hour()).minute(dayjs().minute()).second(dayjs().second()).toISOString() : dayjs().toISOString(),
                 ITEMS: itemsToReturn,
                 IS_SYNCED: 0
             };
@@ -502,7 +502,8 @@ export default function SalesReturns() {
             title: 'Return Date',
             dataIndex: 'DATE',
             key: 'DATE',
-            render: d => d ? dayjs(d).format('DD/MM/YYYY') : '-'
+            width: 110,
+            render: d => d ? dayjs(d).format('YYYY-MM-DD') : '-'
         },
         {
             title: 'Refunded Amount',
@@ -516,6 +517,25 @@ export default function SalesReturns() {
             dataIndex: 'REFUND_METHOD',
             key: 'REFUND_METHOD',
             render: m => <Tag color={m === 'cash' ? 'green' : m === 'credit_note' ? 'purple' : 'blue'} className="uppercase font-bold">{m || 'CASH'}</Tag>
+        },
+        {
+            title: 'Created / Added By',
+            key: 'CREATED_INFO',
+            width: 150,
+            render: (_, r) => {
+                const { dateStr, timeStr, addedBy } = formatSLDateTime(r.CREATED_DATE || r.CREATED_AT || r.DATE, r);
+                return (
+                    <div>
+                        <div className="font-bold text-slate-800 text-xs">{dateStr}</div>
+                        <div className="text-[11px] text-gray-500 font-mono">{timeStr}</div>
+                        {addedBy && (
+                            <div className="text-[10px] text-blue-700 font-semibold flex items-center gap-1 mt-0.5">
+                                <span>👤 {addedBy}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             title: 'Action',

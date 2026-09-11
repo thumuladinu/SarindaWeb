@@ -140,11 +140,6 @@ export default function DirectSale() {
     const grandTotal = cart.reduce((sum, item) => sum + (item.TOTAL_PRICE || 0), 0);
 
     const handleFinish = async (values) => {
-        if (cart.length === 0) {
-            message.warning('Cart is empty. Please add items to sell.');
-            return;
-        }
-
         setSubmitting(true);
         try {
             const formattedItems = cart.map(i => ({
