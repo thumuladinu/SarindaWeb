@@ -3,6 +3,7 @@ import Dexie from 'dexie';
 const db = new Dexie('ChamikaRiceMillDB');
 
 // Define Schema for offline-first operation
+// v7 — previous schema (no changes, required for migration chain)
 db.version(7).stores({
     sales_bills: '++LOCAL_ID, BILL_ID, INVOICE_NO, BATCH_NO, DISPATCH_NO, CUSTOMER_ID, IS_SETTLED, DATE, CREATED_DATE, IS_SYNCED',
     dispatch_notes: '++LOCAL_ID, DISPATCH_ID, DISPATCH_NO, DATE, DRIVER_NAME, LORRY_NO, STATUS, IS_SYNCED, CREATED_DATE',
@@ -18,6 +19,35 @@ db.version(7).stores({
     expenses: '++LOCAL_ID, EXPENSE_ID, EXPENSE_NO, CATEGORY_NAME, AMOUNT, DATE, IS_SYNCED',
     expense_categories: 'CATEGORY_ID, NAME, IS_ACTIVE',
     settings: 'key'
+});
+
+// v8 — adds CODE (permanent unique identifier for sync) and IS_SYNCED to customers
+db.version(8).stores({
+    sales_bills: '++LOCAL_ID, BILL_ID, INVOICE_NO, BATCH_NO, DISPATCH_NO, CUSTOMER_ID, IS_SETTLED, DATE, CREATED_DATE, IS_SYNCED',
+    dispatch_notes: '++LOCAL_ID, DISPATCH_ID, DISPATCH_NO, DATE, DRIVER_NAME, LORRY_NO, STATUS, IS_SYNCED, CREATED_DATE',
+    stock_inwards: '++LOCAL_ID, INWARD_ID, DATE, ITEM_ID, VEHICLE_NO, IS_SYNCED, CREATED_DATE',
+    sales_returns: '++LOCAL_ID, RETURN_ID, INVOICE_NO, CUSTOMER_ID, ITEM_ID, DATE, IS_SYNCED',
+    items: 'ITEM_ID, CODE, SYSTEM_CODE, NAME, CATEGORY, IS_ACTIVE',
+    customers: 'CUSTOMER_ID, &CODE, NAME, PHONE, PHONE_NUMBER, IS_ACTIVE, IS_SYNCED',
+    vehicles: 'VEHICLE_ID, VEHICLE_NO, DRIVER_NAME, IS_ACTIVE',
+    places: 'PLACE_ID, NAME, DISTRICT, IS_ACTIVE',
+    staff: 'STAFF_ID, USERNAME, NAME, ROLE, PIN, IS_ACTIVE',
+    yield_configs: 'ID',
+    barcode_history: '++LOCAL_ID, BATCH_NO, INVOICE_NO, TOTAL_STICKERS, PRINTED_DATE',
+    expenses: '++LOCAL_ID, EXPENSE_ID, EXPENSE_NO, CATEGORY_NAME, AMOUNT, DATE, IS_SYNCED',
+    expense_categories: 'CATEGORY_ID, NAME, IS_ACTIVE',
+    settings: 'key'
+}).upgrade(async tx => {
+    // Backfill CODE for any existing customers that don't have one
+    await tx.customers.toCollection().modify(cust => {
+        if (!cust.CODE) {
+            cust.CODE = `MCU-LOCAL-${String(cust.CUSTOMER_ID || Date.now()).slice(-4).padStart(4, '0')}`;
+        }
+        if (cust.IS_SYNCED === undefined) {
+            // Customers already in Dexie came from server pull — mark them synced
+            cust.IS_SYNCED = 1;
+        }
+    });
 });
 
 export async function seedDefaultOfflineData() {

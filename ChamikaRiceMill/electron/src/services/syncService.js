@@ -500,6 +500,7 @@ class SyncService {
             await this.pushPendingInward(baseUrl);
             await this.pushPendingReturns(baseUrl);
             await this.pushPendingExpenses(baseUrl);
+            await this.pushPendingCustomers(baseUrl);  // push locally-added/edited customers
 
             // 2. Pull Cloud Master Data into Dexie
             await this.pullReferenceData(baseUrl);
@@ -817,16 +818,69 @@ class SyncService {
                 await db.items.clear();
                 await db.items.bulkPut(itemsRes.data.result);
             }
+
+            // ────────────────────────────────────────────────────────────────
+            // CUSTOMERS: CODE-based smart upsert — NEVER wipe local table
+            // Primary match: by CODE (permanent unique identifier)
+            // Fallback match: by CUSTOMER_ID for old records without CODE yet
+            // (handles production deployments where CODE column was just added)
+            // ────────────────────────────────────────────────────────────────
             if (custRes.data?.success && Array.isArray(custRes.data.result)) {
-                await db.customers.clear();
-                await db.customers.bulkPut(custRes.data.result.filter(c => c && c.CUSTOMER_ID).map(c => ({
-                    ...c,
-                    DISTANCE: Number(c.DISTANCE || c.DISTANCE_KM || 0),
-                    PHONE: c.PHONE_NUMBER || c.PHONE,
-                    LOCATION: c.LOCATION || c.ADDRESS,
-                    BANK_DETAILS_JSON: typeof c.BANK_DETAILS_JSON === 'object' ? JSON.stringify(c.BANK_DETAILS_JSON) : (c.BANK_DETAILS_JSON || null)
-                })));
+                for (const serverCust of custRes.data.result) {
+                    if (!serverCust || !serverCust.CUSTOMER_ID) continue;
+
+                    const cleanPayload = {
+                        ...serverCust,
+                        DISTANCE: Number(serverCust.DISTANCE || serverCust.DISTANCE_KM || 0),
+                        PHONE: serverCust.PHONE_NUMBER || serverCust.PHONE,
+                        LOCATION: serverCust.LOCATION || serverCust.ADDRESS,
+                        BANK_DETAILS_JSON: typeof serverCust.BANK_DETAILS_JSON === 'object'
+                            ? JSON.stringify(serverCust.BANK_DETAILS_JSON)
+                            : (serverCust.BANK_DETAILS_JSON || null),
+                        IS_SYNCED: 1
+                    };
+
+                    // If server record has no CODE yet (race: backfill not finished), auto-assign one
+                    if (!cleanPayload.CODE) {
+                        cleanPayload.CODE = `MCU-MIGRT-${String(serverCust.CUSTOMER_ID).padStart(4, '0')}`;
+                    }
+
+                    let existing = null;
+
+                    // Step 1: Try matching by CODE first (preferred, permanent)
+                    try {
+                        existing = await db.customers.where('CODE').equals(cleanPayload.CODE).first();
+                    } catch(e) {
+                        // CODE index may not be ready yet on very first DB upgrade
+                        existing = null;
+                    }
+
+                    // Step 2: Fallback — match by server CUSTOMER_ID (small integer, safe on production)
+                    if (!existing && serverCust.CUSTOMER_ID < 1000000000000) {
+                        existing = await db.customers.get(serverCust.CUSTOMER_ID).catch(() => null);
+                    }
+
+                    if (existing) {
+                        if (existing.IS_SYNCED === 0) {
+                            // Local pending edit — do NOT overwrite, let push handle it
+                            continue;
+                        }
+                        // Update fields from server, keep local CUSTOMER_ID as Dexie PK
+                        await db.customers.update(existing.CUSTOMER_ID, cleanPayload).catch(() => {});
+                    } else {
+                        // New customer from server — add to local
+                        const localId = serverCust.CUSTOMER_ID && serverCust.CUSTOMER_ID < 1000000000000
+                            ? serverCust.CUSTOMER_ID
+                            : Date.now();
+                        await db.customers.add({ ...cleanPayload, CUSTOMER_ID: localId }).catch(async () => {
+                            // CUSTOMER_ID collision — strip it and let Dexie use a new timestamp one
+                            const { CUSTOMER_ID: _drop, ...rest } = cleanPayload;
+                            await db.customers.add({ ...rest, CUSTOMER_ID: Date.now() }).catch(() => {});
+                        });
+                    }
+                }
             }
+
             if (vehRes.data?.success && Array.isArray(vehRes.data.result)) {
                 await db.vehicles.clear();
                 await db.vehicles.bulkPut(vehRes.data.result);
@@ -1097,7 +1151,70 @@ class SyncService {
             console.error('Error cleaning up 30-day old synced data:', e);
         }
     }
-}
+    // ─────────────────────────────────────────────────────────────
+    // PUSH CUSTOMERS (Local → Cloud, matched by CODE)
+    // ─────────────────────────────────────────────────────────────
+    async pushPendingCustomers(baseUrl = this.apiBase) {
+        let pending;
+        try {
+            pending = await db.customers.where('IS_SYNCED').equals(0).toArray();
+        } catch (e) {
+            // IS_SYNCED index may not exist yet on older DBs — fallback gracefully
+            console.warn('[SyncService] pushPendingCustomers: IS_SYNCED index not ready yet, skipping');
+            return;
+        }
+        if (!pending || pending.length === 0) return;
+
+        for (const cust of pending) {
+            try {
+                const code = cust.CODE;
+                if (!code) {
+                    // Shouldn't happen, but skip any without CODE
+                    console.warn('[SyncService] Customer missing CODE, skipping push:', cust.CUSTOMER_ID);
+                    continue;
+                }
+
+                const payload = {
+                    CODE: code,
+                    NAME: cust.NAME,
+                    PHONE: cust.PHONE || cust.PHONE_NUMBER || '',
+                    PHONE_NUMBER: cust.PHONE_NUMBER || cust.PHONE || '',
+                    ADDRESS: cust.ADDRESS || cust.LOCATION || '',
+                    LOCATION: cust.LOCATION || cust.ADDRESS || '',
+                    DISTANCE: Number(cust.DISTANCE || 0),
+                    CREDIT_LIMIT: Number(cust.CREDIT_LIMIT || 0),
+                    BANK_DETAILS_JSON: typeof cust.BANK_DETAILS_JSON === 'string'
+                        ? cust.BANK_DETAILS_JSON
+                        : JSON.stringify(cust.BANK_DETAILS_JSON || []),
+                    IS_ACTIVE: cust.IS_ACTIVE !== undefined ? cust.IS_ACTIVE : 1,
+                    DEVICE_ID: cust.DEVICE_ID || getTerminalDeviceCode(),
+                    CREATED_DATE: cust.CREATED_DATE || new Date().toISOString().slice(0, 19).replace('T', ' ')
+                };
+
+                const res = await axios.post(`${baseUrl}/api/MilladdCustomer`, payload, { timeout: 8000 });
+
+                if (res.data?.success) {
+                    const serverCustomerId = res.data.customerId;
+                    const serverCode = res.data.customerCode || code;
+
+                    // Mark as synced and update CODE/CUSTOMER_ID from server if needed
+                    await db.customers.update(cust.CUSTOMER_ID, {
+                        IS_SYNCED: 1,
+                        CODE: serverCode,
+                        // If server returned a real small-integer CUSTOMER_ID, store it as a reference
+                        // (we keep our local CUSTOMER_ID as the Dexie PK, not the server ID)
+                        SERVER_CUSTOMER_ID: serverCustomerId || cust.CUSTOMER_ID
+                    });
+                    console.log(`[SyncService] Customer synced: ${cust.NAME} (CODE: ${serverCode}, Server ID: ${serverCustomerId})`);
+                }
+            } catch (err) {
+                console.error(`[SyncService] Failed to push customer ${cust.NAME || cust.CUSTOMER_ID}:`, err.message);
+                if (err.response && err.response.status === 401) break;
+            }
+        }
+    }
+
+} // end class SyncService
 
 const syncService = new SyncService();
 export default syncService;

@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons';
 import db from '../../services/db';
 import syncService from '../../services/syncService';
-import axios from 'axios';
+import { getTerminalDeviceCode } from '../../utils/terminalHelper';
 import dayjs from 'dayjs';
 
 export default function Resources() {
@@ -190,6 +190,22 @@ export default function Resources() {
         }
     };
 
+    // Generate sequential customer CODE: MCU-{TTTTT}-{NNNN}
+    const generateCustomerCode = async () => {
+        const terminalCode = getTerminalDeviceCode() || 'LOCAL';
+        const prefix = `MCU-${terminalCode.slice(0, 5)}-`;
+        const allCustomers = await db.customers.toArray();
+        let maxSeq = 0;
+        allCustomers.forEach(c => {
+            if (c.CODE && c.CODE.startsWith(prefix)) {
+                const parts = c.CODE.split('-');
+                const last = parseInt(parts[parts.length - 1], 10);
+                if (!isNaN(last) && last > maxSeq) maxSeq = last;
+            }
+        });
+        return `${prefix}${String(maxSeq + 1).padStart(4, '0')}`;
+    };
+
     // Customer Save
     const handleSaveCustomer = async (values) => {
         try {
@@ -203,16 +219,23 @@ export default function Resources() {
                 DISTANCE: values.DISTANCE !== undefined ? Number(values.DISTANCE) : 0,
                 CREDIT_LIMIT: values.CREDIT_LIMIT || 0,
                 BANK_DETAILS_JSON: JSON.stringify(cleanBanks),
-                IS_ACTIVE: 1
+                IS_ACTIVE: 1,
+                IS_SYNCED: 0  // mark pending so sync engine will push it
             };
 
             if (editingRecord) {
+                // Update existing — preserve CODE, mark as pending re-sync
                 await db.customers.update(editingRecord.CUSTOMER_ID, payload);
                 message.success('Customer updated');
             } else {
+                // New customer — generate a permanent CODE
+                const code = await generateCustomerCode();
                 await db.customers.add({
                     CUSTOMER_ID: Date.now(),
                     ...payload,
+                    CODE: code,
+                    DEVICE_ID: getTerminalDeviceCode(),
+                    CREATED_DATE: dayjs().format('YYYY-MM-DD HH:mm:ss'),
                     BALANCE: 0
                 });
                 message.success('Customer added');
@@ -221,11 +244,10 @@ export default function Resources() {
             form.resetFields();
             loadAll();
 
-            // Try syncing customer up to cloud API if online
-            const serverUrl = localStorage.getItem('mill_server_url') || 'http://localhost:3001';
-            const endpoint = editingRecord ? `${serverUrl}/api/MillupdateCustomer` : `${serverUrl}/api/MilladdCustomer`;
-            const reqData = editingRecord ? { CUSTOMER_ID: editingRecord.CUSTOMER_ID, ...payload } : payload;
-            axios.post(endpoint, reqData).catch(() => {});
+            // Trigger immediate sync push so the customer reaches the server right away
+            if (syncService.isOnline) {
+                syncService.pushPendingCustomers().catch(() => {});
+            }
         } catch (e) {
             console.error(e);
             message.error('Failed to save customer');

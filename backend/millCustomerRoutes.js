@@ -12,31 +12,40 @@ const util = require('util');
 pool.query = util.promisify(pool.query);
 
 // Now you can use pool.query with async/await
+
+// ─────────────────────────────────────────────────────────────
+// Customer CODE generation: MCU-{DEVICE}-{NNNN}
+// Format is permanent and unique per device — never changes
+// ─────────────────────────────────────────────────────────────
+async function generateCustomerCode(deviceId) {
+    const prefix = `MCU-${(deviceId || 'WEB01').toUpperCase().slice(0, 5)}-`;
+    const rows = await pool.query(
+        'SELECT CODE FROM mill_customers WHERE CODE LIKE ? ORDER BY CUSTOMER_ID DESC LIMIT 1',
+        [`${prefix}%`]
+    );
+    let nextSeq = 1;
+    if (rows && rows.length > 0 && rows[0].CODE) {
+        const parts = rows[0].CODE.split('-');
+        const last = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(last)) nextSeq = last + 1;
+    }
+    return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+}
+
 router.post('/api/MillgetAllCustomers', async (req, res) => {
     //console.log('Get all customers request received:');
     try {
-        // Ensure the MySQL connection pool is defined
         if (!pool) {
             console.error('Error: MySQL connection pool is not defined');
             return res.status(500).json({ success: false, message: 'Internal server error' });
         }
 
-        // Query to fetch all active customers
         const queryResult = await pool.query('SELECT * FROM mill_customers WHERE IS_ACTIVE=1');
 
-        // Check if queryResult is an array before trying to use .map
         if (Array.isArray(queryResult)) {
-            // Check if any customers are found
-            if (queryResult.length === 0) {
-                return res.status(404).json({ success: false, message: 'No active customers found' });
-            }
-
-            // Convert the query result to a new array without circular references
             const customers = queryResult.map(customer => ({ ...customer }));
-
-            //reverse array with latest customer first
             customers.reverse();
-
+            // Always return success:true even if empty (empty list is valid)
             return res.status(200).json({ success: true, result: customers });
         } else {
             console.error('Error: queryResult is not an array:', queryResult);
@@ -125,32 +134,83 @@ const ensureCustomerExtraColumns = async () => {
     try { await pool.query('ALTER TABLE mill_customers ADD COLUMN BANK_DETAILS_JSON TEXT'); } catch(e) {}
     try { await pool.query('ALTER TABLE mill_customers ADD COLUMN PHONE_NUMBER VARCHAR(50)'); } catch(e) {}
     try { await pool.query('ALTER TABLE mill_customers ADD COLUMN LOCATION VARCHAR(255)'); } catch(e) {}
+    // CODE column for permanent unique customer identification (CODE-based sync)
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN CODE VARCHAR(30) NULL'); } catch(e) {}
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN DEVICE_ID VARCHAR(20) NULL'); } catch(e) {}
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN CREATED_DATE DATETIME NULL'); } catch(e) {}
 };
+
+// Ensure CODE column exists at startup
+(async () => {
+    try {
+        await pool.query('ALTER TABLE mill_customers ADD COLUMN CODE VARCHAR(30) NULL');
+        console.log('[CustomerRoutes] CODE column added to mill_customers');
+    } catch(e) { /* already exists */ }
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN DEVICE_ID VARCHAR(20) NULL'); } catch(e) {}
+    try { await pool.query('ALTER TABLE mill_customers ADD COLUMN CREATED_DATE DATETIME NULL'); } catch(e) {}
+    // Backfill existing customers that have no CODE yet
+    try {
+        const noCode = await pool.query('SELECT CUSTOMER_ID FROM mill_customers WHERE CODE IS NULL OR CODE = \"\"');
+        for (const row of (noCode || [])) {
+            const code = `MCU-MIGRT-${String(row.CUSTOMER_ID).padStart(4, '0')}`;
+            await pool.query('UPDATE mill_customers SET CODE = ? WHERE CUSTOMER_ID = ?', [code, row.CUSTOMER_ID]);
+        }
+        if ((noCode || []).length > 0) console.log(`[CustomerRoutes] Backfilled CODE for ${noCode.length} existing customers`);
+    } catch(e) { console.warn('[CustomerRoutes] CODE backfill warning:', e.message); }
+})();
 
 router.post('/api/MilladdCustomer', async (req, res) => {
     //console.log('Add customer request received:', req.body);
-
     try {
-        // Ensure the MySQL connection pool is defined
         if (!pool) {
             console.error('Error: MySQL connection pool is not defined');
             return res.status(500).json({ success: false, message: 'Internal server error' });
         }
 
+        const body = { ...req.body };
+
+        // If client didn't send a CODE, generate one now
+        if (!body.CODE) {
+            body.CODE = await generateCustomerCode(body.DEVICE_ID || body.deviceId || 'WEB01');
+        }
+
+        // Ensure CREATED_DATE is set
+        if (!body.CREATED_DATE) {
+            body.CREATED_DATE = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        }
+
+        // Guard: if same CODE already exists, return the existing record (idempotent)
+        const existing = await pool.query('SELECT CUSTOMER_ID, CODE FROM mill_customers WHERE CODE = ?', [body.CODE]);
+        if (existing && existing.length > 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'Customer already exists (matched by CODE)',
+                customerId: existing[0].CUSTOMER_ID,
+                customerCode: existing[0].CODE
+            });
+        }
+
         let insertResult;
         try {
-            insertResult = await pool.query('INSERT INTO mill_customers SET ?', req.body);
+            insertResult = await pool.query('INSERT INTO mill_customers SET ?', body);
         } catch (err) {
             if (err.code === 'ER_BAD_FIELD_ERROR') {
                 await ensureCustomerExtraColumns();
-                insertResult = await pool.query('INSERT INTO mill_customers SET ?', req.body);
+                insertResult = await pool.query('INSERT INTO mill_customers SET ?', body);
             } else {
                 throw err;
             }
         }
 
         if (insertResult.affectedRows > 0) {
-            return res.status(200).json({ success: true, message: 'Customer added successfully' });
+            const newId = insertResult.insertId;
+            // Return CUSTOMER_ID and CODE so the local Electron app can reconcile the record
+            return res.status(200).json({
+                success: true,
+                message: 'Customer added successfully',
+                customerId: newId,
+                customerCode: body.CODE
+            });
         } else {
             console.error('Error: Failed to add customer:', insertResult.message);
             return res.status(500).json({ success: false, message: 'Internal server error' });

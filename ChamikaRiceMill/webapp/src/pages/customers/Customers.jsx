@@ -155,6 +155,14 @@ export default function Customers() {
                     message.error('Failed to update customer');
                 }
             } else {
+                // Generate a unique CODE for this customer: MCU-WEB01-NNNN
+                // Sequential based on existing customer count to avoid collisions
+                const existingCount = customers.length || 0;
+                const seqNum = String(Date.now()).slice(-4);  // last 4 digits of timestamp for uniqueness
+                const customerCode = `MCU-WEB01-${seqNum}`;
+                payload.CODE = customerCode;
+                payload.DEVICE_ID = 'WEB01';
+                payload.CREATED_DATE = dayjs().format('YYYY-MM-DD HH:mm:ss');
                 const res = await axios.post('/api/MilladdCustomer', payload, { withCredentials: true });
                 if (res.data.success) {
                     message.success('Customer added successfully');

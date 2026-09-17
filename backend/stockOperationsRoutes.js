@@ -703,7 +703,13 @@ async function updateStockLevels(opType, data, clearanceType, opCode = '', itemS
 
     // Helper to get current stock from ledger using Unified Calculator
     async function getCurrentStock(itemId) {
-        return await calculateCurrentStock(pool, itemId, storeNo, isHighPrecision ? dateTimeUtils.toSLMySQLDateTime(opTimestamp) : null);
+        const historicalStock = await calculateCurrentStock(pool, itemId, storeNo, isHighPrecision ? dateTimeUtils.toSLMySQLDateTime(opTimestamp) : null);
+        const liveStock = await calculateCurrentStock(pool, itemId, storeNo, null);
+        // Use liveStock if liveStock is smaller (prevents double-clearing if prior transactions were inserted)
+        if (liveStock < historicalStock) {
+            return liveStock;
+        }
+        return historicalStock;
     }
 
     // Helper to create a stock adjustment transaction
