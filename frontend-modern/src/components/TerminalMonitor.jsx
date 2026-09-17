@@ -15,6 +15,12 @@ const fmtDate = (date) =>
           })
         : '—';
 
+const isMillTerminal = (t) =>
+    String(t.storeNo) === '999' ||
+    t.storeName?.toLowerCase().includes('mill') ||
+    t.type?.toLowerCase().includes('mill') ||
+    t.terminalId?.toLowerCase().includes('mill');
+
 const TerminalMonitor = () => {
     const { message } = App.useApp();
     const { stores, getName, getHex } = useStores();
@@ -23,7 +29,10 @@ const TerminalMonitor = () => {
     useEffect(() => {
         const newSocket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
         newSocket.on('connect', () => newSocket.emit('admin:get_terminals'));
-        newSocket.on('admin:terminals_update', (data) => setTerminals(data));
+        newSocket.on('admin:terminals_update', (data) => {
+            const storeTerminals = (data || []).filter(t => !isMillTerminal(t));
+            setTerminals(storeTerminals);
+        });
         return () => newSocket.disconnect();
     }, []);
 

@@ -57,10 +57,16 @@ const DevCache = () => {
         });
 
         newSocket.on('admin:terminals_update', (data) => {
-            setTerminals(data);
+            const storeTerminals = (data || []).filter(t => 
+                String(t.storeNo) !== '999' && 
+                !t.storeName?.toLowerCase().includes('mill') && 
+                !t.type?.toLowerCase().includes('mill') && 
+                !t.terminalId?.toLowerCase().includes('mill')
+            );
+            setTerminals(storeTerminals);
             const current = selectedTerminalRef.current;
             if (current) {
-                const updated = data.find(t => t.terminalId === current.terminalId);
+                const updated = storeTerminals.find(t => t.terminalId === current.terminalId);
                 if (updated) setSelectedTerminal(updated);
             }
         });

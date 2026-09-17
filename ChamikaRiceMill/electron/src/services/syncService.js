@@ -97,9 +97,6 @@ class SyncService {
                 this.socket.disconnect();
             }
             let url = this.apiBase || 'http://localhost:3001';
-            if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-                url = 'http://localhost:3001';
-            }
             console.log('[SyncService] Connecting Mill Electron Socket to:', url);
             this.socket = io(url, {
                 reconnectionDelayMax: 5000,
@@ -495,12 +492,12 @@ class SyncService {
             const baseUrl = this.apiBase;
 
             // 1. Push Offline Records to Cloud
+            await this.pushPendingCustomers(baseUrl);  // push locally-added/edited customers FIRST so server IDs/CODEs exist
             await this.pushPendingSales(baseUrl);
             await this.pushPendingDispatch(baseUrl);
             await this.pushPendingInward(baseUrl);
             await this.pushPendingReturns(baseUrl);
             await this.pushPendingExpenses(baseUrl);
-            await this.pushPendingCustomers(baseUrl);  // push locally-added/edited customers
 
             // 2. Pull Cloud Master Data into Dexie
             await this.pullReferenceData(baseUrl);
@@ -537,6 +534,22 @@ class SyncService {
         const pending = await db.sales_bills.where('IS_SYNCED').equals(0).toArray();
         for (const bill of pending) {
             try {
+                // Resolve customer CODE and safe server CUSTOMER_ID
+                let custCode = bill.CUSTOMER_CODE || null;
+                let realCustomerId = (bill.CUSTOMER_ID && !isNaN(Number(bill.CUSTOMER_ID))) ? Number(bill.CUSTOMER_ID) : null;
+                if (bill.CUSTOMER_ID) {
+                    const custObj = await db.customers.get(bill.CUSTOMER_ID);
+                    if (custObj) {
+                        custCode = custObj.CODE || custCode;
+                        if (custObj.CUSTOMER_ID && Number(custObj.CUSTOMER_ID) <= 2147483647) {
+                            realCustomerId = Number(custObj.CUSTOMER_ID);
+                        }
+                    }
+                }
+                if (realCustomerId && realCustomerId > 2147483647) {
+                    realCustomerId = null;
+                }
+
                 if (bill.IS_SETTLED_UPDATE && bill.BILL_ID) {
                     // Push Settlement
                     const res = await axios.post(`${baseUrl}/api/mill/sales/settle`, {
@@ -573,7 +586,8 @@ class SyncService {
                         BILL_ID: bill.BILL_ID,
                         INVOICE_NO: bill.INVOICE_NO,
                         BATCH_NO: bill.BATCH_NO || null,
-                        CUSTOMER_ID: (bill.CUSTOMER_ID && !isNaN(Number(bill.CUSTOMER_ID))) ? Number(bill.CUSTOMER_ID) : null,
+                        CUSTOMER_ID: realCustomerId,
+                        CUSTOMER_CODE: custCode,
                         CUSTOMER_NAME: bill.CUSTOMER_NAME,
                         CUSTOMER_PHONE: bill.CUSTOMER_PHONE,
                         CUSTOMER_ADDRESS: bill.CUSTOMER_ADDRESS,
@@ -609,7 +623,8 @@ class SyncService {
 
                     const res = await axios.post(`${baseUrl}/api/mill/sales/add`, {
                         INVOICE_NO: bill.INVOICE_NO,
-                        CUSTOMER_ID: (bill.CUSTOMER_ID && !isNaN(Number(bill.CUSTOMER_ID))) ? Number(bill.CUSTOMER_ID) : null,
+                        CUSTOMER_ID: realCustomerId,
+                        CUSTOMER_CODE: custCode,
                         BATCH_NO: bill.BATCH_NO || null,
                         DATE: billDateStr,
                         CREATED_DATE: bill.CREATED_DATE || bill.CREATED_AT || dayjs().toISOString(),

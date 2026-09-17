@@ -15,7 +15,7 @@ export default function TimeTracker() {
         setLoading(true);
         try {
             const url = API_BASE.endsWith('/') ? `${API_BASE}api/getTerminalSessions` : `${API_BASE}/api/getTerminalSessions`;
-            const response = await axios.post(url, { DATE: date.format('YYYY-MM-DD') });
+            const response = await axios.post(url, { DATE: date.format('YYYY-MM-DD'), app: 'mill' });
             if (response.data.success) {
                 const rawTerminals = response.data.terminals || [];
                 const millTerminals = rawTerminals.filter(t => 

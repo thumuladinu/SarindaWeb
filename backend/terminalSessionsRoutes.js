@@ -13,9 +13,16 @@ router.post('/api/getTerminalSessions', async (req, res) => {
             return res.status(500).json({ success: false, message: 'Internal server error' });
         }
 
-        const { DATE } = req.body;
+        const { DATE, app, isMill } = req.body;
         // Default to today if no date is provided
         const targetDate = DATE || new Date().toISOString().split('T')[0];
+
+        let appFilterClause = '';
+        if (app === 'mill' || isMill === true) {
+            appFilterClause = "AND (TS.storeNo = 999 OR LOWER(TS.type) LIKE '%mill%' OR LOWER(TS.storeName) LIKE '%mill%' OR LOWER(TS.terminalId) LIKE '%mill%')";
+        } else if (app === 'store' || isMill === false) {
+            appFilterClause = "AND (TS.storeNo != 999 AND LOWER(TS.type) NOT LIKE '%mill%' AND LOWER(TS.storeName) NOT LIKE '%mill%' AND LOWER(TS.terminalId) NOT LIKE '%mill%')";
+        }
 
         // Find all sessions that overlap with the targeted date (in Sri Lankan Time)
         // (Started on the date OR ended on the date OR started before and ended after the date OR currently active)
@@ -32,6 +39,7 @@ router.post('/api/getTerminalSessions', async (req, res) => {
             AND TS.cashier IS NOT NULL 
             AND TS.cashier != '' 
             AND LOWER(TS.cashier) NOT IN ('not logged in', 'no cashier', 'cashier')
+            ${appFilterClause}
             ORDER BY TS.terminalId, TS.connectedAt ASC
         `;
 

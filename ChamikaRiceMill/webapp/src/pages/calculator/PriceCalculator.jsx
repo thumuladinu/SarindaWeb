@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    Card, Row, Col, InputNumber, Typography, Button, Table, Tag, Divider,
+    Card, Row, Col, InputNumber, Typography, Button, Tag, Divider,
     Space, Tooltip, App, Modal, Select, Form, Badge
 } from 'antd';
 import {
-    CalculatorOutlined, PrinterOutlined, ReloadOutlined, SaveOutlined,
-    InfoCircleOutlined, CheckCircleOutlined, SwapOutlined, ArrowRightOutlined
+    CalculatorOutlined, SaveOutlined,
+    InfoCircleOutlined, CheckCircleOutlined, ArrowRightOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 
@@ -95,13 +95,19 @@ export default function PriceCalculator() {
     }, []);
 
     const handleCustomerSelect = (custId) => {
-        updateCalc('selectedCustomerId', custId);
-        if (!custId) return;
+        if (!custId) {
+            setCalc(prev => ({ ...prev, selectedCustomerId: null }));
+            return;
+        }
         const cust = customersList.find(c => String(c.CUSTOMER_ID || c.id) === String(custId));
+        const dist = cust ? Number(cust.DISTANCE || cust.DISTANCE_KM || 0) : 0;
+        setCalc(prev => ({
+            ...prev,
+            selectedCustomerId: custId,
+            distanceKm: dist > 0 ? dist : prev.distanceKm
+        }));
         if (cust) {
-            const dist = Number(cust.DISTANCE || cust.DISTANCE_KM || 0);
             if (dist > 0) {
-                updateCalc('distanceKm', dist);
                 message.info(`Loaded ${cust.NAME}'s distance: ${dist} km`);
             } else {
                 message.warning(`${cust.NAME} has no saved distance.`);
@@ -114,12 +120,6 @@ export default function PriceCalculator() {
             ...prev,
             [field]: val === null || val === undefined ? 0 : val
         }));
-    };
-
-    const handleReset = () => {
-        setCalc(defaultConfigState);
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        message.success('Calculator values reset to defaults!');
     };
 
     // ─── MATH CALCULATION ENGINE ─────────────────────────────────
@@ -169,21 +169,6 @@ export default function PriceCalculator() {
         const transportCostPerKg = loadSizeKg > 0 ? (totalTripFuelCost / loadSizeKg) : 0;
         const finalCostPerKg = exMillCostPerKg + transportCostPerKg;
 
-        // ─── Side-by-Side Specific Varieties Math ────────────────
-        // Samba: Paddy Rs. 130, Yield 65%
-        const sambaWeeNeeded = 1 / 0.65; // ~1.538kg
-        const sambaGross = sambaWeeNeeded * (weePrice > 0 ? weePrice : 130);
-        const sambaRaw = Math.max(0, sambaGross - (sambaWeeNeeded * 0.04 * hunsalPrice + sambaWeeNeeded * 0.02 * kuduPrice));
-        const sambaExMill = sambaRaw + totalExpensesPerKg;
-        const sambaFinal = sambaExMill + transportCostPerKg;
-
-        // Nadu: Paddy Rs. 120, Yield 66%
-        const naduWeeNeeded = 1 / 0.66; // ~1.515kg
-        const naduGross = naduWeeNeeded * 120;
-        const naduRaw = Math.max(0, naduGross - (naduWeeNeeded * 0.04 * 95 + naduWeeNeeded * 0.02 * 75));
-        const naduExMill = naduRaw + totalExpensesPerKg;
-        const naduFinal = naduExMill + transportCostPerKg;
-
         return {
             weeNeededFor1KgHal,
             grossWeeCost,
@@ -203,13 +188,7 @@ export default function PriceCalculator() {
             cost5kg: finalCostPerKg * 5,
             cost10kg: finalCostPerKg * 10,
             cost25kg: finalCostPerKg * 25,
-            cost50kg: finalCostPerKg * 50,
-
-            // Variety Comparison
-            sambaExMill,
-            sambaFinal,
-            naduExMill,
-            naduFinal,
+            cost50kg: finalCostPerKg * 50
         };
     }, [calc]);
 
@@ -262,22 +241,6 @@ export default function PriceCalculator() {
         }
     };
 
-    const comparisonColumns = [
-        { title: 'Variety / Metric', dataIndex: 'metric', key: 'metric', render: m => <strong>{m}</strong> },
-        { title: 'Live Formula Output', dataIndex: 'current', key: 'current', align: 'right', render: v => <span className="font-bold text-blue-600 dark:text-blue-400">Rs. {fmt(v)}</span> },
-        { title: '🌾 Samba Standard', dataIndex: 'samba', key: 'samba', align: 'right', render: v => <span className="font-mono text-slate-700 dark:text-slate-300">Rs. {fmt(v)}</span> },
-        { title: '🌾 Nadu Standard', dataIndex: 'nadu', key: 'nadu', align: 'right', render: v => <span className="font-mono text-slate-700 dark:text-slate-300">Rs. {fmt(v)}</span> },
-    ];
-
-    const comparisonData = [
-        { key: '1', metric: '1kg Ex-Mill Price', current: mathResults.exMillCostPerKg, samba: mathResults.sambaExMill, nadu: mathResults.naduExMill },
-        { key: '2', metric: '1kg Delivered Price', current: mathResults.finalCostPerKg, samba: mathResults.sambaFinal, nadu: mathResults.naduFinal },
-        { key: '3', metric: '5kg Pack Price', current: mathResults.cost5kg, samba: mathResults.sambaFinal * 5, nadu: mathResults.naduFinal * 5 },
-        { key: '4', metric: '10kg Pack Price', current: mathResults.cost10kg, samba: mathResults.sambaFinal * 10, nadu: mathResults.naduFinal * 10 },
-        { key: '5', metric: '25kg Bag Price', current: mathResults.cost25kg, samba: mathResults.sambaFinal * 25, nadu: mathResults.naduFinal * 25 },
-        { key: '6', metric: '50kg Bag Price', current: mathResults.cost50kg, samba: mathResults.sambaFinal * 50, nadu: mathResults.naduFinal * 50 },
-    ];
-
     return (
         <div className="p-4 max-w-7xl mx-auto space-y-6">
             {/* Header */}
@@ -288,12 +251,10 @@ export default function PriceCalculator() {
                     </div>
                     <div>
                         <h1 className="text-xl font-black text-slate-900 dark:text-slate-100 m-0">Rice Milling Cost & Price Calculator</h1>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 m-0">Live real-time milling math, byproduct offsets, and side-by-side variety pricing</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 m-0">Live real-time milling math, byproduct offsets, and delivered pricing</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <Button icon={<ReloadOutlined />} onClick={handleReset}>Reset Defaults</Button>
-                    <Button icon={<PrinterOutlined />} onClick={() => window.print()}>Print Calculation</Button>
                     <Button type="primary" icon={<SaveOutlined />} onClick={handleOpenSaveModal} className="!bg-emerald-600 font-bold shadow-md">
                         Save Catalog Prices
                     </Button>
@@ -301,21 +262,16 @@ export default function PriceCalculator() {
             </div>
 
             {/* Quick Live Highlight Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
                 <Card className="shadow-sm border-l-4 border-l-blue-600">
                     <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Calculated Rice Ex-Mill Price</div>
                     <div className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">Rs. {fmt(mathResults.exMillCostPerKg)} <span className="text-xs font-normal text-slate-400">/ kg</span></div>
                     <div className="text-[11px] text-slate-500 mt-1">Gross Paddy: Rs. {fmt(mathResults.grossWeeCost)} - Offset: Rs. {fmt(mathResults.totalByProductIncome)}</div>
                 </Card>
-                <Card className="shadow-sm border-l-4 border-l-purple-600">
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">🌾 Samba Reference Price</div>
-                    <div className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">Rs. {fmt(mathResults.sambaFinal)} <span className="text-xs font-normal text-slate-400">/ kg</span></div>
-                    <div className="text-[11px] text-slate-500 mt-1">25kg Bag: <strong>Rs. {fmt(mathResults.sambaFinal * 25)}</strong></div>
-                </Card>
                 <Card className="shadow-sm border-l-4 border-l-emerald-600">
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">🌾 Nadu Reference Price</div>
-                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">Rs. {fmt(mathResults.naduFinal)} <span className="text-xs font-normal text-slate-400">/ kg</span></div>
-                    <div className="text-[11px] text-slate-500 mt-1">25kg Bag: <strong>Rs. {fmt(mathResults.naduFinal * 25)}</strong></div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Final Delivered Price (with Transport)</div>
+                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">Rs. {fmt(mathResults.finalCostPerKg)} <span className="text-xs font-normal text-slate-400">/ kg</span></div>
+                    <div className="text-[11px] text-slate-500 mt-1">25kg Bag Delivered: <strong>Rs. {fmt(mathResults.cost25kg)}</strong></div>
                 </Card>
             </div>
 
@@ -442,7 +398,7 @@ export default function PriceCalculator() {
                     </Card>
                 </Col>
 
-                {/* Right Column: Live Breakdown & Side-by-Side Comparison */}
+                {/* Right Column: Live Breakdown */}
                 <Col xs={24} lg={11} className="space-y-4">
                     {/* Live Calculation Output Card */}
                     <Card title={<span className="font-bold text-slate-900 dark:text-slate-100">Milling Cost & Margin Breakdown</span>} className="shadow-sm">
@@ -490,17 +446,6 @@ export default function PriceCalculator() {
                             <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">25kg Bag: <strong className="font-mono text-emerald-600 font-bold">Rs. {fmt(mathResults.cost25kg)}</strong></div>
                             <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">50kg Bag: <strong className="font-mono text-purple-600 font-bold">Rs. {fmt(mathResults.cost50kg)}</strong></div>
                         </div>
-                    </Card>
-
-                    {/* Side-by-Side Comparison Card */}
-                    <Card title={<span className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2"><SwapOutlined className="text-blue-600" /> Side-by-Side Rice Variety Comparison</span>} className="shadow-sm">
-                        <Table
-                            dataSource={comparisonData}
-                            columns={comparisonColumns}
-                            pagination={false}
-                            size="small"
-                            className="w-full"
-                        />
                     </Card>
                 </Col>
             </Row>

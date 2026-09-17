@@ -7,6 +7,12 @@ import { useStores } from '../../contexts/StoresContext';
 
 const WEIGHING_HEX = '#10b981';
 
+const isMillTerminal = (t) =>
+    String(t.storeNo) === '999' ||
+    t.storeName?.toLowerCase().includes('mill') ||
+    t.type?.toLowerCase().includes('mill') ||
+    t.terminalId?.toLowerCase().includes('mill');
+
 const TimeTracker = () => {
     const { stores, getName, getHex } = useStores();
     const [selectedDate, setSelectedDate] = useState(dayjs());
@@ -16,8 +22,11 @@ const TimeTracker = () => {
     const fetchSessions = async (date) => {
         setLoading(true);
         try {
-            const response = await axios.post('/api/getTerminalSessions', { DATE: date.format('YYYY-MM-DD') });
-            if (response.data.success) setTerminalData(response.data.terminals || []);
+            const response = await axios.post('/api/getTerminalSessions', { DATE: date.format('YYYY-MM-DD'), app: 'store' });
+            if (response.data.success) {
+                const storeTerminals = (response.data.terminals || []).filter(t => !isMillTerminal(t));
+                setTerminalData(storeTerminals);
+            }
             else message.error('Failed to fetch session data');
         } catch {
             message.error('Network error fetching session data');

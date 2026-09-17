@@ -113,7 +113,24 @@ router.post('/api/mill/sales/add', async (req, res) => {
         if (!Array.isArray(itemsList)) itemsList = [];
 
         let invoiceNo = req.body.INVOICE_NO || await generateInvoiceNo(DEVICE_ID);
-        const customerId = (CUSTOMER_ID && !isNaN(Number(CUSTOMER_ID))) ? Number(CUSTOMER_ID) : null;
+        
+        let customerId = null;
+        if (req.body.CUSTOMER_CODE) {
+            const custRow = await pool.query('SELECT CUSTOMER_ID FROM mill_customers WHERE CODE = ? LIMIT 1', [req.body.CUSTOMER_CODE]);
+            if (custRow && custRow.length > 0) {
+                customerId = custRow[0].CUSTOMER_ID;
+            }
+        }
+        if (!customerId && CUSTOMER_ID && !isNaN(Number(CUSTOMER_ID))) {
+            const numId = Number(CUSTOMER_ID);
+            if (numId > 0 && numId <= 2147483647) {
+                const custRow = await pool.query('SELECT CUSTOMER_ID FROM mill_customers WHERE CUSTOMER_ID = ? LIMIT 1', [numId]);
+                if (custRow && custRow.length > 0) {
+                    customerId = custRow[0].CUSTOMER_ID;
+                }
+            }
+        }
+
         const createdById = (CREATED_BY && !isNaN(Number(CREATED_BY))) ? Number(CREATED_BY) : null;
 
         // Check if invoice already exists to avoid ER_DUP_ENTRY
@@ -492,7 +509,22 @@ router.post('/api/mill/sales/edit', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Cannot edit a settled bill. Please unlock it first.' });
         }
 
-        const customerId = (CUSTOMER_ID && !isNaN(Number(CUSTOMER_ID))) ? Number(CUSTOMER_ID) : null;
+        let customerId = null;
+        if (req.body.CUSTOMER_CODE) {
+            const custRow = await pool.query('SELECT CUSTOMER_ID FROM mill_customers WHERE CODE = ? LIMIT 1', [req.body.CUSTOMER_CODE]);
+            if (custRow && custRow.length > 0) {
+                customerId = custRow[0].CUSTOMER_ID;
+            }
+        }
+        if (!customerId && CUSTOMER_ID && !isNaN(Number(CUSTOMER_ID))) {
+            const numId = Number(CUSTOMER_ID);
+            if (numId > 0 && numId <= 2147483647) {
+                const custRow = await pool.query('SELECT CUSTOMER_ID FROM mill_customers WHERE CUSTOMER_ID = ? LIMIT 1', [numId]);
+                if (custRow && custRow.length > 0) {
+                    customerId = custRow[0].CUSTOMER_ID;
+                }
+            }
+        }
         const finalAmt = FINAL_AMOUNT !== undefined ? Number(FINAL_AMOUNT) : (NET_AMOUNT || TOTAL_AMOUNT || 0);
 
         // 1. Revert Old Inventory
