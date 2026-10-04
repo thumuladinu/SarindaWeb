@@ -1539,8 +1539,70 @@ function emitWeightsUpdated(code, action) {
 }
 
 // Sync weight measurement from Store 2 Weighing Station
-router.post('/api/weights/sync', async (req, res) => {
-    const weightData = req.body;
+// Remove unpaid stock placeholder(s) for a weighing bill (CODE IS NULL = POS has not paid yet).
+// Paid POS transactions are never touched. Returns number of placeholders removed.
+async function deactivateUnpaidPlaceholders(s2Code) {
+    const placeholders = await pool.query(
+        `SELECT TRANSACTION_ID FROM store_transactions
+         WHERE WEIGHT_CODE = ? AND CODE IS NULL AND IS_ACTIVE = 1`,
+        [s2Code]
+    );
+    for (const p of placeholders || []) {
+        await pool.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [p.TRANSACTION_ID]);
+        await pool.query('UPDATE store_transactions SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [p.TRANSACTION_ID]);
+    }
+    return (placeholders || []).length;
+}
+
+// Paid weighing bills are LOCKED: no edit, no 0 kg, no delete - from any app.
+// Paid = an active POS transaction is linked (WEIGHT_CODE + CODE set), or the record says
+// "Money Collected" and its POS sale still exists. If the owner deletes the POS sale, it unlocks.
+// Returns null when editable, else { record } with the current server copy (for clients to restore).
+async function getPaidLock(code) {
+    const s2Code = code.replace(/^S2-/, '');
+    const rows = await pool.query('SELECT ITEM_DETAILS FROM weight_measurements WHERE CODE = ? LIMIT 1', [code]);
+    // First sync of a record must always be allowed (POS may have paid before the weight reached the server;
+    // the cross-check below then marks it Money Collected).
+    if (!rows || rows.length === 0) return null;
+    const details = parseDetails(rows[0].ITEM_DETAILS);
+
+    const [paidTx] = await pool.query(
+        `SELECT TRANSACTION_ID, CODE FROM store_transactions
+         WHERE WEIGHT_CODE = ? AND CODE IS NOT NULL AND IS_ACTIVE = 1 LIMIT 1`,
+        [s2Code]
+    );
+
+    let paid = !!(paidTx && paidTx.TRANSACTION_ID);
+    if (!paid && details.status === 'Money Collected') {
+        if (!details.transactionCode) {
+            paid = true; // can't verify the sale - stay safe
+        } else {
+            const [sale] = await pool.query(
+                'SELECT TRANSACTION_ID FROM store_transactions WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1',
+                [details.transactionCode]
+            );
+            paid = !!(sale && sale.TRANSACTION_ID);
+        }
+    }
+    if (!paid) return null;
+
+    return {
+        record: {
+            items: details.items || [],
+            grossWeight: details.grossWeight || 0,
+            tareWeight: details.tareWeight || 0,
+            netWeight: details.netWeight || 0,
+            status: 'Money Collected',
+            collectedAt: details.collectedAt || null,
+            transactionCode: details.transactionCode || (paidTx && paidTx.CODE) || null
+        }
+    };
+}
+
+// Shared create / edit / delete logic for weight measurements.
+// Used by Weighing Station sync AND owner edits from the web (/weighting page),
+// so stock placeholders, paid-bill protection and live refresh behave the same.
+async function handleWeightSync(weightData, res) {
     console.log('[WeightSync] Received:', weightData.code || weightData.measureId);
 
     try {
@@ -1549,23 +1611,26 @@ router.post('/api/weights/sync', async (req, res) => {
             : toMySQLDateTime();
         const code = weightData.code || weightData.measureId || `WM-${Date.now()}`;
 
+        // Paid at POS -> refuse any change (edit, 0 kg, delete, resend)
+        const lock = await getPaidLock(code);
+        if (lock) {
+            console.log(`[WeightSync] Refused change to PAID bill ${code} (${lock.record.transactionCode || 'paid'})`);
+            return res.status(409).json({
+                success: false,
+                locked: true,
+                code,
+                message: `Bill ${code} is already paid at POS${lock.record.transactionCode ? ` (${lock.record.transactionCode})` : ''}. Paid bills cannot be edited or deleted.`,
+                record: lock.record
+            });
+        }
+
         // Handle delete
         if (weightData.isDelete) {
-            await pool.query('UPDATE weight_measurements SET IS_ACTIVE = 0 WHERE CODE = ?', [code]);
+            await pool.query('UPDATE weight_measurements SET IS_ACTIVE = 0, UPDATED_DATE = NOW() WHERE CODE = ?', [code]);
 
-            // Also remove unpaid stock placeholder (CODE IS NULL) so deleted bill stops counting in stock.
-            // Paid POS transactions (CODE NOT NULL) are left untouched.
-            const s2Code = code.replace(/^S2-/, '');
-            const placeholders = await pool.query(
-                `SELECT TRANSACTION_ID FROM store_transactions
-                 WHERE WEIGHT_CODE = ? AND CODE IS NULL AND IS_ACTIVE = 1`,
-                [s2Code]
-            );
-            for (const p of placeholders || []) {
-                await pool.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [p.TRANSACTION_ID]);
-                await pool.query('UPDATE store_transactions SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [p.TRANSACTION_ID]);
-            }
-            console.log(`[WeightSync] Deleted: ${code} (${(placeholders || []).length} stock placeholder(s) removed)`);
+            // Also remove unpaid stock placeholder so deleted bill stops counting in stock.
+            const removed = await deactivateUnpaidPlaceholders(code.replace(/^S2-/, ''));
+            console.log(`[WeightSync] Deleted: ${code} (${removed} stock placeholder(s) removed)`);
             emitWeightsUpdated(code, 'deleted');
             return res.status(200).json({ success: true, message: 'Weight deleted', code });
         }
@@ -1585,7 +1650,10 @@ router.post('/api/weights/sync', async (req, res) => {
             vehicleNo: weightData.vehicleNo || '',
             driverName: weightData.driverName || '',
             status: weightData.status || 'Pending',
-            storeNo: weightData.storeNo || 2
+            storeNo: weightData.storeNo || 2,
+            // Set only when an owner edits from the web; Weighing Station uses it to pull the change
+            webEditedAt: weightData.webEditedAt || null,
+            webEditedBy: weightData.webEditedBy || null
         };
 
         // Check if record exists for upsert
@@ -1663,7 +1731,15 @@ router.post('/api/weights/sync', async (req, res) => {
                     [s2Code]
                 );
 
-                if (existingPlaceholder && existingPlaceholder.TRANSACTION_ID) {
+                const totalNetKg = (itemDetails.items || []).reduce(
+                    (sum, i) => sum + (parseFloat(i.netWeight != null ? i.netWeight : i.netWt) || 0), 0
+                );
+
+                if (totalNetKg <= 0) {
+                    // 0 kg = test / void bill: no stock. Remove placeholder (recreated if weights are added back).
+                    const removed = await deactivateUnpaidPlaceholders(s2Code);
+                    console.log(`[WeightSync] ${code} is 0 kg — ${removed} stock placeholder(s) removed`);
+                } else if (existingPlaceholder && existingPlaceholder.TRANSACTION_ID) {
                     // Update existing transaction items to reflect the new edit
                     const placeholderId = existingPlaceholder.TRANSACTION_ID;
                     console.log(`[WeightSync] Updating existing stock placeholder tx (ID: ${placeholderId}) for ${code}`);
@@ -1742,6 +1818,90 @@ router.post('/api/weights/sync', async (req, res) => {
         console.error('[WeightSync] Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
+}
+
+router.post('/api/weights/sync', (req, res) => handleWeightSync(req.body || {}, res));
+
+const MAX_WEB_EDIT_ITEMS = 50;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// Validate + normalise items sent from the web edit form. Net is recalculated here, never trusted.
+function normaliseWebEditItems(items) {
+    if (!Array.isArray(items) || items.length === 0) return { error: 'At least one item is required' };
+    if (items.length > MAX_WEB_EDIT_ITEMS) return { error: `Too many items (max ${MAX_WEB_EDIT_ITEMS})` };
+    const clean = [];
+    for (const [idx, item] of items.entries()) {
+        const productCode = String(item?.productCode || '').trim().toUpperCase();
+        const gross = Number(item?.grossWeight);
+        const tare = Number(item?.tareWeight);
+        if (!productCode || productCode.length > 50) return { error: `Item ${idx + 1}: select a product` };
+        if (!Number.isFinite(gross) || !Number.isFinite(tare) || gross < 0 || tare < 0 || gross > 100000 || tare > 100000) {
+            return { error: `Item ${idx + 1}: weights must be numbers between 0 and 100000` };
+        }
+        clean.push({
+            id: String(item?.id || `${Date.now()}-${idx}`),
+            productCode,
+            productName: String(item?.productName || productCode).slice(0, 100),
+            grossWeight: round2(gross),
+            tareWeight: round2(tare),
+            netWeight: round2(Math.max(0, gross - tare))
+        });
+    }
+    return { items: clean };
+}
+
+const parseDetails = (raw) => {
+    try { return typeof raw === 'string' ? JSON.parse(raw) : (raw || {}); } catch { return {}; }
+};
+
+// Owner edit from web /weighting page
+router.post('/api/weights/web-edit', async (req, res) => {
+    try {
+        const { code, items, userId, userRole } = req.body || {};
+        if (!code || typeof code !== 'string') return res.status(400).json({ success: false, message: 'Code is required' });
+        if (userRole === 'MONITOR') return res.status(403).json({ success: false, message: 'Monitor accounts cannot edit records' });
+
+        const { items: cleanItems, error } = normaliseWebEditItems(items);
+        if (error) return res.status(400).json({ success: false, message: error });
+
+        const rows = await pool.query(
+            "SELECT *, DATE_FORMAT(CREATED_DATE, '%Y-%m-%d %H:%i:%s') AS CREATED_STR FROM weight_measurements WHERE CODE = ? AND IS_ACTIVE = 1 LIMIT 1",
+            [code]
+        );
+        if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: 'Record not found or already deleted' });
+
+        const row = rows[0];
+        const oldDetails = parseDetails(row.ITEM_DETAILS);
+        const sum = (field) => round2(cleanItems.reduce((s, i) => s + i[field], 0));
+
+        console.log(`[WeightWebEdit] ${code} edited by user ${userId || '?'}`);
+        return handleWeightSync({
+            ...oldDetails,
+            measureId: code,
+            items: cleanItems,
+            grossWeight: sum('grossWeight'),
+            tareWeight: sum('tareWeight'),
+            netWeight: sum('netWeight'),
+            itemName: cleanItems[0].productName,
+            status: oldDetails.status || 'Pending',
+            notes: row.NOTES,
+            createdAt: row.CREATED_STR || undefined, // DB-local (SL) string, avoids TZ shift
+            webEditedAt: new Date().toISOString(),
+            webEditedBy: userId || null
+        }, res);
+    } catch (error) {
+        console.error('[WeightWebEdit] Error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to update weighing record' });
+    }
+});
+
+// Owner delete from web /weighting page
+router.post('/api/weights/web-delete', async (req, res) => {
+    const { code, userId, userRole } = req.body || {};
+    if (!code || typeof code !== 'string') return res.status(400).json({ success: false, message: 'Code is required' });
+    if (userRole === 'MONITOR') return res.status(403).json({ success: false, message: 'Monitor accounts cannot delete records' });
+    console.log(`[WeightWebDelete] ${code} deleted by user ${userId || '?'}`);
+    return handleWeightSync({ measureId: code, isDelete: true }, res);
 });
 
 // Update weight measurement status (called when POS completes QR transaction)
@@ -1808,9 +1968,11 @@ router.post('/api/weights/update-status', async (req, res) => {
 // Get weight measurements (for web display and POS)
 router.post('/api/weights/get', async (req, res) => {
     try {
-        const { code, startDate, endDate, limit = 500 } = req.body;
+        const { code, startDate, endDate, limit = 500, includeInactive = false } = req.body;
 
-        let query = 'SELECT * FROM weight_measurements WHERE IS_ACTIVE = 1';
+        let query = includeInactive
+            ? 'SELECT * FROM weight_measurements WHERE 1 = 1'
+            : 'SELECT * FROM weight_measurements WHERE IS_ACTIVE = 1';
         const params = [];
 
         if (code) {

@@ -1,15 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Table, Button, Input, DatePicker, Tag, Row, Col, Statistic, Card, Spin, Modal, Descriptions, App } from 'antd';
-import { SearchOutlined, ReloadOutlined, DatabaseOutlined, CalendarOutlined, EyeOutlined } from '@ant-design/icons';
+import { Table, Button, Input, DatePicker, Tag, Row, Col, Statistic, Card, Spin, Modal, Descriptions, App, Tooltip } from 'antd';
+import { SearchOutlined, ReloadOutlined, DatabaseOutlined, CalendarOutlined, EyeOutlined, EditOutlined, DeleteOutlined, LockOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import { io } from 'socket.io-client';
+import Cookies from 'js-cookie';
+import WeightEditModal from './WeightEditModal';
 import MobileDateRange from '../../components/common/MobileDateRange';
 
 const { RangePicker } = DatePicker;
 
 const Weighting = () => {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
+    const [currentUser] = useState(() => {
+        try { return JSON.parse(Cookies.get('rememberedUser') || 'null'); } catch { return null; }
+    });
+    const canManage = currentUser?.ROLE !== 'MONITOR';
+    // Paid at POS = locked here (change it from POS / Transactions instead)
+    const isPaid = (record) => record?.status === 'Money Collected';
+    const canChange = (record) => canManage && !isPaid(record);
+    const PaidLock = ({ record }) => (
+        <Tooltip title={`Paid at POS${record.transactionCode ? ` (${record.transactionCode})` : ''}. Edit or delete it from the POS bill instead.`}>
+            <Tag icon={<LockOutlined />} className="m-0">Paid</Tag>
+        </Tooltip>
+    );
+    const [editRecord, setEditRecord] = useState(null);
     const [loading, setLoading] = useState(false);
     const [weightData, setWeightData] = useState([]);
     const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
@@ -96,7 +111,7 @@ const Weighting = () => {
         socket.on('weights:updated', ({ code, action } = {}) => {
             const { pagination: p, searchText: q, dateRange: d } = latestQueryRef.current;
             fetchWeightData(p.current, p.pageSize, q, d);
-            if (action === 'deleted') message.info(`Weighing record ${code} deleted at Weighing Station`);
+            if (action === 'deleted') message.info(`Weighing record ${code} deleted`);
         });
         return () => socket.disconnect();
     }, []);
@@ -120,6 +135,47 @@ const Weighting = () => {
 
     const handleSearchChange = (e) => {
         setSearchText(e.target.value);
+    };
+
+    const refreshCurrentPage = () => fetchWeightData(pagination.current, pagination.pageSize, searchText, dateRange);
+
+    const openEdit = (record) => {
+        setDetailsVisible(false);
+        setEditRecord(record);
+    };
+
+    const confirmDelete = (record) => {
+        if (isPaid(record)) {
+            message.warning('Paid bills cannot be deleted here. Change it from the POS bill instead.');
+            return;
+        }
+        modal.confirm({
+            title: `Delete weighing record ${record.code}?`,
+            content: (
+                <div className="flex flex-col gap-2">
+                    <span>{record.netWeight} kg · {formatDateTime(record.createdAt)}</span>
+                    <span>It will be removed from stock and POS will no longer accept its QR.</span>
+                    <span className="text-gray-500">Weighing Station will remove it automatically. This cannot be undone.</span>
+                </div>
+            ),
+            okText: 'Delete',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    const res = await axios.post('/api/weights/web-delete', {
+                        code: record.code,
+                        userId: currentUser?.USER_ID,
+                        userRole: currentUser?.ROLE
+                    });
+                    if (!res.data?.success) throw new Error(res.data?.message || 'Delete failed');
+                    message.success(`${record.code} deleted`);
+                    setDetailsVisible(false);
+                    refreshCurrentPage();
+                } catch (err) {
+                    message.error(err.response?.data?.message || err.message || 'Delete failed');
+                }
+            }
+        });
     };
 
     const formatDateTime = (dateStr) => {
@@ -201,14 +257,24 @@ const Weighting = () => {
             title: 'Action',
             key: 'action',
             align: 'center',
-            width: 80,
+            width: canManage ? 130 : 80,
             render: (_, record) => (
-                <Button
-                    type="text"
-                    icon={<EyeOutlined />}
-                    onClick={() => { setSelectedRecord(record); setDetailsVisible(true); }}
-                    className="text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10"
-                />
+                <div className="flex justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                        type="text"
+                        icon={<EyeOutlined />}
+                        title="View"
+                        onClick={() => { setSelectedRecord(record); setDetailsVisible(true); }}
+                        className="text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10"
+                    />
+                    {canChange(record) && (
+                        <>
+                            <Button type="text" icon={<EditOutlined />} title="Edit" onClick={() => openEdit(record)} className="text-amber-500" />
+                            <Button type="text" danger icon={<DeleteOutlined />} title="Delete" onClick={() => confirmDelete(record)} />
+                        </>
+                    )}
+                    {canManage && isPaid(record) && <PaidLock record={record} />}
+                </div>
             )
         }
     ];
@@ -310,6 +376,18 @@ const Weighting = () => {
                                 {record.items.map(i => i.productCode).join(', ')}
                             </div>
                         )}
+
+                        {canManage && isPaid(record) && (
+                            <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                <LockOutlined /> Paid at POS - change it from the POS bill
+                            </div>
+                        )}
+                        {canChange(record) && (
+                            <div className="flex gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
+                                <Button size="small" icon={<EditOutlined />} className="flex-1" onClick={() => openEdit(record)}>Edit</Button>
+                                <Button size="small" danger icon={<DeleteOutlined />} className="flex-1" onClick={() => confirmDelete(record)}>Delete</Button>
+                            </div>
+                        )}
                     </div>
                 ))}
 
@@ -332,7 +410,16 @@ const Weighting = () => {
                 title={<span className="text-lg font-bold">Details: {selectedRecord?.code}</span>}
                 open={detailsVisible}
                 onCancel={() => setDetailsVisible(false)}
-                footer={[<Button key="close" onClick={() => setDetailsVisible(false)}>Close</Button>]}
+                footer={[
+                    canChange(selectedRecord) && (
+                        <Button key="delete" danger icon={<DeleteOutlined />} onClick={() => confirmDelete(selectedRecord)}>Delete</Button>
+                    ),
+                    canChange(selectedRecord) && (
+                        <Button key="edit" icon={<EditOutlined />} onClick={() => openEdit(selectedRecord)}>Edit</Button>
+                    ),
+                    canManage && isPaid(selectedRecord) && <PaidLock key="lock" record={selectedRecord} />,
+                    <Button key="close" onClick={() => setDetailsVisible(false)}>Close</Button>
+                ].filter(Boolean)}
                 className="glass-modal"
                 width={500}
             >
@@ -402,6 +489,14 @@ const Weighting = () => {
                     </div>
                 )}
             </Modal>
+
+            <WeightEditModal
+                open={!!editRecord}
+                record={editRecord}
+                currentUser={currentUser}
+                onClose={() => setEditRecord(null)}
+                onSaved={refreshCurrentPage}
+            />
         </div>
     );
 };
