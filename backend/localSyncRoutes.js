@@ -1529,6 +1529,15 @@ router.post('/api/transactions/update', async (req, res) => {
 // Simplified table: ID, CODE, ITEM_DETAILS (JSON), NOTES, CREATED_BY, CREATED_DATE, UPDATED_DATE, IS_ACTIVE
 // =====================================================
 
+// Notify web admin + POS terminals that weighing records changed (live refresh)
+function emitWeightsUpdated(code, action) {
+    try {
+        if (global.io) global.io.emit('weights:updated', { code, action });
+    } catch (e) {
+        console.warn('[WeightSync] Socket emit failed (non-fatal):', e.message);
+    }
+}
+
 // Sync weight measurement from Store 2 Weighing Station
 router.post('/api/weights/sync', async (req, res) => {
     const weightData = req.body;
@@ -1543,7 +1552,21 @@ router.post('/api/weights/sync', async (req, res) => {
         // Handle delete
         if (weightData.isDelete) {
             await pool.query('UPDATE weight_measurements SET IS_ACTIVE = 0 WHERE CODE = ?', [code]);
-            console.log(`[WeightSync] Deleted: ${code}`);
+
+            // Also remove unpaid stock placeholder (CODE IS NULL) so deleted bill stops counting in stock.
+            // Paid POS transactions (CODE NOT NULL) are left untouched.
+            const s2Code = code.replace(/^S2-/, '');
+            const placeholders = await pool.query(
+                `SELECT TRANSACTION_ID FROM store_transactions
+                 WHERE WEIGHT_CODE = ? AND CODE IS NULL AND IS_ACTIVE = 1`,
+                [s2Code]
+            );
+            for (const p of placeholders || []) {
+                await pool.query('UPDATE store_transactions_items SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [p.TRANSACTION_ID]);
+                await pool.query('UPDATE store_transactions SET IS_ACTIVE = 0 WHERE TRANSACTION_ID = ?', [p.TRANSACTION_ID]);
+            }
+            console.log(`[WeightSync] Deleted: ${code} (${(placeholders || []).length} stock placeholder(s) removed)`);
+            emitWeightsUpdated(code, 'deleted');
             return res.status(200).json({ success: true, message: 'Weight deleted', code });
         }
 
@@ -1707,6 +1730,8 @@ router.post('/api/weights/sync', async (req, res) => {
             console.warn('[WeightSync] Cross-check with transactions failed (non-fatal):', crossCheckError.message);
         }
 
+        emitWeightsUpdated(code, existing && existing.length > 0 ? 'updated' : 'created');
+
         res.status(200).json({
             success: true,
             message: 'Weight synced',
@@ -1843,6 +1868,11 @@ router.post('/api/weights/getByCode', async (req, res) => {
         const rows = await pool.query('SELECT * FROM weight_measurements WHERE CODE = ? AND IS_ACTIVE = 1', [code]);
 
         if (!rows || rows.length === 0) {
+            // Distinguish "deleted at Weighing Station" from "never synced"
+            const deletedRows = await pool.query('SELECT ID FROM weight_measurements WHERE CODE = ? AND IS_ACTIVE = 0 LIMIT 1', [code]);
+            if (deletedRows && deletedRows.length > 0) {
+                return res.status(410).json({ success: false, deleted: true, message: 'Weighing bill was deleted at Weighing Station' });
+            }
             return res.status(404).json({ success: false, message: 'Weight measurement not found' });
         }
 

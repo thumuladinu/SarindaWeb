@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Table, Button, Input, DatePicker, Tag, Row, Col, Statistic, Card, Spin, Modal, Descriptions, App } from 'antd';
 import { SearchOutlined, ReloadOutlined, DatabaseOutlined, CalendarOutlined, EyeOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { io } from 'socket.io-client';
 import MobileDateRange from '../../components/common/MobileDateRange';
 
 const { RangePicker } = DatePicker;
@@ -85,6 +86,21 @@ const Weighting = () => {
         fetchWeightData(pagination.current, pagination.pageSize, searchText, dateRange);
     }, []); // Initial load
 
+    // Live refresh when Weighing Station creates / edits / deletes a record
+    const latestQueryRef = useRef({});
+    latestQueryRef.current = { pagination, searchText, dateRange };
+    useEffect(() => {
+        const socketUrl = import.meta.env.VITE_API_URL ||
+            (window.location.hostname === 'localhost' ? 'http://localhost:3001' : '/');
+        const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+        socket.on('weights:updated', ({ code, action } = {}) => {
+            const { pagination: p, searchText: q, dateRange: d } = latestQueryRef.current;
+            fetchWeightData(p.current, p.pageSize, q, d);
+            if (action === 'deleted') message.info(`Weighing record ${code} deleted at Weighing Station`);
+        });
+        return () => socket.disconnect();
+    }, []);
+
     // Debounce Search
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -160,7 +176,9 @@ const Weighting = () => {
             dataIndex: 'netWeight',
             key: 'netWeight',
             align: 'right',
-            render: (val) => <span className="font-bold text-emerald-600 dark:text-emerald-400">{val} kg</span>
+            render: (val) => parseFloat(val) === 0
+                ? <Tag color="red" className="m-0">0.00 kg · Void</Tag>
+                : <span className="font-bold text-emerald-600 dark:text-emerald-400">{val} kg</span>
         },
         {
             title: 'Status',
