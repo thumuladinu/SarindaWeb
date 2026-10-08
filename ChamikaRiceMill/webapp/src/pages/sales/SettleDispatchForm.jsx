@@ -3,6 +3,7 @@ import { Form, Input, Button, DatePicker, Select, InputNumber, Typography, messa
 import { MinusCircleOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { FINISHED_ITEMS } from '../../utils/constants';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -12,7 +13,8 @@ export default function SettleDispatchForm({ dispatchId, onSuccess, onCancel, re
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [dispatchNote, setDispatchNote] = useState(null);
-    const [systemItems, setSystemItems] = useState({ P: null, N: null });
+    // Real mill items per rice variety: { [BASE]: { P: item, N: item } }
+    const [varietyItems, setVarietyItems] = useState({});
     const [totals, setTotals] = useState({}); // tracking final amounts for printed bills
     const [extraRows, setExtraRows] = useState([]); // dynamic extra bills rows
 
@@ -43,10 +45,17 @@ export default function SettleDispatchForm({ dispatchId, onSuccess, onCancel, re
                     .map(i => String(i.ITEM_ID))
             );
 
-            // Keep for backward compat (pItem/nItem used for fallback price from selling price)
-            const pItem = allDbItems.find(i => String(i.SYSTEM_CODE || '').endsWith('_P')) || null;
-            const nItem = allDbItems.find(i => String(i.SYSTEM_CODE || '').endsWith('_N')) || null;
-            setSystemItems({ P: pItem, N: nItem });
+            const vMap = {};
+            const baseOfItem = {};
+            FINISHED_ITEMS.forEach(def => {
+                const dbItem = allDbItems.find(i => i.SYSTEM_CODE === def.SYSTEM_CODE);
+                if (!dbItem) return;
+                baseOfItem[String(dbItem.ITEM_ID)] = def.BASE;
+                if (Number(dbItem.IS_ACTIVE) === 0 && def.IS_FUTURE) return;
+                vMap[def.BASE] = { ...(vMap[def.BASE] || {}), [def.VARIATION]: dbItem };
+            });
+            setVarietyItems(vMap);
+            const baseOfBillItem = (i) => FINISHED_ITEMS.find(d => d.SYSTEM_CODE === i.SYSTEM_CODE)?.BASE || baseOfItem[String(i.ITEM_ID)] || null;
 
             // Fetch Dispatch Note
             const res = await axios.get(`/api/mill/dispatch/${dispatchId}`, { withCredentials: true });
@@ -100,6 +109,7 @@ export default function SettleDispatchForm({ dispatchId, onSuccess, onCancel, re
                     const hasCheques = (b.CHEQUES && b.CHEQUES.length > 0) || b.PAYMENT_METHOD === 'cheque';
 
                     initialBills[b.BILL_ID] = {
+                        BASE: bItems.map(baseOfBillItem).find(Boolean) || undefined,
                         PAYMENT_METHOD: hasCheques ? 'cheque' : (b.PAYMENT_METHOD || 'cash'),
                         REMARK: b.REMARK || '',
                         CHEQUES: (b.CHEQUES || []).map(c => ({
@@ -175,6 +185,7 @@ export default function SettleDispatchForm({ dispatchId, onSuccess, onCancel, re
         const id = `extra_${Date.now()}`;
         setExtraRows(prev => [...prev, id]);
         form.setFieldValue(['extras', id], {
+            BASE: Object.keys(varietyItems)[0],
             PAYMENT_METHOD: 'cash',
             REMARK: '',
             CHEQUES: [],
@@ -219,96 +230,58 @@ export default function SettleDispatchForm({ dispatchId, onSuccess, onCancel, re
                 DUE_DATE: c.DUE_DATE ? (typeof c.DUE_DATE.format === 'function' ? c.DUE_DATE.format('YYYY-MM-DD') : String(c.DUE_DATE).slice(0, 10)) : null
             }));
 
-            const formattedBills = [];
-
-            // 1. Existing Printed Bills
-            if (values.bills) {
-                for (const [billId, data] of Object.entries(values.bills)) {
-                    if (!data) continue;
-                    const itemsToInsert = [];
-                    const addRowToItems = (type, weight, qty, price) => {
-                        const parsedQty = parseFloat(qty || 0);
-                        const parsedPrice = parseFloat(price || 0);
-                        if (parsedQty > 0) {
-                            const itemDb = type === 'P' ? systemItems.P : systemItems.N;
-                            if (itemDb) {
-                                itemsToInsert.push({
-                                    ITEM_ID: itemDb.ITEM_ID,
-                                    BAG_WEIGHT: weight,
-                                    BAG_COUNT: parsedQty,
-                                    QUANTITY: parsedQty,
-                                    UNIT_PRICE: parsedPrice,
-                                    TOTAL_PRICE: parsedQty * parsedPrice
-                                });
-                            }
-                        }
-                    };
-
-                    const it = data.items || {};
-                    addRowToItems('P', 5, it.P5_qty, it.P5_price);
-                    addRowToItems('P', 10, it.P10_qty, it.P10_price);
-                    addRowToItems('P', 25, it.P25_qty, it.P25_price);
-                    addRowToItems('N', 5, it.N5_qty, it.N5_price);
-                    addRowToItems('N', 10, it.N10_qty, it.N10_price);
-                    addRowToItems('N', 25, it.N25_qty, it.N25_price);
-
-                    formattedBills.push({
-                        BILL_ID: billId,
-                        FINAL_AMOUNT: totals[billId] || 0,
-                        PAYMENT_METHOD: data.PAYMENT_METHOD,
-                        REMARK: data.REMARK,
-                        CHEQUES: formatCheques(data.CHEQUES),
-                        ITEMS: itemsToInsert
+            // Bag rows -> real items of the bill's own rice variety. QUANTITY is kg (bags x bag weight).
+            const buildItems = (base, it, label) => {
+                const rows = [];
+                ['P', 'N'].forEach(type => [5, 10, 25].forEach(weight => {
+                    const qty = parseFloat(it?.[`${type}${weight}_qty`] || 0);
+                    const price = parseFloat(it?.[`${type}${weight}_price`] || 0);
+                    if (qty <= 0) return;
+                    const itemDb = varietyItems[base]?.[type];
+                    if (!itemDb) throw new Error(`${label}: choose the rice variety (no ${type} item for "${base || '-'}")`);
+                    rows.push({
+                        ITEM_ID: itemDb.ITEM_ID,
+                        SYSTEM_CODE: itemDb.SYSTEM_CODE,
+                        ITEM_NAME: itemDb.NAME,
+                        BAG_WEIGHT: weight,
+                        BAG_COUNT: qty,
+                        QUANTITY: qty * weight,
+                        UNIT_PRICE: price,
+                        TOTAL_PRICE: qty * price
                     });
-                }
+                }));
+                return rows;
+            };
+
+            const formattedBills = [];
+            for (const bill of (dispatchNote?.BILLS || [])) {
+                const data = values.bills?.[bill.BILL_ID];
+                if (!data) continue;
+                formattedBills.push({
+                    BILL_ID: bill.BILL_ID,
+                    INVOICE_NO: bill.INVOICE_NO,
+                    FINAL_AMOUNT: totals[bill.BILL_ID] || 0,
+                    PAYMENT_METHOD: data.PAYMENT_METHOD,
+                    REMARK: data.REMARK,
+                    CHEQUES: formatCheques(data.CHEQUES),
+                    ITEMS: buildItems(data.BASE, data.items, `Bill ${bill.INVOICE_NO}`)
+                });
             }
 
-            // 2. Extra Handwritten Bills
-            const formattedExtraBills = [];
-            if (values.extras) {
-                for (const [id, data] of Object.entries(values.extras)) {
-                    if (!data) continue;
-                    const itemsToInsert = [];
-                    const addRowToItems = (type, weight, qty, price) => {
-                        const parsedQty = parseFloat(qty || 0);
-                        const parsedPrice = parseFloat(price || 0);
-                        if (parsedQty > 0) {
-                            const itemDb = type === 'P' ? systemItems.P : systemItems.N;
-                            if (itemDb) {
-                                itemsToInsert.push({
-                                    ITEM_ID: itemDb.ITEM_ID,
-                                    BAG_WEIGHT: weight,
-                                    BAG_COUNT: parsedQty,
-                                    QUANTITY: parsedQty,
-                                    UNIT_PRICE: parsedPrice,
-                                    TOTAL_PRICE: parsedQty * parsedPrice
-                                });
-                            }
-                        }
-                    };
-
-                    const it = data.items || {};
-                    addRowToItems('P', 5, it.P5_qty, it.P5_price);
-                    addRowToItems('P', 10, it.P10_qty, it.P10_price);
-                    addRowToItems('P', 25, it.P25_qty, it.P25_price);
-                    addRowToItems('N', 5, it.N5_qty, it.N5_price);
-                    addRowToItems('N', 10, it.N10_qty, it.N10_price);
-                    addRowToItems('N', 25, it.N25_qty, it.N25_price);
-
-                    if (itemsToInsert.length > 0) {
-                        formattedExtraBills.push({
-                            FINAL_AMOUNT: calcExtraTotal(id),
-                            PAYMENT_METHOD: data.PAYMENT_METHOD || 'cash',
-                            REMARK: data.REMARK || '',
-                            CHEQUES: formatCheques(data.CHEQUES),
-                            ITEMS: itemsToInsert
-                        });
-                    }
-                }
-            }
+            const formattedExtraBills = Object.entries(values.extras || {})
+                .filter(([, d]) => d)
+                .map(([id, data], idx) => ({
+                    FINAL_AMOUNT: calcExtraTotal(id),
+                    PAYMENT_METHOD: data.PAYMENT_METHOD || 'cash',
+                    REMARK: data.REMARK || '',
+                    CHEQUES: formatCheques(data.CHEQUES),
+                    ITEMS: buildItems(data.BASE, data.items, `Extra #${idx + 1}`)
+                }))
+                .filter(e => e.ITEMS.length > 0);
 
             const payload = {
                 DISPATCH_ID: dispatchId,
+                DISPATCH_NO: dispatchNote?.DISPATCH_NO,
                 BILLS: formattedBills,
                 EXTRA_BILLS: formattedExtraBills
             };
@@ -322,7 +295,7 @@ export default function SettleDispatchForm({ dispatchId, onSuccess, onCancel, re
             }
         } catch (e) {
             console.error('Submit error:', e);
-            message.error('Failed to submit settlement');
+            message.error(e.response?.data?.message || e.message || 'Failed to submit settlement');
         } finally {
             setSubmitting(false);
         }
@@ -387,6 +360,9 @@ export default function SettleDispatchForm({ dispatchId, onSuccess, onCancel, re
                                         <td rowSpan={2} className={`${tdClass} px-2 font-bold text-center bg-gray-50 dark:bg-slate-900 border-r`}>
                                             {bill.INVOICE_NO}
                                             <div className="text-[10px] font-normal text-gray-500">{bill.CUSTOMER_NAME || 'Walk-in'}</div>
+                                            <Form.Item name={['bills', bid, 'BASE']} noStyle>
+                                                <Select disabled={isSettled} size="small" placeholder="Rice variety" options={Object.keys(varietyItems).map(v => ({ value: v, label: v }))} style={{ width: '100%', marginTop: 4, fontSize: 11 }} />
+                                            </Form.Item>
                                         </td>
                                         <td className={`${tdClass} text-center font-bold bg-gray-100 dark:bg-slate-700`}>P</td>
                                         <td className={tdClass}>
@@ -513,6 +489,9 @@ export default function SettleDispatchForm({ dispatchId, onSuccess, onCancel, re
                                                 />
                                             </div>
                                             <div className="text-[10px] font-normal text-gray-500 dark:text-gray-400">(Auto Invoice)</div>
+                                            <Form.Item name={['extras', id, 'BASE']} noStyle>
+                                                <Select disabled={isSettled} size="small" placeholder="Rice variety" options={Object.keys(varietyItems).map(v => ({ value: v, label: v }))} style={{ width: '100%', marginTop: 4, fontSize: 11 }} />
+                                            </Form.Item>
                                         </td>
                                         <td className={`${tdClass} text-center font-bold bg-amber-100 dark:bg-amber-900/50`}>P</td>
                                         <td className={tdClass}>

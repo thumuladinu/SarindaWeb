@@ -16,6 +16,41 @@ import db from '../../services/db';
 import syncService, { getStoredApiBase } from '../../services/syncService';
 import printService from '../../services/printService';
 import { getTerminalDeviceCode, initTerminalDeviceCode } from '../../utils/terminalHelper';
+import { getLang, setLang } from '../../simple/i18n';
+
+const CLASSIC_KEY = 'mill_classic_screens';
+
+// Simple vs classic screens + label language (switch back any time, no reinstall)
+function ScreensCard() {
+    const [classic, setClassic] = React.useState(() => { try { return localStorage.getItem(CLASSIC_KEY) === 'true'; } catch (e) { return false; } });
+    const [lang, setL] = React.useState(getLang());
+    const choose = (value) => {
+        try { localStorage.setItem(CLASSIC_KEY, value ? 'true' : 'false'); } catch (e) { /* ignore */ }
+        setClassic(value);
+        window.dispatchEvent(new Event('mill-screens-changed'));
+    };
+    const btn = (active) => `rounded-2xl border-2 px-5 py-3 text-base font-bold ${active ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-blue-400'}`;
+    return (
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+            <div>
+                <div className="text-lg font-extrabold text-slate-900">Screens</div>
+                <div className="text-sm text-slate-500 mb-3">Simple screens are easier. Classic screens are the old layout (same data).</div>
+                <div className="flex flex-wrap gap-3">
+                    <button type="button" className={btn(!classic)} onClick={() => choose(false)}>✨ Simple screens (recommended)</button>
+                    <button type="button" className={btn(classic)} onClick={() => choose(true)}>🗂 Classic screens</button>
+                </div>
+            </div>
+            <div>
+                <div className="text-lg font-extrabold text-slate-900">Language</div>
+                <div className="flex flex-wrap gap-3 mt-2">
+                    {[['mixed', 'English + Sinhala help on hard words'], ['en', 'English only']].map(([v, l]) => (
+                        <button key={v} type="button" className={btn(lang === v)} onClick={() => { setLang(v); setL(v); }}>{l}</button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function Settings() {
     const [activeTab, setActiveTab] = useState('sync');
@@ -947,6 +982,9 @@ export default function Settings() {
                     </Tag>
                 </div>
             </div>
+
+ 
+            <ScreensCard />
 
             {/* Tabs */}
             <Tabs 

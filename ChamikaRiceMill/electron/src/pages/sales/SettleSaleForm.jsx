@@ -4,6 +4,7 @@ import { PlusOutlined, MinusCircleOutlined, CheckCircleOutlined } from '@ant-des
 import dayjs from 'dayjs';
 import db from '../../services/db';
 import syncService from '../../services/syncService';
+import { FINISHED_ITEMS } from '../../utils/constants';
 
 const { Title, Text } = Typography;
 
@@ -12,6 +13,9 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
     const [loading, setLoading] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState(bill?.PAYMENT_METHOD || 'cash');
     const [systemItems, setSystemItems] = useState({ P: null, N: null });
+    // Real mill items per rice variety, and the variety these extras belong to
+    const [varietyItems, setVarietyItems] = useState({});
+    const [base, setBase] = useState(undefined);
 
     const [rowsP, setRowsP] = useState({
         5: { price: 0, qty: 0 },
@@ -31,30 +35,36 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
         loadData();
     }, []);
 
+    const applyBase = (selectedBase, vMap = varietyItems) => {
+        setBase(selectedBase);
+        const pItem = vMap[selectedBase]?.P || null;
+        const nItem = vMap[selectedBase]?.N || null;
+        setSystemItems({ P: pItem, N: nItem });
+        const kgP = parseFloat(pItem?.SELLING_PRICE || 0);
+        const kgN = parseFloat(nItem?.SELLING_PRICE || 0);
+        setRowsP(prev => ({ 5: { price: kgP * 5, qty: prev[5]?.qty || 0 }, 10: { price: kgP * 10, qty: prev[10]?.qty || 0 }, 25: { price: kgP * 25, qty: prev[25]?.qty || 0 } }));
+        setRowsN(prev => ({ 5: { price: kgN * 5, qty: prev[5]?.qty || 0 }, 10: { price: kgN * 10, qty: prev[10]?.qty || 0 }, 25: { price: kgN * 25, qty: prev[25]?.qty || 0 } }));
+    };
+
     const loadData = async () => {
         const itemList = await db.items.toArray();
-        const pItem = (itemList || []).find(i => i.SYSTEM_CODE === 'OUT_SAMBA' || i.NAME?.toLowerCase().includes('samba') || i.CODE === 'P');
-        const nItem = (itemList || []).find(i => i.SYSTEM_CODE === 'OUT_NADU' || i.NAME?.toLowerCase().includes('nadu') || i.CODE === 'N');
-
-        setSystemItems({ 
-            P: pItem || { ITEM_ID: 1, NAME: 'Samba Rice', CODE: 'P', SELLING_PRICE: 191.58 }, 
-            N: nItem || { ITEM_ID: 2, NAME: 'Nadu Rice', CODE: 'N', SELLING_PRICE: 179.56 } 
+        const vMap = {};
+        FINISHED_ITEMS.forEach(def => {
+            const dbItem = (itemList || []).find(i => i.SYSTEM_CODE === def.SYSTEM_CODE);
+            if (!dbItem || (Number(dbItem.IS_ACTIVE) === 0 && def.IS_FUTURE)) return;
+            vMap[def.BASE] = { ...(vMap[def.BASE] || {}), [def.VARIATION]: dbItem };
         });
+        setVarietyItems(vMap);
 
-        const pPricePerKg = parseFloat(pItem?.SELLING_PRICE || 191.58);
-        const nPricePerKg = parseFloat(nItem?.SELLING_PRICE || 179.56);
-
-        setRowsP({
-            5: { price: parseFloat((pPricePerKg * 5).toFixed(2)), qty: 0 },
-            10: { price: parseFloat((pPricePerKg * 10).toFixed(2)), qty: 0 },
-            25: { price: parseFloat((pPricePerKg * 25).toFixed(2)), qty: 0 }
-        });
-
-        setRowsN({
-            5: { price: parseFloat((nPricePerKg * 5).toFixed(2)), qty: 0 },
-            10: { price: parseFloat((nPricePerKg * 10).toFixed(2)), qty: 0 },
-            25: { price: parseFloat((nPricePerKg * 25).toFixed(2)), qty: 0 }
-        });
+        // Same variety as the printed bill; Rs 0 bills have none -> officer chooses
+        let printed = bill?.ITEMS || bill?.ITEMS_JSON || [];
+        if (typeof printed === 'string') {
+            try { printed = JSON.parse(printed); } catch (e) { printed = []; }
+        }
+        const billBase = (Array.isArray(printed) ? printed : [])
+            .map(i => FINISHED_ITEMS.find(d => d.SYSTEM_CODE === i.SYSTEM_CODE)?.BASE)
+            .find(Boolean);
+        applyBase(billBase || Object.keys(vMap)[0], vMap);
 
         form.setFieldsValue({
             DISCOUNT: bill?.DISCOUNT || 0,
@@ -93,10 +103,11 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
             const addHwItem = (type, weight, rowData) => {
                 if (rowData.qty > 0) {
                     const itemDb = type === 'P' ? systemItems.P : systemItems.N;
+                    if (!itemDb) throw new Error(`Choose the rice variety first (no ${type} item for "${base || '-'}")`);
                     hwItems.push({
                         ITEM_ID: itemDb.ITEM_ID,
                         ITEM_NAME: itemDb.NAME,
-                        SYSTEM_CODE: type === 'P' ? 'OUT_SAMBA' : 'OUT_NADU',
+                        SYSTEM_CODE: itemDb.SYSTEM_CODE,
                         CODE: itemDb.CODE || type,
                         BAG_WEIGHT: weight,
                         BAG_COUNT: rowData.qty,
@@ -145,7 +156,7 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
             }
         } catch (e) {
             console.error('Error settling bill:', e);
-            message.error('Failed to settle bill');
+            message.error(e.message || 'Failed to settle bill');
         } finally {
             setLoading(false);
         }
@@ -169,8 +180,18 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
 
                 {/* Handwritten Extra Orders */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
-                    <div className="font-bold text-slate-800 text-xs uppercase tracking-wide">
-                        📝 Handwritten Extra Orders (Delivered by Driver)
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="font-bold text-slate-800 text-xs uppercase tracking-wide">
+                            📝 Handwritten Extra Orders (Delivered by Driver)
+                        </div>
+                        <Select
+                            size="small"
+                            value={base}
+                            onChange={(v) => applyBase(v)}
+                            placeholder="Rice variety"
+                            options={Object.keys(varietyItems).map(b => ({ value: b, label: b }))}
+                            style={{ minWidth: 190 }}
+                        />
                     </div>
 
                     {/* Samba HW */}

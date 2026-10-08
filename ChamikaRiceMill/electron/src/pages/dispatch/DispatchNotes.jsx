@@ -63,7 +63,7 @@ export default function DispatchNotes() {
                 db.staff.toArray()
             ]);
 
-            const sorted = (noteList || []).sort((a, b) => {
+            const sorted = (noteList || []).filter(n => !n.DELETE_PENDING).sort((a, b) => {
                 const dateA = a.CREATED_DATE || a.CREATED_AT || a.DATE || '';
                 const dateB = b.CREATED_DATE || b.CREATED_AT || b.DATE || '';
 
@@ -143,13 +143,7 @@ export default function DispatchNotes() {
                 bills = allBills.filter(b => b.DISPATCH_NO && String(b.DISPATCH_NO) === String(record.DISPATCH_NO));
             }
 
-            // Priority 3: Match by legacy DISPATCH_ID column on sales_bills
-            if (bills.length === 0 && (record.DISPATCH_ID || record.LOCAL_ID)) {
-                const noteDispatchId = record.DISPATCH_ID || record.LOCAL_ID;
-                bills = allBills.filter(b => b.DISPATCH_ID && (String(b.DISPATCH_ID) === String(noteDispatchId) || String(b.DISPATCH_ID) === String(record.LOCAL_ID)));
-            }
-            
-            // Priority 4: Match by BILL_ID (server ID) or LOCAL_ID
+            // Priority 3: older notes without invoice list -> real server BILL_IDs only (never local row numbers)
             if (bills.length === 0) {
                 let billIds = record.BILL_IDS_JSON || record.BILL_IDS || [];
                 if (typeof billIds === 'string') {
@@ -157,12 +151,7 @@ export default function DispatchNotes() {
                 }
                 if (Array.isArray(billIds) && billIds.length > 0) {
                     const numericIds = billIds.map(i => Number(i)).filter(i => !isNaN(i));
-                    const matchedByBillId = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
-                    if (matchedByBillId.length > 0) {
-                        bills = matchedByBillId;
-                    } else {
-                        bills = allBills.filter(b => b.LOCAL_ID && numericIds.includes(Number(b.LOCAL_ID)));
-                    }
+                    bills = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
                 }
             }
             setLinkedBills(bills);
@@ -188,13 +177,34 @@ export default function DispatchNotes() {
     };
 
     const handleDelete = async (record) => {
+        if ((record.STATUS || '').toUpperCase() === 'SETTLED') {
+            message.warning('Settled dispatch notes cannot be deleted.');
+            return;
+        }
         try {
-            await db.dispatch_notes.delete(record.LOCAL_ID);
+            // Free the bills locally (the server does the same when the delete syncs)
+            if (record.DISPATCH_NO) {
+                const linked = await db.sales_bills.where('DISPATCH_NO').equals(record.DISPATCH_NO).toArray();
+                for (const b of linked) await db.sales_bills.update(b.LOCAL_ID, { DISPATCH_NO: null, DISPATCH_ID: null });
+            }
+            if (!record.DISPATCH_ID && !record.IS_SYNCED) {
+                await db.dispatch_notes.delete(record.LOCAL_ID); // never reached the server
+            } else {
+                await db.dispatch_notes.update(record.LOCAL_ID, { DELETE_PENDING: true, IS_SYNCED: 0, SYNC_ERROR: null });
+                if (syncService.isOnline) syncService.syncAll();
+            }
+            await syncService.updatePendingCount();
             message.success('Dispatch Note deleted');
             loadData();
         } catch (e) {
             message.error('Failed to delete');
         }
+    };
+
+    const handleRetrySync = async (record) => {
+        await syncService.retryRecord('dispatch_notes', record.LOCAL_ID);
+        message.info(`Retrying ${record.DISPATCH_NO}...`);
+        loadData();
     };
 
     const columns = [
@@ -219,6 +229,15 @@ export default function DispatchNotes() {
             render: (val, r) => (
                 <div>
                     <div className="font-bold text-slate-800 font-mono text-xs">{val || `DSP-${r.LOCAL_ID}`}</div>
+                    {r.SYNC_ERROR ? (
+                        <Tooltip title={`Server refused: ${r.SYNC_ERROR}`}>
+                            <Tag color="error" className="text-[10px] mt-0.5 cursor-pointer" onClick={() => handleRetrySync(r)}>Sync problem · Retry</Tag>
+                        </Tooltip>
+                    ) : !r.IS_SYNCED && (
+                        <Tooltip title={r.SYNC_NOTE ? `Waiting: ${r.SYNC_NOTE}` : 'Saved on this PC, waiting to sync'}>
+                            <Tag color="volcano" className="text-[10px] mt-0.5">{r.SETTLE_PENDING ? 'Settle not synced' : 'Offline'}</Tag>
+                        </Tooltip>
+                    )}
                 </div>
             )
         },
@@ -334,9 +353,15 @@ export default function DispatchNotes() {
                         </>
                     )}
 
-                    <Popconfirm title="Delete this dispatch note?" onConfirm={() => handleDelete(r)}>
-                        <Button size="small" danger icon={<DeleteOutlined />} />
-                    </Popconfirm>
+                    {(r.STATUS || '').toUpperCase() === 'SETTLED' ? (
+                        <Tooltip title="Settled dispatch notes cannot be deleted">
+                            <Button size="small" danger icon={<DeleteOutlined />} disabled />
+                        </Tooltip>
+                    ) : (
+                        <Popconfirm title="Delete this dispatch note? Its bills become free again." onConfirm={() => handleDelete(r)}>
+                            <Button size="small" danger icon={<DeleteOutlined />} />
+                        </Popconfirm>
+                    )}
                 </Space>
             )
         }

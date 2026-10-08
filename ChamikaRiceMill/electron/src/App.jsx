@@ -29,6 +29,20 @@ import Settings from './pages/settings/Settings';
 import BagLabels from './pages/labels/BagLabels';
 import Expenses from './pages/expenses/Expenses';
 
+// Simple screens (default). Classic screens stay available via Settings -> "Classic screens".
+import SimpleLayout from './simple/SimpleLayout';
+import Home from './simple/pages/Home';
+import NewBill from './simple/pages/NewBill';
+import Bills from './simple/pages/Bills';
+import { LorryList, SendLorry } from './simple/pages/Lorries';
+import SettleLorry from './simple/pages/SettleLorry';
+import QuickExpense from './simple/pages/QuickExpense';
+
+export const CLASSIC_KEY = 'mill_classic_screens';
+export const isClassicScreens = () => {
+    try { return localStorage.getItem(CLASSIC_KEY) === 'true'; } catch (e) { return false; }
+};
+
 import { io } from 'socket.io-client';
 import { getTerminalDeviceCode, getCurrentUserName } from './utils/terminalHelper';
 
@@ -41,6 +55,7 @@ const Layout = ({ children }) => {
     const [latency, setLatency] = useState(syncService.latency);
     const [isSyncing, setIsSyncing] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
+    const [errorCount, setErrorCount] = useState(0);
 
     useEffect(() => {
         syncService.updatePendingCount().then(c => setPendingCount(c));
@@ -59,6 +74,7 @@ const Layout = ({ children }) => {
             }
             if (event === 'pendingCountChanged') {
                 setPendingCount(typeof data === 'number' ? data : (data?.total || 0));
+                setErrorCount(typeof data === 'number' ? 0 : (data?.errors || 0));
             }
         });
 
@@ -197,6 +213,13 @@ const Layout = ({ children }) => {
                             </span>
                         )}
                     </button>
+                    {errorCount > 0 && (
+                        <Tooltip title={`${errorCount} record(s) were refused by the server. Open Sales or Dispatch and press "Sync problem · Retry" to see why.`}>
+                            <Tag color="error" className="px-2.5 py-1 text-xs font-bold rounded-xl border-0 shadow-sm">
+                                ⚠ {errorCount} need attention
+                            </Tag>
+                        </Tooltip>
+                    )}
 
                     {/* Profile Avatar & All-Pages Dropdown Menu */}
                     <Dropdown
@@ -252,9 +275,47 @@ const Layout = ({ children }) => {
 
 const AuthenticatedApp = () => {
     const { isLoggedIn } = useAuth();
+    const [classic, setClassic] = useState(isClassicScreens());
+
+    useEffect(() => {
+        const h = () => setClassic(isClassicScreens());
+        window.addEventListener('mill-screens-changed', h);
+        return () => window.removeEventListener('mill-screens-changed', h);
+    }, []);
 
     if (!isLoggedIn) {
         return <Login />;
+    }
+
+    if (!classic) {
+        return (
+            <Router>
+                <SimpleLayout>
+                    <Routes>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/new-bill" element={<NewBill />} />
+                        <Route path="/bills" element={<Bills />} />
+                        <Route path="/lorries" element={<LorryList />} />
+                        <Route path="/lorries/new" element={<SendLorry />} />
+                        <Route path="/lorries/:dispatchNo/settle" element={<SettleLorry />} />
+                        {/* Screens not redesigned yet open inside the simple layout */}
+                        <Route path="/sales" element={<Sales />} />
+                        <Route path="/dispatch-notes" element={<DispatchNotes />} />
+                        <Route path="/stock-inward" element={<StockInward />} />
+                        <Route path="/quick-pos" element={<QuickPOS />} />
+                        <Route path="/price-calculator" element={<PriceCalculator />} />
+                        <Route path="/expenses" element={<QuickExpense />} />
+                        <Route path="/expenses/full" element={<Expenses />} />
+                        <Route path="/labels" element={<BagLabels />} />
+                        <Route path="/sales-returns" element={<SalesReturns />} />
+                        <Route path="/items" element={<Items />} />
+                        <Route path="/resources" element={<Resources />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                </SimpleLayout>
+            </Router>
+        );
     }
 
     return (

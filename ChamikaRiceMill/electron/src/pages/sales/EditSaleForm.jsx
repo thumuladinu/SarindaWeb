@@ -198,7 +198,7 @@ export default function EditSaleForm({ billRecord, billId, onSuccess, onCancel }
         try {
             const itemsList = [];
             const addRowToItems = (type, weight, rowData) => {
-                if (rowData.qty >= 0) {
+                if (Number(rowData.qty) > 0) { // only real bags (0-bag rows created empty lines)
                     const sysDef = FINISHED_ITEMS.find(i => i.BASE === baseRiceType && i.VARIATION === type);
                     itemsList.push({
                         ITEM_ID: sysDef?.SYSTEM_CODE || `${baseRiceType}_${type}`,

@@ -20,56 +20,25 @@ export default function EditDispatchModal({ visible, record, onClose, onSuccess 
         }
     }, [visible, record]);
 
+    // A bill belongs to the note when it carries the note's DISPATCH_NO or its INVOICE_NO is in the note.
+    // Older notes without an invoice list fall back to real server BILL_IDs only (never local row numbers).
     const checkIsBillLinked = (b, rec) => {
         if (!b || !rec) return false;
-
-        // Priority 1: Match by DISPATCH_NO directly on bill
-        const bDispNo = b.DISPATCH_NO ? String(b.DISPATCH_NO).trim() : null;
         const rNo = rec.DISPATCH_NO ? String(rec.DISPATCH_NO).trim() : null;
-        if (bDispNo && rNo && bDispNo === rNo) return true;
+        if (rNo && b.DISPATCH_NO && String(b.DISPATCH_NO).trim() === rNo) return true;
 
-        // Priority 2: Match by DISPATCH_ID on bill
-        if (b.DISPATCH_ID) {
-            const rLocal = rec.LOCAL_ID ? String(rec.LOCAL_ID).trim() : null;
-            const rGlobal = rec.DISPATCH_ID ? String(rec.DISPATCH_ID).trim() : null;
-            const bDisp = String(b.DISPATCH_ID).trim();
-            if ((rLocal && bDisp === rLocal) || (rGlobal && bDisp === rGlobal)) return true;
-        }
-
-        // Priority 3: Match by INVOICE_NOS
-        let currentInvNos = rec.INVOICE_NOS_JSON || rec.INVOICE_NOS || [];
-        if (typeof currentInvNos === 'string') {
-            try {
-                const parsed = JSON.parse(currentInvNos);
-                currentInvNos = Array.isArray(parsed) ? parsed : currentInvNos.split(',').map(s => s.trim());
-            } catch(e) {
-                currentInvNos = currentInvNos.split(',').map(s => s.trim());
+        const toList = (v) => {
+            let list = v || [];
+            if (typeof list === 'string') {
+                try { list = JSON.parse(list); } catch (e) { list = list.split(','); }
             }
-        }
-        if (Array.isArray(currentInvNos) && b.INVOICE_NO) {
-            const linkedInvSet = new Set(currentInvNos.map(inv => String(inv).trim()).filter(Boolean));
-            if (linkedInvSet.has(String(b.INVOICE_NO).trim())) return true;
-        }
+            return Array.isArray(list) ? list.map(x => String(x).trim()).filter(Boolean) : [];
+        };
+        const invNos = toList(rec.INVOICE_NOS_JSON || rec.INVOICE_NOS);
+        if (invNos.length > 0) return !!b.INVOICE_NO && invNos.includes(String(b.INVOICE_NO).trim());
 
-        // Priority 4: Match by BILL_IDS
-        let currentLinked = rec.BILL_IDS_JSON || rec.BILL_IDS || [];
-        if (typeof currentLinked === 'string') {
-            try {
-                const parsed = JSON.parse(currentLinked);
-                currentLinked = Array.isArray(parsed) ? parsed : currentLinked.split(',').map(s => s.trim());
-            } catch(e) {
-                currentLinked = currentLinked.split(',').map(s => s.trim());
-            }
-        }
-        if (Array.isArray(currentLinked)) {
-            const linkedIdSet = new Set(currentLinked.map(id => String(id).trim()).filter(Boolean));
-            const strLocal = b.LOCAL_ID ? String(b.LOCAL_ID).trim() : null;
-            const strGlobal = b.BILL_ID ? String(b.BILL_ID).trim() : null;
-            if (strLocal && linkedIdSet.has(strLocal)) return true;
-            if (strGlobal && linkedIdSet.has(strGlobal)) return true;
-        }
-
-        return false;
+        const serverIds = toList(rec.BILL_IDS_JSON || rec.BILL_IDS);
+        return !!b.BILL_ID && serverIds.includes(String(b.BILL_ID));
     };
 
     const loadDropdownsAndBills = async () => {
@@ -178,8 +147,18 @@ export default function EditDispatchModal({ visible, record, onClose, onSuccess 
 
             setLoading(true);
 
+            if (String(record.STATUS || '').toUpperCase() === 'SETTLED') {
+                message.error('This dispatch note is settled and cannot be edited.');
+                return;
+            }
             const selectedObjs = allBills.filter(b => selectedBillIds.includes(getBillRowKey(b)));
-            const rawBillIds = selectedObjs.map(b => b.BILL_ID || b.LOCAL_ID).filter(Boolean);
+            const otherNote = selectedObjs.find(b => b.DISPATCH_NO && String(b.DISPATCH_NO) !== String(record.DISPATCH_NO));
+            if (otherNote) {
+                message.error(`Bill ${otherNote.INVOICE_NO} is already on dispatch note ${otherNote.DISPATCH_NO}.`);
+                return;
+            }
+            // Server ids only; the link itself is made by INVOICE_NO
+            const rawBillIds = selectedObjs.map(b => b.BILL_ID).filter(Boolean);
             const rawInvoiceNos = selectedObjs.map(b => b.INVOICE_NO).filter(Boolean);
 
             const dateStr = values.DATE ? values.DATE.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD');
@@ -211,6 +190,7 @@ export default function EditDispatchModal({ visible, record, onClose, onSuccess 
                 TOTAL_10KG: Number(values.TOTAL_10KG || 0),
                 TOTAL_25KG: Number(values.TOTAL_25KG || 0),
                 TOTAL_BAGS: Number(values.TOTAL_BAGS || 0),
+                NEEDS_PUSH: true,
                 IS_SYNCED: 0
             };
 
@@ -226,33 +206,16 @@ export default function EditDispatchModal({ visible, record, onClose, onSuccess 
             const updatedRecord = { ...record, ...(targetNote || {}), ...updatedPayload };
 
             const dispatchNoVal = updatedRecord.DISPATCH_NO || record.DISPATCH_NO || null;
-            const dispatchIdVal = updatedRecord.LOCAL_ID || updatedRecord.DISPATCH_ID || record.LOCAL_ID || null;
+            const selectedLocalIds = new Set(selectedObjs.map(b => b.LOCAL_ID));
 
-            // Update all bills fast in Dexie
+            // Local link only (DISPATCH_NO). The server link is rebuilt from INVOICE_NOS when the note syncs.
             const updates = [];
             for (const b of allBills) {
                 if (!b.LOCAL_ID) continue;
-
-                const isSel = selectedObjs.some(s => 
-                    (s.LOCAL_ID && String(s.LOCAL_ID) === String(b.LOCAL_ID)) || 
-                    (s.BILL_ID && String(s.BILL_ID) === String(b.BILL_ID)) ||
-                    (s.INVOICE_NO && String(s.INVOICE_NO).trim() === String(b.INVOICE_NO).trim())
-                );
-
-                const wasLinked = checkIsBillLinked(b, record);
-
-                if (isSel) {
-                    updates.push(db.sales_bills.update(b.LOCAL_ID, {
-                        DISPATCH_NO: dispatchNoVal,
-                        DISPATCH_ID: dispatchIdVal,
-                        IS_SYNCED: 0
-                    }));
-                } else if (wasLinked || (b.DISPATCH_NO && dispatchNoVal && String(b.DISPATCH_NO) === String(dispatchNoVal)) || (b.DISPATCH_ID && dispatchIdVal && String(b.DISPATCH_ID) === String(dispatchIdVal))) {
-                    updates.push(db.sales_bills.update(b.LOCAL_ID, {
-                        DISPATCH_NO: null,
-                        DISPATCH_ID: null,
-                        IS_SYNCED: 0
-                    }));
+                if (selectedLocalIds.has(b.LOCAL_ID)) {
+                    updates.push(db.sales_bills.update(b.LOCAL_ID, { DISPATCH_NO: dispatchNoVal }));
+                } else if (dispatchNoVal && b.DISPATCH_NO && String(b.DISPATCH_NO) === String(dispatchNoVal)) {
+                    updates.push(db.sales_bills.update(b.LOCAL_ID, { DISPATCH_NO: null, DISPATCH_ID: null }));
                 }
             }
 

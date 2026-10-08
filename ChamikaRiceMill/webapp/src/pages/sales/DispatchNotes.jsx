@@ -87,7 +87,7 @@ export default function DispatchNotes() {
             }
         } catch (e) {
             console.error(e);
-            message.error('Error deleting dispatch note');
+            message.error(e.response?.data?.message || 'Error deleting dispatch note');
         }
     };
 
@@ -106,7 +106,7 @@ export default function DispatchNotes() {
             }
         } catch (e) {
             console.error(e);
-            message.error('Failed to unlock dispatch note');
+            message.error(e.response?.data?.message || 'Failed to unlock dispatch note');
         }
     };
 
@@ -157,7 +157,7 @@ export default function DispatchNotes() {
             }
         } catch (e) {
             console.error(e);
-            message.error('Error updating dispatch note');
+            message.error(e.response?.data?.message || 'Error updating dispatch note');
         } finally {
             setUpdating(false);
         }

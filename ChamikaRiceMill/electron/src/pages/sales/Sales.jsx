@@ -70,8 +70,9 @@ export default function Sales() {
                 if (timeB !== timeA) return timeB - timeA;
                 return (b.LOCAL_ID || b.BILL_ID || 0) - (a.LOCAL_ID || a.BILL_ID || 0);
             });
-            setSales(bills || []);
-            setFilteredSales(bills || []);
+            const visible = (bills || []).filter(b => !b.DELETE_PENDING);
+            setSales(visible);
+            setFilteredSales(visible);
         } catch (e) {
             console.error('Error loading sales:', e);
         } finally {
@@ -115,14 +116,40 @@ export default function Sales() {
         setFilteredSales(temp);
     }, [searchText, dateRange, statusFilter, sales]);
 
+    // Same rules as the server: settled or dispatched bills cannot be deleted
+    const deleteBlockReason = (r) => {
+        if (r.IS_SETTLED === 1) return 'Settled bills cannot be deleted. Unlock it first.';
+        if (r.DISPATCH_NO) return `On dispatch note ${r.DISPATCH_NO}. Remove it from the dispatch note first.`;
+        return null;
+    };
+
     const handleDelete = async (record) => {
+        const blocked = deleteBlockReason(record);
+        if (blocked) {
+            message.warning(blocked);
+            return;
+        }
         try {
-            await db.sales_bills.delete(record.LOCAL_ID);
-            message.success('Sale deleted successfully');
+            if (!record.BILL_ID && !record.IS_SYNCED) {
+                // Never reached the server -> just remove it here
+                await db.sales_bills.delete(record.LOCAL_ID);
+            } else {
+                // Delete on the server too (queued if offline); hidden here meanwhile
+                await db.sales_bills.update(record.LOCAL_ID, { DELETE_PENDING: true, IS_SYNCED: 0, SYNC_ERROR: null });
+                if (syncService.isOnline) syncService.syncAll();
+            }
+            await syncService.updatePendingCount();
+            message.success('Sale deleted');
             loadSales();
         } catch (e) {
             message.error('Failed to delete sale');
         }
+    };
+
+    const handleRetrySync = async (record) => {
+        await syncService.retryRecord('sales_bills', record.LOCAL_ID);
+        message.info(`Retrying ${record.INVOICE_NO}...`);
+        loadSales();
     };
 
     const handlePrintClick = (record) => {
@@ -177,7 +204,15 @@ export default function Sales() {
             render: (val, r) => (
                 <div>
                     <strong className="font-mono text-blue-900">{val || `BILL-${r.LOCAL_ID}`}</strong>
-                    {!r.IS_SYNCED && <Tag color="volcano" className="ml-1 text-[10px]">Offline</Tag>}
+                    {r.SYNC_ERROR ? (
+                        <Tooltip title={`Server refused: ${r.SYNC_ERROR}`}>
+                            <Tag color="error" className="ml-1 text-[10px] cursor-pointer" onClick={() => handleRetrySync(r)}>Sync problem · Retry</Tag>
+                        </Tooltip>
+                    ) : !r.IS_SYNCED && (
+                        <Tooltip title={r.SYNC_NOTE ? `Waiting: ${r.SYNC_NOTE}` : 'Saved on this PC, waiting to sync'}>
+                            <Tag color="volcano" className="ml-1 text-[10px]">Offline</Tag>
+                        </Tooltip>
+                    )}
                     {r.BATCH_NO && <div className="text-[11px] text-gray-500 font-mono">Batch: {r.BATCH_NO}</div>}
                 </div>
             )
@@ -251,11 +286,12 @@ export default function Sales() {
                     <Tooltip title="Print Official Bill">
                         <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintClick(r)} />
                     </Tooltip>
-                    <Tooltip title="Edit Bill Data">
+                    <Tooltip title={r.IS_SETTLED === 1 ? 'Settled bills are locked' : 'Edit Bill Data'}>
                         <Button 
                             size="small" 
                             icon={<EditOutlined />} 
                             className="!text-amber-600 border-amber-300 font-medium"
+                            disabled={r.IS_SETTLED === 1}
                             onClick={() => handleEditClick(r)} 
                         >
                             Edit
@@ -274,9 +310,15 @@ export default function Sales() {
                             </Button>
                         </Tooltip>
                     ) : null}
-                    <Popconfirm title="Delete this sale bill?" onConfirm={() => handleDelete(r)}>
-                        <Button size="small" danger icon={<DeleteOutlined />} />
-                    </Popconfirm>
+                    {deleteBlockReason(r) ? (
+                        <Tooltip title={deleteBlockReason(r)}>
+                            <Button size="small" danger icon={<DeleteOutlined />} disabled />
+                        </Tooltip>
+                    ) : (
+                        <Popconfirm title="Delete this sale bill?" onConfirm={() => handleDelete(r)}>
+                            <Button size="small" danger icon={<DeleteOutlined />} />
+                        </Popconfirm>
+                    )}
                 </Space>
             )
         }

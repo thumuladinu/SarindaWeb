@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Form, Input, Button, DatePicker, Select, Divider, InputNumber, Row, Col, Typography, message, Space } from 'antd';
 import { PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
+import { FINISHED_ITEMS } from '../../utils/constants';
 
 const { Title, Text } = Typography;
 
@@ -10,6 +11,9 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
     const [loading, setLoading] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState(bill?.PAYMENT_METHOD || 'cash');
     const [systemItems, setSystemItems] = useState({ P: null, N: null });
+    // Real mill items per rice variety, and the variety these handwritten extras belong to
+    const [varietyItems, setVarietyItems] = useState({});
+    const [base, setBase] = useState(undefined);
     const [existingCheques, setExistingCheques] = useState([]);
 
     const [rowsP, setRowsP] = useState({
@@ -45,44 +49,37 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
         }
     };
 
-    const fetchSystemItems = async () => {
-        try {
-            const res = await axios.post('/api/MillgetAllItems', {}, { withCredentials: true });
-            if (res.data.success) {
-                const pItem = res.data.result.find(i => i.SYSTEM_CODE === 'OUT_SAMBA');
-                const nItem = res.data.result.find(i => i.SYSTEM_CODE === 'OUT_NADU');
-                setSystemItems({ P: pItem, N: nItem });
-
-                const pPricePerKg = parseFloat(pItem?.SELLING_PRICE || 0);
-                const nPricePerKg = parseFloat(nItem?.SELLING_PRICE || 0);
-
-                if (pPricePerKg > 0) {
-                    setRowsP({
-                        5: { price: parseFloat((pPricePerKg * 5).toFixed(2)), qty: 0 },
-                        10: { price: parseFloat((pPricePerKg * 10).toFixed(2)), qty: 0 },
-                        25: { price: parseFloat((pPricePerKg * 25).toFixed(2)), qty: 0 }
-                    });
-                }
-
-                if (nPricePerKg > 0) {
-                    setRowsN({
-                        5: { price: parseFloat((nPricePerKg * 5).toFixed(2)), qty: 0 },
-                        10: { price: parseFloat((nPricePerKg * 10).toFixed(2)), qty: 0 },
-                        25: { price: parseFloat((nPricePerKg * 25).toFixed(2)), qty: 0 }
-                    });
-                }
-            }
-        } catch (e) {
-            console.error('Failed to fetch items', e);
-        }
+    const applyBase = (selectedBase, vMap = varietyItems) => {
+        setBase(selectedBase);
+        const pItem = vMap[selectedBase]?.P || null;
+        const nItem = vMap[selectedBase]?.N || null;
+        setSystemItems({ P: pItem, N: nItem });
+        const kgP = parseFloat(pItem?.SELLING_PRICE || 0);
+        const kgN = parseFloat(nItem?.SELLING_PRICE || 0);
+        setRowsP(prev => ({ 5: { price: kgP * 5, qty: prev[5]?.qty || 0 }, 10: { price: kgP * 10, qty: prev[10]?.qty || 0 }, 25: { price: kgP * 25, qty: prev[25]?.qty || 0 } }));
+        setRowsN(prev => ({ 5: { price: kgN * 5, qty: prev[5]?.qty || 0 }, 10: { price: kgN * 10, qty: prev[10]?.qty || 0 }, 25: { price: kgN * 25, qty: prev[25]?.qty || 0 } }));
     };
 
-    const handleRowChange = (type, weight, field, value) => {
-        const val = value || 0;
-        if (type === 'P') {
-            setRowsP(prev => ({ ...prev, [weight]: { ...prev[weight], [field]: val } }));
-        } else {
-            setRowsN(prev => ({ ...prev, [weight]: { ...prev[weight], [field]: val } }));
+    const fetchSystemItems = async () => {
+        try {
+            const [itemsRes, billRes] = await Promise.all([
+                axios.post('/api/MillgetAllItems', {}, { withCredentials: true }),
+                axios.get(`/api/mill/sales/${bill.BILL_ID}`, { withCredentials: true }).catch(() => null)
+            ]);
+            if (!itemsRes.data.success) return;
+            const vMap = {};
+            FINISHED_ITEMS.forEach(def => {
+                const dbItem = itemsRes.data.result.find(i => i.SYSTEM_CODE === def.SYSTEM_CODE);
+                if (!dbItem || (Number(dbItem.IS_ACTIVE) === 0 && def.IS_FUTURE)) return;
+                vMap[def.BASE] = { ...(vMap[def.BASE] || {}), [def.VARIATION]: dbItem };
+            });
+            setVarietyItems(vMap);
+            // Same variety as the printed bill; Rs 0 bills have none -> officer chooses
+            const printed = billRes?.data?.result?.ITEMS || [];
+            const billBase = printed.map(i => FINISHED_ITEMS.find(d => d.SYSTEM_CODE === i.SYSTEM_CODE)?.BASE).find(Boolean);
+            applyBase(billBase || Object.keys(vMap)[0], vMap);
+        } catch (e) {
+            console.error('Failed to load mill items', e);
         }
     };
 
@@ -131,9 +128,11 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
             const addRowToItems = (type, weight, rowData) => {
                 if (rowData.qty > 0) {
                     const itemDb = type === 'P' ? systemItems.P : systemItems.N;
-                    if (itemDb) {
+                    if (!itemDb) throw new Error(`Choose the rice variety first (no ${type} item for "${base || '-'}")`);
+                    {
                         items.push({
                             ITEM_ID: itemDb.ITEM_ID,
+                            SYSTEM_CODE: itemDb.SYSTEM_CODE,
                             BAG_WEIGHT: weight,
                             BAG_COUNT: rowData.qty,
                             QUANTITY: weight * rowData.qty,
@@ -150,6 +149,7 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
 
             const payload = {
                 BILL_ID: bill.BILL_ID,
+                INVOICE_NO: bill.INVOICE_NO,
                 HANDWRITTEN_SUB_TOTAL: values.HANDWRITTEN_SUB_TOTAL || 0,
                 DISCOUNT: values.DISCOUNT || 0,
                 FINAL_AMOUNT: values.FINAL_AMOUNT || 0,
@@ -169,7 +169,7 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
             }
         } catch (error) {
             console.error('Error settling sale:', error);
-            message.error('Failed to settle bill');
+            message.error(error.response?.data?.message || error.message || 'Failed to settle bill');
         } finally {
             setLoading(false);
         }
@@ -234,6 +234,15 @@ export default function SettleSaleForm({ bill, onSuccess, onCancel }) {
             </div>
 
             <Divider>Handwritten Extra Items (Optional)</Divider>
+            <div className="flex justify-end mb-2">
+                <Select
+                    value={base}
+                    onChange={(v) => applyBase(v)}
+                    placeholder="Rice variety"
+                    options={Object.keys(varietyItems).map(b => ({ value: b, label: b }))}
+                    style={{ minWidth: 200 }}
+                />
+            </div>
             {renderRows('P', 'P - Samba Rice')}
             {renderRows('N', 'N - Nadu Rice')}
 

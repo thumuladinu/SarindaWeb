@@ -4,19 +4,22 @@ const router = express.Router();
 const cors = require('cors');
 const pool = require('./index');
 const util = require('util');
+const { withTransaction, toSLDateTime, toSLDate, findBill, MillError, sendError } = require('./millShared');
 
 router.use(cors());
 pool.query = util.promisify(pool.query);
 
 // Helper for Return No
-const generateReturnNo = async () => {
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-    const countRes = await pool.query(
-        `SELECT COUNT(*) as count FROM mill_sales_returns WHERE DATE(CREATED_DATE) = CURDATE()`
-    );
-    const seq = (countRes[0]?.count || 0) + 1;
-    return `MSR-${dateStr}-${String(seq).padStart(4, '0')}`;
+// MSR-YYYYMMDD-NNNN (SL date), next number after the highest of the day
+const generateReturnNo = async (q = pool.query.bind(pool)) => {
+    const prefix = `MSR-${require('./millShared').slNow().slice(0, 10).replace(/-/g, '')}-`;
+    const rows = await q('SELECT RETURN_NO FROM mill_sales_returns WHERE RETURN_NO LIKE ?', [`${prefix}%`]);
+    let max = 0;
+    rows.forEach(r => {
+        const n = parseInt(String(r.RETURN_NO).slice(prefix.length), 10);
+        if (!isNaN(n) && n > max) max = n;
+    });
+    return `${prefix}${String(max + 1).padStart(4, '0')}`;
 };
 
 // Initialize Tables
@@ -37,6 +40,9 @@ const initReturnTables = async () => {
                 CREATED_DATE DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         `);
+
+        // One-time device reference: a re-sent return is recognised instead of recorded twice
+        try { await pool.query('ALTER TABLE mill_sales_returns ADD COLUMN CLIENT_REF VARCHAR(100) NULL UNIQUE'); } catch (e) {}
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS mill_sales_return_items (
@@ -106,52 +112,60 @@ router.get('/api/mill/returns/:id', async (req, res) => {
 // ─── CREATE SALES RETURN ────────────────────────────────────────
 router.post('/api/mill/returns/add', async (req, res) => {
     try {
-        const { BILL_ID, INVOICE_NO, CUSTOMER_ID, REFUND_AMOUNT, REFUND_METHOD, REASON, DATE, CREATED_BY, ITEMS } = req.body;
+        const body = req.body || {};
+        const { CUSTOMER_ID, REFUND_AMOUNT, REFUND_METHOD, REASON, CREATED_BY, ITEMS } = body;
 
-        if (!BILL_ID || !INVOICE_NO) {
-            return res.status(400).json({ success: false, message: 'Invoice / Bill selection required' });
+        if (!body.INVOICE_NO && !body.BILL_ID) {
+            return res.status(400).json({ success: false, permanent: true, message: 'Invoice / Bill selection required' });
         }
         if (!ITEMS || !Array.isArray(ITEMS) || ITEMS.length === 0) {
-            return res.status(400).json({ success: false, message: 'Must select at least one item to return' });
+            return res.status(400).json({ success: false, permanent: true, message: 'Must select at least one item to return' });
         }
 
-        const returnNo = await generateReturnNo();
+        const result = await withTransaction(pool, async (q) => {
+            if (body.CLIENT_REF) {
+                const dup = await q('SELECT RETURN_ID, RETURN_NO FROM mill_sales_returns WHERE CLIENT_REF = ? LIMIT 1', [body.CLIENT_REF]);
+                if (dup.length > 0) return { returnId: dup[0].RETURN_ID, returnNo: dup[0].RETURN_NO, existed: true };
+            }
+            // The bill is identified by its permanent INVOICE_NO (a desktop BILL_ID may be a local row number)
+            const bill = await findBill(q, { INVOICE_NO: body.INVOICE_NO, BILL_ID: body.INVOICE_NO ? null : body.BILL_ID }, false);
+            if (!bill) throw new MillError(404, `Bill ${body.INVOICE_NO || body.BILL_ID} not found on server`, { retryable: true });
 
-        // 1. Insert Sales Return Record
-        const returnInsert = await pool.query('INSERT INTO mill_sales_returns SET ?', {
-            RETURN_NO: returnNo,
-            BILL_ID,
-            INVOICE_NO,
-            CUSTOMER_ID: CUSTOMER_ID || null,
-            REFUND_AMOUNT: REFUND_AMOUNT || 0,
-            REFUND_METHOD: REFUND_METHOD || 'cash',
-            REASON: REASON || null,
-            DATE: DATE || new Date().toISOString().slice(0, 10),
-            CREATED_DATE: req.body.CREATED_DATE ? new Date(req.body.CREATED_DATE) : new Date(),
-            CREATED_BY: CREATED_BY || null
+            const returnNo = await generateReturnNo(q);
+            const returnInsert = await q('INSERT INTO mill_sales_returns SET ?', {
+                RETURN_NO: returnNo,
+                BILL_ID: bill.BILL_ID,
+                INVOICE_NO: bill.INVOICE_NO,
+                CUSTOMER_ID: CUSTOMER_ID || bill.CUSTOMER_ID || null,
+                REFUND_AMOUNT: REFUND_AMOUNT || 0,
+                REFUND_METHOD: REFUND_METHOD || 'cash',
+                REASON: REASON || null,
+                DATE: toSLDate(body.DATE),
+                CREATED_DATE: toSLDateTime(body.CREATED_DATE),
+                CREATED_BY: CREATED_BY || null,
+                CLIENT_REF: body.CLIENT_REF || null
+            });
+            const returnId = returnInsert.insertId;
+
+            for (const item of ITEMS) {
+                if (item.RETURNED_BAG_COUNT > 0 || item.RETURNED_QTY > 0) {
+                    await q('INSERT INTO mill_sales_return_items SET ?', {
+                        RETURN_ID: returnId,
+                        ITEM_ID: item.ITEM_ID,
+                        BAG_WEIGHT: item.BAG_WEIGHT || null,
+                        RETURNED_BAG_COUNT: item.RETURNED_BAG_COUNT || 0,
+                        RETURNED_QTY: item.RETURNED_QTY || item.RETURNED_BAG_COUNT || 0,
+                        UNIT_PRICE: item.UNIT_PRICE || 0,
+                        REFUND_LINE_TOTAL: item.REFUND_LINE_TOTAL || ((item.RETURNED_BAG_COUNT || 1) * (item.UNIT_PRICE || 0))
+                    });
+                }
+            }
+            return { returnId, returnNo, existed: false };
         });
 
-        const returnId = returnInsert.insertId;
-
-        // 2. Insert Returned Items
-        for (const item of ITEMS) {
-            if (item.RETURNED_BAG_COUNT > 0 || item.RETURNED_QTY > 0) {
-                await pool.query('INSERT INTO mill_sales_return_items SET ?', {
-                    RETURN_ID: returnId,
-                    ITEM_ID: item.ITEM_ID,
-                    BAG_WEIGHT: item.BAG_WEIGHT || null,
-                    RETURNED_BAG_COUNT: item.RETURNED_BAG_COUNT || 0,
-                    RETURNED_QTY: item.RETURNED_QTY || item.RETURNED_BAG_COUNT || 0,
-                    UNIT_PRICE: item.UNIT_PRICE || 0,
-                    REFUND_LINE_TOTAL: item.REFUND_LINE_TOTAL || ((item.RETURNED_BAG_COUNT || 1) * (item.UNIT_PRICE || 0))
-                });
-            }
-        }
-
-        res.json({ success: true, message: 'Sales return recorded successfully', returnId, returnNo });
+        res.json({ success: true, message: result.existed ? 'Sales return already recorded' : 'Sales return recorded successfully', returnId: result.returnId, returnNo: result.returnNo });
     } catch (error) {
-        console.error('Error creating sales return:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+        sendError(res, error, 'Error creating sales return:');
     }
 });
 

@@ -38,13 +38,12 @@ export default function PrintableDispatchNote({ visible, onClose, note, linkedBi
                     matched = allBills.filter(b => b.INVOICE_NO && cleanInvNos.includes(String(b.INVOICE_NO).trim()));
                 }
 
-                // Priority 2: Match by DISPATCH_ID
-                if (matched.length === 0) {
-                    const noteDispatchId = note.DISPATCH_ID || note.LOCAL_ID;
-                    matched = allBills.filter(b => b.DISPATCH_ID && (String(b.DISPATCH_ID) === String(noteDispatchId) || String(b.DISPATCH_ID) === String(note.LOCAL_ID)));
+                // Priority 2: Match by DISPATCH_NO on the bills
+                if (matched.length === 0 && note.DISPATCH_NO) {
+                    matched = allBills.filter(b => b.DISPATCH_NO && String(b.DISPATCH_NO) === String(note.DISPATCH_NO));
                 }
 
-                // Priority 3: Match by BILL_ID or LOCAL_ID
+                // Priority 3: older notes without invoice list -> real server BILL_IDs only
                 if (matched.length === 0) {
                     let ids = note.BILL_IDS_JSON || note.BILL_IDS || [];
                     if (typeof ids === 'string') {
@@ -52,12 +51,7 @@ export default function PrintableDispatchNote({ visible, onClose, note, linkedBi
                     }
                     if (Array.isArray(ids) && ids.length > 0) {
                         const numericIds = ids.map(i => Number(i)).filter(i => !isNaN(i));
-                        const matchedByBillId = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
-                        if (matchedByBillId.length > 0) {
-                            matched = matchedByBillId;
-                        } else {
-                            matched = allBills.filter(b => b.LOCAL_ID && numericIds.includes(Number(b.LOCAL_ID)));
-                        }
+                        matched = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
                     }
                 }
                 setBillsList(matched.length > 0 ? matched : (linkedBills || []));

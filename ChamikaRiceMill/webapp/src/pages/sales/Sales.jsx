@@ -134,7 +134,7 @@ export default function Sales() {
             }
         } catch (e) {
             console.error(e);
-            message.error('Failed to unlock sale');
+            message.error(e.response?.data?.message || 'Failed to unlock sale');
         }
     };
 
@@ -210,7 +210,7 @@ export default function Sales() {
             }
         } catch (e) {
             console.error(e);
-            message.error('An error occurred');
+            message.error(e.response?.data?.message || 'An error occurred');
         } finally {
             setCreatingDispatch(false);
         }

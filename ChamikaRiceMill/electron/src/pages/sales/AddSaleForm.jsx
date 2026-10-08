@@ -466,6 +466,10 @@ export default function AddSaleForm({ onBillCreated, onPrintBill }) {
                     DATE: dayjs()
                 }}
                 onFinish={(vals) => handleFinish(vals, false)}
+                onKeyDown={(e) => {
+                    // Enter moves on; it must never save the bill (Save buttons only)
+                    if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault();
+                }}
             >
                 <div className="space-y-4">
                     {/* Top Metadata Row */}

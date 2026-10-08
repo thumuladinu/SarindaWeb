@@ -898,16 +898,12 @@ class PrintService {
                     }
                 }
 
-                // Priority 2: Match by DISPATCH_ID column on sales_bills
-                if (bills.length === 0) {
-                    const noteDispatchId = note.DISPATCH_ID || note.LOCAL_ID;
-                    const matchedByDispatch = allBills.filter(b => b.DISPATCH_ID && (String(b.DISPATCH_ID) === String(noteDispatchId) || String(b.DISPATCH_ID) === String(note.LOCAL_ID)));
-                    if (matchedByDispatch.length > 0) {
-                        bills = matchedByDispatch;
-                    }
+                // Priority 2: Match by DISPATCH_NO on the bills
+                if (bills.length === 0 && note.DISPATCH_NO) {
+                    bills = allBills.filter(b => b.DISPATCH_NO && String(b.DISPATCH_NO) === String(note.DISPATCH_NO));
                 }
 
-                // Priority 3: Match by BILL_ID (server ID) or LOCAL_ID
+                // Priority 3: older notes without invoice list -> real server BILL_IDs only (never local row numbers)
                 if (bills.length === 0) {
                     let ids = note.BILL_IDS_JSON || note.BILL_IDS || [];
                     if (typeof ids === 'string') {
@@ -915,12 +911,7 @@ class PrintService {
                     }
                     if (Array.isArray(ids) && ids.length > 0) {
                         const numericIds = ids.map(i => Number(i)).filter(i => !isNaN(i));
-                        const matchedByBillId = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
-                        if (matchedByBillId.length > 0) {
-                            bills = matchedByBillId;
-                        } else {
-                            bills = allBills.filter(b => b.LOCAL_ID && numericIds.includes(Number(b.LOCAL_ID)));
-                        }
+                        bills = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
                     }
                 }
             } catch (e) {

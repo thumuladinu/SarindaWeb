@@ -11,15 +11,16 @@ pool.query = util.promisify(pool.query);
 // ─── GET MILL DASHBOARD STATS ──────────────────────────────────
 router.get('/api/mill/dashboard/stats', async (req, res) => {
     try {
-        const today = new Date().toISOString().slice(0, 10);
+        // Mill records are stored in Sri Lankan time; the server clock is UTC -> use the SL date for "today"
+        const today = require('./millShared').slNow().slice(0, 10);
 
         // 1. Today's Sales Calculation (Strictly for today's sales bills)
         const todaySalesRes = await pool.query(`
             SELECT COALESCE(SUM(COALESCE(FINAL_AMOUNT, NET_AMOUNT, TOTAL_AMOUNT, 0)), 0) as today_sales,
                    COUNT(BILL_ID) as bill_count
             FROM mill_bills
-            WHERE (DATE(CREATED_DATE) = CURDATE() OR DATE(DATE) = CURDATE() OR DATE(CONVERT_TZ(CREATED_DATE, '+00:00', '+05:30')) = CURDATE())
-        `);
+            WHERE IS_ACTIVE = 1 AND (DATE(CREATED_DATE) = ? OR DATE(DATE) = ?)
+        `, [today, today]);
 
         const salesAmt = parseFloat(todaySalesRes[0]?.today_sales || 0);
         const salesCount = todaySalesRes[0]?.bill_count || 0;
@@ -28,8 +29,8 @@ router.get('/api/mill/dashboard/stats', async (req, res) => {
         const todayPurchaseRes = await pool.query(`
             SELECT COALESCE(SUM(COALESCE(TOTAL_PRICE, QUANTITY * COALESCE(PRICE_PER_UNIT, 0), 0)), 0) as today_purchase
             FROM mill_stock_inward
-            WHERE (DATE(CREATED_DATE) = CURDATE() OR DATE(DATE) = CURDATE() OR DATE(CONVERT_TZ(CREATED_DATE, '+00:00', '+05:30')) = CURDATE())
-        `).catch(() => [{ today_purchase: 0 }]);
+            WHERE (DATE(CREATED_DATE) = ? OR DATE(DATE) = ?)
+        `, [today, today]).catch(() => [{ today_purchase: 0 }]);
 
         const buyingAmt = parseFloat(todayPurchaseRes[0]?.today_purchase || 0);
 
@@ -37,8 +38,8 @@ router.get('/api/mill/dashboard/stats', async (req, res) => {
         const expensesRes = await pool.query(`
             SELECT COALESCE(SUM(AMOUNT), 0) as total_expenses
             FROM mill_expenses
-            WHERE (DATE(CREATED_DATE) = CURDATE() OR DATE(DATE) = CURDATE() OR DATE(CONVERT_TZ(CREATED_DATE, '+00:00', '+05:30')) = CURDATE())
-        `).catch(() => [{ total_expenses: 0 }]);
+            WHERE (DATE(CREATED_DATE) = ? OR DATE(DATE) = ?)
+        `, [today, today]).catch(() => [{ total_expenses: 0 }]);
 
         const expensesAmt = parseFloat(expensesRes[0]?.total_expenses || 0);
 
@@ -100,28 +101,28 @@ router.get('/api/mill/dashboard/stats', async (req, res) => {
             FROM mill_cheques c
             LEFT JOIN mill_bills b ON c.BILL_ID = b.BILL_ID
             LEFT JOIN mill_customers cust ON b.CUSTOMER_ID = cust.CUSTOMER_ID
-            WHERE c.STATUS = 'Pending' AND c.DUE_DATE < CURDATE()
+            WHERE c.STATUS = 'Pending' AND c.DUE_DATE < ?
             ORDER BY c.DUE_DATE ASC
-        `);
+        `, [today]);
 
         const dueTodayCheques = await pool.query(`
             SELECT c.*, b.INVOICE_NO, cust.NAME as CUSTOMER_NAME
             FROM mill_cheques c
             LEFT JOIN mill_bills b ON c.BILL_ID = b.BILL_ID
             LEFT JOIN mill_customers cust ON b.CUSTOMER_ID = cust.CUSTOMER_ID
-            WHERE c.STATUS = 'Pending' AND c.DUE_DATE = CURDATE()
+            WHERE c.STATUS = 'Pending' AND c.DUE_DATE = ?
             ORDER BY c.CHEQUE_ID DESC
-        `);
+        `, [today]);
 
         const upcomingCheques = await pool.query(`
             SELECT c.*, b.INVOICE_NO, cust.NAME as CUSTOMER_NAME
             FROM mill_cheques c
             LEFT JOIN mill_bills b ON c.BILL_ID = b.BILL_ID
             LEFT JOIN mill_customers cust ON b.CUSTOMER_ID = cust.CUSTOMER_ID
-            WHERE c.STATUS = 'Pending' AND c.DUE_DATE > CURDATE()
+            WHERE c.STATUS = 'Pending' AND c.DUE_DATE > ?
             ORDER BY c.DUE_DATE ASC
             LIMIT 5
-        `);
+        `, [today]);
 
         // 5. Active Staff Members Overview
         const activeStaff = await pool.query(`

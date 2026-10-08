@@ -108,7 +108,8 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
 
         setLoading(true);
         try {
-            const billIds = selectedBills.map(b => b.BILL_ID || b.LOCAL_ID);
+            // Links use the permanent INVOICE_NO; BILL_IDS holds real server ids only (never local row numbers)
+            const billIds = selectedBills.map(b => b.BILL_ID).filter(Boolean);
             const invoiceNos = selectedBills.map(b => b.INVOICE_NO).filter(Boolean);
             const dateStr = values.DATE ? values.DATE.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD');
             const terminalCode = getTerminalDeviceCode();
@@ -135,20 +136,18 @@ export default function CreateDispatchModal({ visible, onClose, selectedBills, o
                 DEVICE_ID: terminalCode,
                 ADDED_BY: userName,
                 CREATED_BY_NAME: userName,
+                NEEDS_PUSH: true,
                 IS_SYNCED: 0
             };
 
             const localDispatchId = await db.dispatch_notes.add(payload);
             const createdNote = { ...payload, LOCAL_ID: localDispatchId };
 
-            // Update sales bills locally with DISPATCH_ID & DISPATCH_NO
+            // Mark bills as on this dispatch locally (the server link is made when the note syncs)
             for (const b of selectedBills) {
-                await db.sales_bills.update(b.LOCAL_ID, {
-                    DISPATCH_ID: localDispatchId,
-                    DISPATCH_NO: dispatchNo,
-                    IS_SYNCED: 0
-                });
+                await db.sales_bills.update(b.LOCAL_ID, { DISPATCH_NO: dispatchNo });
             }
+            if (syncService.isOnline) syncService.syncAll();
 
             message.success(`Dispatch Note ${dispatchNo} created for ${selectedBills.length} bills!`);
             form.resetFields();

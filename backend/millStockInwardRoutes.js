@@ -9,6 +9,11 @@ const util = require('util');
 router.use(cors());
 pool.query = util.promisify(pool.query);
 
+// One-time device reference so a re-sent inward is recognised instead of adding stock twice
+const ensureInwardClientRef = (async () => {
+    try { await pool.query('ALTER TABLE mill_stock_inward ADD COLUMN CLIENT_REF VARCHAR(100) NULL UNIQUE'); } catch (e) {}
+})();
+
 // Auto-migrate new columns for condition and dry percentage
 (async () => {
     try {
@@ -23,17 +28,17 @@ pool.query = util.promisify(pool.query);
 })();
 
 // Generate reference number: MI-YYYYMMDD-XXXX
+// MP/ST/GG-YYYYMMDD-NNNN (SL date), next number after the highest of the day
 const generateReferenceNo = async (type) => {
-    const prefix = type === 'store_transfer' ? 'ST' : type === 'mill_purchase' ? 'MP' : 'GG';
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-    
-    const countResult = await pool.query(
-        `SELECT COUNT(*) as count FROM mill_stock_inward WHERE DATE(CREATED_DATE) = CURDATE() AND INWARD_TYPE = ?`,
-        [type]
-    );
-    const seq = (countResult[0]?.count || 0) + 1;
-    return `${prefix}-${dateStr}-${String(seq).padStart(4, '0')}`;
+    const code = type === 'store_transfer' ? 'ST' : type === 'mill_purchase' ? 'MP' : 'GG';
+    const prefix = `${code}-${require('./millShared').slNow().slice(0, 10).replace(/-/g, '')}-`;
+    const rows = await pool.query('SELECT REFERENCE_NO FROM mill_stock_inward WHERE REFERENCE_NO LIKE ?', [`${prefix}%`]);
+    let max = 0;
+    rows.forEach(r => {
+        const n = parseInt(String(r.REFERENCE_NO).slice(prefix.length), 10);
+        if (!isNaN(n) && n > max) max = n;
+    });
+    return `${prefix}${String(max + 1).padStart(4, '0')}`;
 };
 
 // Update inventory ledger and mill_items stock
@@ -141,6 +146,14 @@ router.post('/api/mill/inward/add', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Type, Item, and Date are required' });
         }
 
+        await ensureInwardClientRef;
+        if (data.CLIENT_REF) {
+            const dup = await pool.query('SELECT INWARD_ID, REFERENCE_NO FROM mill_stock_inward WHERE CLIENT_REF = ? LIMIT 1', [data.CLIENT_REF]);
+            if (dup.length > 0) {
+                return res.status(200).json({ success: true, message: 'Stock inward already recorded', insertId: dup[0].INWARD_ID, referenceNo: dup[0].REFERENCE_NO });
+            }
+        }
+
         // Generate reference number
         data.REFERENCE_NO = await generateReferenceNo(data.INWARD_TYPE);
 
@@ -165,13 +178,13 @@ router.post('/api/mill/inward/add', async (req, res) => {
             'SURPLUS_WASTAGE', 'PRICE_PER_UNIT', 'TOTAL_PRICE', 'NO_OF_BAGS', 'STORE_NO',
             'STORE_TRANSFER_REF', 'VEHICLE_NO', 'DRIVER_NAME', 'SUPPLIER_ID', 'DATE', 'CREATED_DATE',
             'NOTES', 'RECEIVED_BY', 'CREATED_BY', 'IS_SYNCED', 'LOCAL_ID', 'SYNC_TIMESTAMP',
-            'CONDITION', 'DRY_PERCENTAGE', 'GROSS_WEIGHT', 'MOISTURE_LOSS_PERCENT'
+            'CONDITION', 'DRY_PERCENTAGE', 'GROSS_WEIGHT', 'MOISTURE_LOSS_PERCENT', 'CLIENT_REF'
         ];
         const insertData = {};
         allowedFields.forEach(f => {
             if (data[f] !== undefined) insertData[f] = data[f];
         });
-        if (data.CREATED_DATE) insertData.CREATED_DATE = new Date(data.CREATED_DATE);
+        insertData.CREATED_DATE = require('./millShared').toSLDateTime(data.CREATED_DATE);
 
         const insertResult = await pool.query('INSERT INTO mill_stock_inward SET ?', insertData);
 

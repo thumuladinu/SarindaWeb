@@ -7,6 +7,11 @@ const util = require('util');
 router.use(cors());
 pool.query = util.promisify(pool.query);
 
+// One-time device reference so a re-sent expense is recognised instead of recorded twice
+const ensureExpenseClientRef = (async () => {
+    try { await pool.query('ALTER TABLE mill_expenses ADD COLUMN CLIENT_REF VARCHAR(100) NULL UNIQUE'); } catch (e) {}
+})();
+
 // ─── INIT TABLES & SEED CATEGORIES ─────────────────────────────
 (async () => {
     try {
@@ -115,6 +120,14 @@ router.post('/api/mill/expenses/add', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Category and positive amount are required' });
         }
 
+        await ensureExpenseClientRef;
+        if (req.body.CLIENT_REF) {
+            const dup = await pool.query('SELECT EXPENSE_ID, EXPENSE_NO FROM mill_expenses WHERE CLIENT_REF = ? LIMIT 1', [req.body.CLIENT_REF]);
+            if (dup.length > 0) {
+                return res.json({ success: true, expenseNo: dup[0].EXPENSE_NO, expenseId: dup[0].EXPENSE_ID, message: 'Expense already recorded' });
+            }
+        }
+
         const expNo = await generateExpenseNo();
 
         const insertData = {
@@ -125,8 +138,9 @@ router.post('/api/mill/expenses/add', async (req, res) => {
             PAID_TO: PAID_TO || null,
             REF_NO: REF_NO || null,
             DATE: DATE || new Date().toISOString().slice(0, 19).replace('T', ' '),
-            CREATED_DATE: req.body.CREATED_DATE ? new Date(req.body.CREATED_DATE) : new Date(),
+            CREATED_DATE: require('./millShared').toSLDateTime(req.body.CREATED_DATE),
             NOTES: NOTES || null,
+            CLIENT_REF: req.body.CLIENT_REF || null,
             CALCULATION_DATA: CALCULATION_DATA ? JSON.stringify(CALCULATION_DATA) : null,
             DEVICE_ID: DEVICE_ID || 'WEB',
             CREATED_BY: CREATED_BY || null,

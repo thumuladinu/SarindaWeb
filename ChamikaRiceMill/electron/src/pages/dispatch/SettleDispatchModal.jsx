@@ -11,6 +11,8 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import db from '../../services/db';
 import syncService from '../../services/syncService';
+import { FINISHED_ITEMS } from '../../utils/constants';
+import { getTerminalDeviceCode } from '../../utils/terminalHelper';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -21,7 +23,8 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
     const [submitting, setSubmitting] = useState(false);
     const [dispatchNote, setDispatchNote] = useState(null);
     const [billsList, setBillsList] = useState([]);
-    const [systemItems, setSystemItems] = useState({ P: null, N: null });
+    // Real mill items per rice variety: { [BASE]: { P: item, N: item } }
+    const [varietyItems, setVarietyItems] = useState({});
     const [totals, setTotals] = useState({}); // tracking final amounts for printed bills
     const [extraRows, setExtraRows] = useState([]); // dynamic extra bills rows
 
@@ -30,6 +33,10 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
             fetchData();
         }
     }, [open, noteRecord]);
+
+    // Form rows keyed by the permanent INVOICE_NO (never by local/server row numbers)
+    const billRowKey = (b) => String(b.INVOICE_NO || `BILL-${b.BILL_ID || b.LOCAL_ID}`);
+    const varietyOptions = Object.keys(varietyItems).map(base => ({ value: base, label: base }));
 
     const fetchData = async () => {
         setLoading(true);
@@ -67,9 +74,20 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
                     .map(i => String(i.ITEM_ID))
             );
 
-            const pItem = allDbItems.find(i => String(i.SYSTEM_CODE || '').endsWith('_P')) || null;
-            const nItem = allDbItems.find(i => String(i.SYSTEM_CODE || '').endsWith('_N')) || null;
-            setSystemItems({ P: pItem, N: nItem });
+            const vMap = {};
+            const baseOfItem = {};
+            FINISHED_ITEMS.forEach(def => {
+                const dbItem = allDbItems.find(i => i.SYSTEM_CODE === def.SYSTEM_CODE);
+                if (!dbItem) return;
+                baseOfItem[String(dbItem.ITEM_ID)] = def.BASE;
+                if (Number(dbItem.IS_ACTIVE) === 0 && def.IS_FUTURE) return;
+                vMap[def.BASE] = { ...(vMap[def.BASE] || {}), [def.VARIATION]: dbItem };
+            });
+            setVarietyItems(vMap);
+            const baseOfBillItem = (i) => {
+                const def = FINISHED_ITEMS.find(d => d.SYSTEM_CODE === i.SYSTEM_CODE);
+                return (def && def.BASE) || baseOfItem[String(i.ITEM_ID)] || null;
+            };
 
             // Store pItemIds and nItemIds for use in the forEach below
             // We use a closure trick: re-define isP/isN inside the forEach with access to these sets
@@ -114,13 +132,7 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
                     localBills = allBills.filter(b => b.DISPATCH_NO && String(b.DISPATCH_NO) === String(noteRecord.DISPATCH_NO));
                 }
 
-                // Priority 3: Match by legacy DISPATCH_ID column on sales_bills
-                if (localBills.length === 0 && (noteRecord.DISPATCH_ID || noteRecord.LOCAL_ID)) {
-                    const noteDispatchId = noteRecord.DISPATCH_ID || noteRecord.LOCAL_ID;
-                    localBills = allBills.filter(b => b.DISPATCH_ID && (String(b.DISPATCH_ID) === String(noteDispatchId) || String(b.DISPATCH_ID) === String(noteRecord.LOCAL_ID)));
-                }
-                
-                // Priority 3: Match by BILL_ID (server ID) or LOCAL_ID
+                // Priority 3: older notes without invoice list -> real server BILL_IDs only
                 if (localBills.length === 0) {
                     let billIds = noteRecord.BILL_IDS_JSON || noteRecord.BILL_IDS || [];
                     if (typeof billIds === 'string') {
@@ -128,12 +140,7 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
                     }
                     if (Array.isArray(billIds) && billIds.length > 0) {
                         const numericIds = billIds.map(i => Number(i)).filter(i => !isNaN(i));
-                        const matchedByBillId = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
-                        if (matchedByBillId.length > 0) {
-                            localBills = matchedByBillId;
-                        } else {
-                            localBills = allBills.filter(b => b.LOCAL_ID && numericIds.includes(Number(b.LOCAL_ID)));
-                        }
+                        localBills = allBills.filter(b => b.BILL_ID && numericIds.includes(Number(b.BILL_ID)));
                     }
                 }
 
@@ -158,7 +165,7 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
             const initTotals = {};
 
             loadedBills.forEach(b => {
-                const bKey = b.BILL_ID || b.LOCAL_ID;
+                const bKey = billRowKey(b);
                 const bItems = b.ITEMS || b.ITEMS_JSON || [];
                 // Robust matching: by ITEM_ID in set, SYSTEM_CODE suffix, or item name (P)/(N)
                 const isP = (i) => (
@@ -199,7 +206,10 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
 
                 const hasCheques = (b.CHEQUES && b.CHEQUES.length > 0) || b.PAYMENT_METHOD === 'cheque';
 
+                const billBase = (Array.isArray(bItems) ? bItems.map(baseOfBillItem).find(Boolean) : null) || undefined;
+
                 initialBills[bKey] = {
+                    BASE: billBase,
                     PAYMENT_METHOD: hasCheques ? 'cheque' : (b.PAYMENT_METHOD || 'cash'),
                     REMARK: b.REMARK || '',
                     CHEQUES: (b.CHEQUES || []).map(c => ({
@@ -274,6 +284,7 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
         const id = `extra_${Date.now()}`;
         setExtraRows(prev => [...prev, id]);
         form.setFieldValue(['extras', id], {
+            BASE: Object.keys(varietyItems)[0],
             PAYMENT_METHOD: 'cash',
             REMARK: '',
             CHEQUES: [],
@@ -310,6 +321,21 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
         return total;
     };
 
+    // Device-generated invoice for an extra handwritten bill, so a re-sent settlement can never create it twice
+    const nextExtraInvoiceNos = async (count) => {
+        const prefix = `MIV-${dayjs().format('YYYYMMDD')}-${getTerminalDeviceCode()}-E`;
+        const used = new Set((await db.sales_bills.toArray()).map(b => b.INVOICE_NO).filter(Boolean));
+        (await db.dispatch_notes.toArray()).forEach(n => (n.SETTLE_PAYLOAD?.EXTRA_BILLS || []).forEach(e => e.INVOICE_NO && used.add(e.INVOICE_NO)));
+        let max = 0;
+        used.forEach(inv => {
+            if (inv.startsWith(prefix)) {
+                const n = parseInt(inv.slice(prefix.length), 10);
+                if (!isNaN(n) && n > max) max = n;
+            }
+        });
+        return Array.from({ length: count }, (_, i) => `${prefix}${String(max + 1 + i).padStart(4, '0')}`);
+    };
+
     const handleFinish = async (values) => {
         setSubmitting(true);
         try {
@@ -318,146 +344,103 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
                 DUE_DATE: c.DUE_DATE ? (typeof c.DUE_DATE.format === 'function' ? c.DUE_DATE.format('YYYY-MM-DD') : String(c.DUE_DATE).slice(0, 10)) : null
             }));
 
-            const formattedBills = [];
-
-            // 1. Process Existing Printed Bills
-            if (values.bills) {
-                for (const [billKey, data] of Object.entries(values.bills)) {
-                    if (!data) continue;
-                    const itemsToInsert = [];
-                    const addRowToItems = (type, weight, qty, price) => {
-                        const parsedQty = parseFloat(qty || 0);
-                        const parsedPrice = parseFloat(price || 0);
-                        if (parsedQty > 0) {
-                            const itemDb = type === 'P' ? systemItems.P : systemItems.N;
-                            itemsToInsert.push({
-                                ITEM_ID: itemDb?.ITEM_ID || (type === 'P' ? 1 : 2),
-                                SYSTEM_CODE: type === 'P' ? 'OUT_SAMBA' : 'OUT_NADU',
-                                BAG_WEIGHT: weight,
-                                BAG_COUNT: parsedQty,
-                                QUANTITY: parsedQty * weight,
-                                UNIT_PRICE: parsedPrice,
-                                TOTAL_PRICE: parsedQty * parsedPrice
-                            });
-                        }
-                    };
-
-                    const it = data.items || {};
-                    addRowToItems('P', 5, it.P5_qty, it.P5_price);
-                    addRowToItems('P', 10, it.P10_qty, it.P10_price);
-                    addRowToItems('P', 25, it.P25_qty, it.P25_price);
-                    addRowToItems('N', 5, it.N5_qty, it.N5_price);
-                    addRowToItems('N', 10, it.N10_qty, it.N10_price);
-                    addRowToItems('N', 25, it.N25_qty, it.N25_price);
-
-                    const targetBill = billsList.find(b => 
-                        String(b.LOCAL_ID) === String(billKey) || String(b.BILL_ID) === String(billKey)
-                    );
-
-                    const finalAmount = totals[billKey] || targetBill?.FINAL_AMOUNT || 0;
-
-                    // Update bill in Dexie IndexedDB
-                    if (targetBill?.LOCAL_ID) {
-                        await db.sales_bills.update(targetBill.LOCAL_ID, {
-                            FINAL_AMOUNT: finalAmount,
-                            PAYMENT_METHOD: data.PAYMENT_METHOD || 'cash',
-                            REMARK: data.REMARK || '',
-                            CHEQUES: formatCheques(data.CHEQUES),
-                            ITEMS_JSON: itemsToInsert,
-                            IS_SETTLED: 1,
-                            IS_SYNCED: 0
-                        });
-                    }
-
-                    formattedBills.push({
-                        BILL_ID: targetBill?.BILL_ID || billKey,
-                        FINAL_AMOUNT: finalAmount,
-                        PAYMENT_METHOD: data.PAYMENT_METHOD,
-                        REMARK: data.REMARK,
-                        CHEQUES: formatCheques(data.CHEQUES),
-                        ITEMS: itemsToInsert
+            // Bag rows -> items of the bill's own rice variety (real mill items only)
+            const buildItems = (base, it, label) => {
+                const rows = [];
+                ['P', 'N'].forEach(type => [5, 10, 25].forEach(weight => {
+                    const qty = parseFloat(it?.[`${type}${weight}_qty`] || 0);
+                    const price = parseFloat(it?.[`${type}${weight}_price`] || 0);
+                    if (qty <= 0) return;
+                    const itemDb = varietyItems[base]?.[type];
+                    if (!itemDb) throw new Error(`${label}: choose the rice variety (no ${type} item for "${base || '-'}")`);
+                    rows.push({
+                        ITEM_ID: itemDb.ITEM_ID,
+                        SYSTEM_CODE: itemDb.SYSTEM_CODE,
+                        ITEM_NAME: itemDb.NAME,
+                        BAG_WEIGHT: weight,
+                        BAG_COUNT: qty,
+                        QUANTITY: qty * weight,
+                        UNIT_PRICE: price,
+                        TOTAL_PRICE: qty * price
                     });
-                }
-            }
+                }));
+                return rows;
+            };
 
-            // 2. Process Extra Handwritten Bills
-            const formattedExtraBills = [];
-            if (values.extras) {
-                for (const [id, data] of Object.entries(values.extras)) {
-                    if (!data) continue;
-                    const itemsToInsert = [];
-                    const addRowToItems = (type, weight, qty, price) => {
-                        const parsedQty = parseFloat(qty || 0);
-                        const parsedPrice = parseFloat(price || 0);
-                        if (parsedQty > 0) {
-                            const itemDb = type === 'P' ? systemItems.P : systemItems.N;
-                            itemsToInsert.push({
-                                ITEM_ID: itemDb?.ITEM_ID || (type === 'P' ? 1 : 2),
-                                SYSTEM_CODE: type === 'P' ? 'OUT_SAMBA' : 'OUT_NADU',
-                                BAG_WEIGHT: weight,
-                                BAG_COUNT: parsedQty,
-                                QUANTITY: parsedQty * weight,
-                                UNIT_PRICE: parsedPrice,
-                                TOTAL_PRICE: parsedQty * parsedPrice
-                            });
-                        }
-                    };
-
-                    const it = data.items || {};
-                    addRowToItems('P', 5, it.P5_qty, it.P5_price);
-                    addRowToItems('P', 10, it.P10_qty, it.P10_price);
-                    addRowToItems('P', 25, it.P25_qty, it.P25_price);
-                    addRowToItems('N', 5, it.N5_qty, it.N5_price);
-                    addRowToItems('N', 10, it.N10_qty, it.N10_price);
-                    addRowToItems('N', 25, it.N25_qty, it.N25_price);
-
-                    if (itemsToInsert.length > 0) {
-                        formattedExtraBills.push({
-                            FINAL_AMOUNT: calcExtraTotal(id),
-                            PAYMENT_METHOD: data.PAYMENT_METHOD || 'cash',
-                            REMARK: data.REMARK || '',
-                            CHEQUES: formatCheques(data.CHEQUES),
-                            ITEMS: itemsToInsert
-                        });
-                    }
-                }
-            }
-
-            // 3. Mark Dispatch Note as SETTLED in Dexie IndexedDB
-            const noteLocalId = noteRecord.LOCAL_ID;
-            if (noteLocalId) {
-                await db.dispatch_notes.update(noteLocalId, {
-                    STATUS: 'SETTLED',
-                    SETTLED_BILLS_JSON: formattedBills,
-                    EXTRA_BILLS_JSON: formattedExtraBills,
-                    IS_SYNCED: 0
+            const formattedBills = [];
+            const localBillUpdates = [];
+            for (const bill of billsList) {
+                const key = billRowKey(bill);
+                const data = values.bills?.[key];
+                if (!data) continue;
+                const items = buildItems(data.BASE, data.items, `Bill ${bill.INVOICE_NO}`);
+                const finalAmount = totals[key] || bill.FINAL_AMOUNT || 0;
+                formattedBills.push({
+                    INVOICE_NO: bill.INVOICE_NO,
+                    BILL_ID: bill.BILL_ID || undefined,
+                    FINAL_AMOUNT: finalAmount,
+                    PAYMENT_METHOD: data.PAYMENT_METHOD,
+                    REMARK: data.REMARK,
+                    CHEQUES: formatCheques(data.CHEQUES),
+                    ITEMS: items
                 });
+                localBillUpdates.push({ invoiceNo: bill.INVOICE_NO, changes: {
+                    FINAL_AMOUNT: finalAmount,
+                    PAYMENT_METHOD: data.PAYMENT_METHOD || 'cash',
+                    REMARK: data.REMARK || '',
+                    CHEQUES: formatCheques(data.CHEQUES),
+                    ...(items.length > 0 ? { ITEMS_JSON: items } : {}),
+                    IS_SETTLED: 1
+                } });
             }
 
-            // 4. Push to Backend if online
+            const extraEntries = Object.entries(values.extras || {}).filter(([, d]) => d);
+            const extraBuilt = extraEntries
+                .map(([id, data], idx) => ({ id, data, items: buildItems(data.BASE, data.items, `Extra #${idx + 1}`) }))
+                .filter(e => e.items.length > 0);
+            const extraInvoiceNos = await nextExtraInvoiceNos(extraBuilt.length);
+            const formattedExtraBills = extraBuilt.map((e, i) => ({
+                INVOICE_NO: extraInvoiceNos[i],
+                FINAL_AMOUNT: calcExtraTotal(e.id),
+                PAYMENT_METHOD: e.data.PAYMENT_METHOD || 'cash',
+                REMARK: e.data.REMARK || '',
+                CHEQUES: formatCheques(e.data.CHEQUES),
+                ITEMS: e.items
+            }));
+
+            // Save locally first, then sync through the queue (create note if needed -> settle).
+            for (const u of localBillUpdates) {
+                const local = u.invoiceNo ? await db.sales_bills.where('INVOICE_NO').equals(u.invoiceNo).first() : null;
+                if (local) await db.sales_bills.update(local.LOCAL_ID, u.changes);
+            }
+            let noteLocal = noteRecord.LOCAL_ID ? await db.dispatch_notes.get(noteRecord.LOCAL_ID) : null;
+            if (!noteLocal && noteRecord.DISPATCH_NO) {
+                noteLocal = await db.dispatch_notes.where('DISPATCH_NO').equals(noteRecord.DISPATCH_NO).first();
+            }
+            if (!noteLocal) throw new Error('Dispatch note not found on this PC. Sync and try again.');
+
+            await db.dispatch_notes.update(noteLocal.LOCAL_ID, {
+                STATUS: 'SETTLED',
+                SETTLED_BILLS_JSON: formattedBills,
+                EXTRA_BILLS_JSON: formattedExtraBills,
+                SETTLE_PENDING: true,
+                SETTLE_PAYLOAD: { BILLS: formattedBills, EXTRA_BILLS: formattedExtraBills },
+                SYNC_ERROR: null,
+                IS_SYNCED: 0
+            });
+            await syncService.updatePendingCount();
+
             if (syncService.isOnline) {
-                try {
-                    const baseUrl = syncService.apiBase;
-                    const res = await axios.post(`${baseUrl}/api/mill/dispatch/settle`, {
-                        DISPATCH_ID: noteRecord.DISPATCH_ID || noteRecord.LOCAL_ID,
-                        BILLS: formattedBills,
-                        EXTRA_BILLS: formattedExtraBills
-                    }, { timeout: 10000 });
-
-                    if (res.data?.success && noteLocalId) {
-                        await db.dispatch_notes.update(noteLocalId, { IS_SYNCED: 1 });
-                    }
-                } catch (apiErr) {
-                    console.warn('Backend settlement push will retry on next sync:', apiErr.message);
-                }
+                syncService.syncAll();
+                message.success('Dispatch Note settled. Syncing to server...');
+            } else {
+                message.success('Dispatch Note settled. It will sync when the PC is online.');
             }
-
-            message.success('Dispatch Note settled successfully');
             if (onSuccess) onSuccess();
             if (onClose) onClose();
         } catch (e) {
             console.error('Submit error:', e);
-            message.error('Failed to submit settlement');
+            message.error(e.message || 'Failed to submit settlement');
         } finally {
             setSubmitting(false);
         }
@@ -478,6 +461,8 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
             width={1180}
             footer={null}
             destroyOnClose
+            maskClosable={false}
+            keyboard={false}
             style={{ top: 20 }}
             bodyStyle={{ padding: '20px 24px' }}
         >
@@ -537,16 +522,19 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
                             <tbody>
                                 {/* Printed Bills */}
                                 {billsList.map(bill => {
-                                    const bid = bill.BILL_ID || bill.LOCAL_ID;
+                                    const bid = billRowKey(bill);
                                     return (
                                         <React.Fragment key={bid}>
                                             {/* P (Samba) Row */}
                                             <tr>
                                                 <td rowSpan={2} className={`${tdClass} px-2 font-bold text-center bg-gray-50 dark:bg-slate-900 border-r`}>
-                                                    {bill.INVOICE_NO || `BILL-${bid}`}
+                                                    {bill.INVOICE_NO || bid}
                                                     <div className="text-[10px] font-normal text-gray-500 dark:text-gray-400">
                                                         {bill.CUSTOMER_NAME || 'Walk-in'}
                                                     </div>
+                                                    <Form.Item name={['bills', bid, 'BASE']} noStyle>
+                                                        <Select disabled={isSettled} size="small" placeholder="Rice variety" options={varietyOptions} style={{ width: '100%', marginTop: 4, fontSize: 11 }} />
+                                                    </Form.Item>
                                                 </td>
                                                 <td className={`${tdClass} text-center font-bold bg-gray-100 dark:bg-slate-700`}>P</td>
                                                 <td className={tdClass}>
@@ -711,6 +699,9 @@ export default function SettleDispatchModal({ open, noteRecord, onClose, onSucce
                                                         )}
                                                     </div>
                                                     <div className="text-[10px] font-normal text-gray-500 dark:text-gray-400">(Auto Invoice)</div>
+                                                    <Form.Item name={['extras', id, 'BASE']} noStyle>
+                                                        <Select disabled={isSettled} size="small" placeholder="Rice variety" options={varietyOptions} style={{ width: '100%', marginTop: 4, fontSize: 11 }} />
+                                                    </Form.Item>
                                                 </td>
                                                 <td className={`${tdClass} text-center font-bold bg-amber-100 dark:bg-amber-900/50`}>P</td>
                                                 <td className={tdClass}>

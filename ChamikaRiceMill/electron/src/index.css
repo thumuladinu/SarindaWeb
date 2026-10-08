@@ -149,3 +149,50 @@
         color: black !important;
     }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Simple screens: make every classic screen shown inside the simple
+   layout bigger and calmer (styling only - no logic changes).
+   ───────────────────────────────────────────────────────────── */
+.simple-ui {
+    font-size: 15px;
+}
+.simple-ui .ant-btn {
+    min-height: 44px;
+    padding-inline: 18px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 12px;
+}
+.simple-ui .ant-btn-sm {
+    min-height: 36px;
+    padding-inline: 12px;
+    font-size: 14px;
+}
+.simple-ui .ant-input,
+.simple-ui .ant-input-affix-wrapper,
+.simple-ui .ant-input-number,
+.simple-ui .ant-picker,
+.simple-ui .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
+    min-height: 44px;
+    font-size: 16px;
+    border-radius: 12px;
+}
+.simple-ui .ant-input-number-input { height: 42px; font-size: 16px; }
+.simple-ui .ant-select-single .ant-select-selector .ant-select-selection-item,
+.simple-ui .ant-select-single .ant-select-selector .ant-select-selection-placeholder { line-height: 42px; }
+.simple-ui .ant-form-item-label > label { font-size: 15px; font-weight: 700; color: #334155; }
+.simple-ui .ant-table { font-size: 15px; }
+.simple-ui .ant-table-thead > tr > th { font-size: 14px; font-weight: 700; }
+.simple-ui .ant-table-tbody > tr > td { padding-top: 14px !important; padding-bottom: 14px !important; }
+.simple-ui .ant-tabs-tab { font-size: 16px; padding: 10px 18px !important; }
+.simple-ui .ant-tag { font-size: 13px; padding: 2px 10px; }
+.simple-ui .ant-modal .ant-modal-title { font-size: 20px; }
+/* tiny helper text used across classic screens */
+.simple-ui .text-\[10px\] { font-size: 12px !important; }
+.simple-ui .text-\[11px\] { font-size: 13px !important; }
+.simple-ui .text-xs { font-size: 14px !important; line-height: 1.4 !important; }
+.simple-ui .ant-select-single:not(.ant-select-sm) { height: 44px; font-size: 16px; }
+.simple-ui .ant-select-single:not(.ant-select-sm) .ant-select-selector { height: 44px !important; border-radius: 12px !important; }
+.simple-ui .ant-select-multiple .ant-select-selector { min-height: 44px; border-radius: 12px; }
+.simple-ui .ant-radio-button-wrapper { height: 44px; line-height: 42px; font-size: 15px; }

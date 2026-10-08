@@ -4,7 +4,8 @@ import { io } from 'socket.io-client';
 import db from './db';
 import { getTerminalDeviceCode, getCurrentUserName } from '../utils/terminalHelper';
 
-const DEFAULT_API_BASE = 'https://crm.bridgitalsolutions.com';
+// Dev (npm run electron:dev) talks to the local backend so testing never touches live data
+const DEFAULT_API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : 'https://crm.bridgitalsolutions.com';
 
 export function getStoredApiBase() {
     try {
@@ -432,19 +433,9 @@ class SyncService {
 
     async updatePendingCount() {
         try {
-            const [bills, dispatch, inwards, returns, expenses] = await Promise.all([
-                db.sales_bills.where('IS_SYNCED').equals(0).count(),
-                db.dispatch_notes.where('IS_SYNCED').equals(0).count(),
-                db.stock_inwards.where('IS_SYNCED').equals(0).count(),
-                db.sales_returns.where('IS_SYNCED').equals(0).count(),
-                db.expenses.where('IS_SYNCED').equals(0).count()
-            ]);
-            const total = bills + dispatch + inwards + returns + expenses;
-            this.notify('pendingCountChanged', {
-                total,
-                breakdown: { bills, dispatch, inwards, returns, expenses }
-            });
-            return total;
+            const breakdown = await this.getPendingBreakdown();
+            this.notify('pendingCountChanged', { total: breakdown.total, errors: breakdown.errors, breakdown });
+            return breakdown.total;
         } catch (e) {
             console.error('Error counting pending records:', e);
             return 0;
@@ -453,15 +444,18 @@ class SyncService {
 
     async getPendingBreakdown() {
         try {
-            const [bills, dispatch, inwards, returns, expenses] = await Promise.all([
+            const [bills, dispatch, inwards, returns, expenses, billErrors, dispatchErrors] = await Promise.all([
                 db.sales_bills.where('IS_SYNCED').equals(0).count(),
                 db.dispatch_notes.where('IS_SYNCED').equals(0).count(),
                 db.stock_inwards.where('IS_SYNCED').equals(0).count(),
                 db.sales_returns.where('IS_SYNCED').equals(0).count(),
-                db.expenses.where('IS_SYNCED').equals(0).count()
+                db.expenses.where('IS_SYNCED').equals(0).count(),
+                db.sales_bills.filter(b => !!b.SYNC_ERROR).count(),
+                db.dispatch_notes.filter(n => !!n.SYNC_ERROR).count()
             ]);
             return {
                 total: bills + dispatch + inwards + returns + expenses,
+                errors: billErrors + dispatchErrors,
                 bills,
                 dispatch,
                 inwards,
@@ -469,7 +463,7 @@ class SyncService {
                 expenses
             };
         } catch (e) {
-            return { total: 0, bills: 0, dispatch: 0, inwards: 0, returns: 0, expenses: 0 };
+            return { total: 0, errors: 0, bills: 0, dispatch: 0, inwards: 0, returns: 0, expenses: 0 };
         }
     }
 
@@ -530,208 +524,239 @@ class SyncService {
     // ─────────────────────────────────────────────────────────────
     // 1. PUSH LOGIC (OFFLINE -> CLOUD)
     // ─────────────────────────────────────────────────────────────
+    // ─── Sync failure handling ───────────────────────────────────
+    // Temporary (offline / timeout / 5xx / "retryable") -> keep retrying, remember last reason.
+    // Permanent (server refused: settled, deleted, unknown item...) -> stop retrying that record,
+    // show the reason on the record until the officer presses Retry.
+    async recordSyncFailure(table, localId, err, label) {
+        const status = err?.response?.status;
+        const data = err?.response?.data || {};
+        const reason = data.message || err?.message || 'Sync failed';
+        console.error(`[Sync] ${label} failed (${status || 'network'}): ${reason}`);
+        if (status === 401) return 'stop';
+        const permanent = !!status && status < 500 && status !== 408 && status !== 429 && data.permanent !== false;
+        try {
+            await db[table].update(localId, permanent
+                ? { SYNC_ERROR: reason, SYNC_ERROR_AT: dayjs().format('YYYY-MM-DD HH:mm:ss'), SYNC_NOTE: null }
+                : { SYNC_NOTE: reason });
+        } catch (e) { /* record may have been removed meanwhile */ }
+        return permanent ? 'permanent' : 'transient';
+    }
+
+    // One-time reference per offline record, created once and kept, so re-sends are recognised by the server
+    async ensureClientRef(table, record, tag) {
+        if (record.CLIENT_REF) return record.CLIENT_REF;
+        const ref = `${getTerminalDeviceCode()}-${tag}${record.LOCAL_ID}-${dayjs().format('YYYYMMDDHHmmss')}`;
+        await db[table].update(record.LOCAL_ID, { CLIENT_REF: ref });
+        return ref;
+    }
+
+    // Officer pressed "Retry" on a record that the server refused before
+    async retryRecord(table, localId) {
+        await db[table].update(localId, { SYNC_ERROR: null, SYNC_ERROR_AT: null, SYNC_NOTE: null });
+        await this.updatePendingCount();
+        if (this.isOnline) this.syncAll();
+    }
+
+    // Each bill carries its pending steps; a step's flag is cleared only after the server confirms it.
+    // Links always use INVOICE_NO (permanent code). LOCAL_ID is never sent as a reference.
     async pushPendingSales(baseUrl = this.apiBase) {
         const pending = await db.sales_bills.where('IS_SYNCED').equals(0).toArray();
         for (const bill of pending) {
+            if (bill.SYNC_ERROR) continue;
             try {
-                // Resolve customer CODE and safe server CUSTOMER_ID
-                let custCode = bill.CUSTOMER_CODE || null;
-                let realCustomerId = (bill.CUSTOMER_ID && !isNaN(Number(bill.CUSTOMER_ID))) ? Number(bill.CUSTOMER_ID) : null;
-                if (bill.CUSTOMER_ID) {
-                    const custObj = await db.customers.get(bill.CUSTOMER_ID);
-                    if (custObj) {
-                        custCode = custObj.CODE || custCode;
-                        if (custObj.CUSTOMER_ID && Number(custObj.CUSTOMER_ID) <= 2147483647) {
-                            realCustomerId = Number(custObj.CUSTOMER_ID);
-                        }
-                    }
-                }
-                if (realCustomerId && realCustomerId > 2147483647) {
-                    realCustomerId = null;
+                if (bill.DELETE_PENDING) {
+                    await axios.post(`${baseUrl}/api/mill/sales/delete`, {
+                        INVOICE_NO: bill.INVOICE_NO,
+                        BILL_ID: bill.BILL_ID || null
+                    }, { timeout: 15000 });
+                    await db.sales_bills.delete(bill.LOCAL_ID);
+                    continue;
                 }
 
-                if (bill.IS_SETTLED_UPDATE && bill.BILL_ID) {
-                    // Push Settlement
+                let billId = bill.BILL_ID;
+                if (!billId) {
+                    // Create carries the latest local values, so a pending edit is covered too
+                    const res = await axios.post(`${baseUrl}/api/mill/sales/add`, await this.buildSalePayload(bill, { forCreate: true }), { timeout: 15000 });
+                    if (!res.data?.success || !res.data.billId) throw new Error(res.data?.message || 'Server did not confirm the bill');
+                    billId = res.data.billId;
+                    await db.sales_bills.update(bill.LOCAL_ID, { BILL_ID: billId, IS_EDIT_PENDING: false });
+                } else if (bill.IS_EDIT_PENDING) {
+                    const res = await axios.post(`${baseUrl}/api/mill/sales/edit`, await this.buildSalePayload(bill), { timeout: 15000 });
+                    if (!res.data?.success) throw new Error(res.data?.message || 'Server did not confirm the edit');
+                    await db.sales_bills.update(bill.LOCAL_ID, { IS_EDIT_PENDING: false });
+                }
+
+                if (bill.IS_SETTLED_UPDATE) {
                     const res = await axios.post(`${baseUrl}/api/mill/sales/settle`, {
-                        BILL_ID: bill.BILL_ID,
+                        INVOICE_NO: bill.INVOICE_NO,
+                        BILL_ID: billId,
                         PAYMENT_METHOD: bill.PAYMENT_METHOD || 'cash',
                         PAID_AMOUNT: bill.PAID_AMOUNT || bill.FINAL_AMOUNT,
                         DISCOUNT: bill.DISCOUNT || 0,
                         FINAL_AMOUNT: bill.FINAL_AMOUNT,
                         HANDWRITTEN_SUB_TOTAL: bill.HANDWRITTEN_SUB_TOTAL || 0,
+                        REMARK: bill.REMARK || null,
                         ITEMS: bill.HANDWRITTEN_ITEMS || [],
                         CHEQUES: bill.CHEQUES || []
-                    }, { timeout: 8000 });
-
-                    if (res.data && res.data.success) {
-                        await db.sales_bills.update(bill.LOCAL_ID, {
-                            IS_SETTLED: 1,
-                            IS_SETTLED_UPDATE: false,
-                            IS_SYNCED: 1
-                        });
-                    }
-                } else if (bill.IS_EDIT_PENDING && bill.BILL_ID) {
-                    // Push Edit Sale
-                    let rawItems = bill.ITEMS || bill.ITEMS_JSON || [];
-                    if (typeof rawItems === 'string') {
-                        try { rawItems = JSON.parse(rawItems); } catch(e) { rawItems = []; }
-                    }
-                    if (!Array.isArray(rawItems)) rawItems = [];
-
-                    const billDateStr = (bill.DATE && dayjs(bill.DATE).isValid()) 
-                        ? dayjs(bill.DATE).format('YYYY-MM-DD') 
-                        : ((bill.CREATED_DATE && dayjs(bill.CREATED_DATE).isValid()) ? dayjs(bill.CREATED_DATE).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
-
-                    const res = await axios.post(`${baseUrl}/api/mill/sales/edit`, {
-                        BILL_ID: bill.BILL_ID,
-                        INVOICE_NO: bill.INVOICE_NO,
-                        BATCH_NO: bill.BATCH_NO || null,
-                        CUSTOMER_ID: realCustomerId,
-                        CUSTOMER_CODE: custCode,
-                        CUSTOMER_NAME: bill.CUSTOMER_NAME,
-                        CUSTOMER_PHONE: bill.CUSTOMER_PHONE,
-                        CUSTOMER_ADDRESS: bill.CUSTOMER_ADDRESS,
-                        VEHICLE_NO: bill.VEHICLE_NO || bill.LORRY_NO || '',
-                        DRIVER_NAME: bill.DRIVER_NAME || '',
-                        TOTAL_AMOUNT: Number(bill.TOTAL_AMOUNT || 0),
-                        PRINTED_SUB_TOTAL: Number(bill.PRINTED_SUB_TOTAL || 0),
-                        NET_AMOUNT: Number(bill.NET_AMOUNT || 0),
-                        FINAL_AMOUNT: Number(bill.FINAL_AMOUNT || 0),
-                        DISCOUNT: Number(bill.DISCOUNT || 0),
-                        DATE: billDateStr,
-                        ITEMS: rawItems,
-                        CREATED_BY: bill.CREATED_BY_NAME || getCurrentUserName()
-                    }, { timeout: 8000 });
-
-                    if (res.data && res.data.success) {
-                        await db.sales_bills.update(bill.LOCAL_ID, {
-                            IS_EDIT_PENDING: false,
-                            IS_SYNCED: 1
-                        });
-                    }
-                } else {
-                    // Push New Sale
-                    let rawItems = bill.ITEMS || bill.ITEMS_JSON || [];
-                    if (typeof rawItems === 'string') {
-                        try { rawItems = JSON.parse(rawItems); } catch(e) { rawItems = []; }
-                    }
-                    if (!Array.isArray(rawItems)) rawItems = [];
-
-                    const billDateStr = (bill.DATE && dayjs(bill.DATE).isValid()) 
-                        ? dayjs(bill.DATE).format('YYYY-MM-DD') 
-                        : ((bill.CREATED_DATE && dayjs(bill.CREATED_DATE).isValid()) ? dayjs(bill.CREATED_DATE).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
-
-                    const res = await axios.post(`${baseUrl}/api/mill/sales/add`, {
-                        INVOICE_NO: bill.INVOICE_NO,
-                        CUSTOMER_ID: realCustomerId,
-                        CUSTOMER_CODE: custCode,
-                        BATCH_NO: bill.BATCH_NO || null,
-                        DATE: billDateStr,
-                        CREATED_DATE: bill.CREATED_DATE || bill.CREATED_AT || dayjs().toISOString(),
-                        TOTAL_AMOUNT: (bill.TOTAL_AMOUNT !== undefined && bill.TOTAL_AMOUNT !== null) ? Number(bill.TOTAL_AMOUNT) : 0,
-                        PRINTED_SUB_TOTAL: (bill.PRINTED_SUB_TOTAL !== undefined && bill.PRINTED_SUB_TOTAL !== null) ? Number(bill.PRINTED_SUB_TOTAL) : 0,
-                        NET_AMOUNT: (bill.NET_AMOUNT !== undefined && bill.NET_AMOUNT !== null) ? Number(bill.NET_AMOUNT) : 0,
-                        FINAL_AMOUNT: (bill.FINAL_AMOUNT !== undefined && bill.FINAL_AMOUNT !== null) ? Number(bill.FINAL_AMOUNT) : 0,
-                        DISCOUNT: Number(bill.DISCOUNT || 0),
-                        PAYMENT_METHOD: bill.PAYMENT_METHOD || 'cash',
-                        IS_SETTLED: (bill.IS_SETTLED !== undefined && bill.IS_SETTLED !== null) ? Number(bill.IS_SETTLED) : 0,
-                        REMARK: bill.REMARK || null,
-                        DEVICE_ID: bill.DEVICE_ID || getTerminalDeviceCode(),
-                        CREATED_BY_NAME: bill.CREATED_BY_NAME || bill.ADDED_BY || getCurrentUserName(),
-                        ITEMS: rawItems
-                    }, { timeout: 8000 });
-
-                    if (res.data && res.data.success) {
-                        const newBillId = res.data.billId;
-                        await db.sales_bills.update(bill.LOCAL_ID, {
-                            BILL_ID: newBillId,
-                            INVOICE_NO: res.data.invoiceNo || bill.INVOICE_NO,
-                            IS_SYNCED: 1
-                        });
-
-                        if (bill.IS_SETTLED_UPDATE && newBillId) {
-                            try {
-                                await axios.post(`${baseUrl}/api/mill/sales/settle`, {
-                                    BILL_ID: newBillId,
-                                    PAYMENT_METHOD: bill.PAYMENT_METHOD || 'cash',
-                                    PAID_AMOUNT: bill.PAID_AMOUNT || bill.FINAL_AMOUNT,
-                                    DISCOUNT: bill.DISCOUNT || 0,
-                                    FINAL_AMOUNT: bill.FINAL_AMOUNT,
-                                    HANDWRITTEN_SUB_TOTAL: bill.HANDWRITTEN_SUB_TOTAL || 0,
-                                    ITEMS: bill.HANDWRITTEN_ITEMS || [],
-                                    CHEQUES: bill.CHEQUES || []
-                                }, { timeout: 8000 });
-                                await db.sales_bills.update(bill.LOCAL_ID, { IS_SETTLED_UPDATE: false });
-                            } catch(e) { console.warn('Secondary settlement push failed:', e.message); }
-                        }
-                    }
+                    }, { timeout: 15000 });
+                    if (!res.data?.success) throw new Error(res.data?.message || 'Server did not confirm the settlement');
+                    await db.sales_bills.update(bill.LOCAL_ID, { IS_SETTLED: 1, IS_SETTLED_UPDATE: false });
                 }
+
+                await db.sales_bills.update(bill.LOCAL_ID, { IS_SYNCED: 1, SYNC_ERROR: null, SYNC_NOTE: null });
             } catch (err) {
-                console.error(`Failed to push sale #${bill.INVOICE_NO || bill.LOCAL_ID}:`, err.message);
-                if (err.response && err.response.status === 401) {
-                    console.warn('Push paused: Unauthorized (401)');
-                    break;
-                }
+                const outcome = await this.recordSyncFailure('sales_bills', bill.LOCAL_ID, err, `Sale ${bill.INVOICE_NO || bill.LOCAL_ID}`);
+                if (outcome === 'stop') break;
             }
         }
     }
 
+    async buildSalePayload(bill, { forCreate = false } = {}) {
+        let custCode = bill.CUSTOMER_CODE || null;
+        let realCustomerId = (bill.CUSTOMER_ID && !isNaN(Number(bill.CUSTOMER_ID))) ? Number(bill.CUSTOMER_ID) : null;
+        if (bill.CUSTOMER_ID) {
+            const custObj = await db.customers.get(bill.CUSTOMER_ID).catch(() => null);
+            if (custObj) {
+                custCode = custObj.CODE || custCode;
+                if (custObj.CUSTOMER_ID && Number(custObj.CUSTOMER_ID) <= 2147483647) realCustomerId = Number(custObj.CUSTOMER_ID);
+            }
+        }
+        if (realCustomerId && realCustomerId > 2147483647) realCustomerId = null;
+
+        let rawItems = bill.ITEMS || bill.ITEMS_JSON || [];
+        if (typeof rawItems === 'string') {
+            try { rawItems = JSON.parse(rawItems); } catch (e) { rawItems = []; }
+        }
+        if (!Array.isArray(rawItems)) rawItems = [];
+
+        const billDateStr = (bill.DATE && dayjs(bill.DATE).isValid())
+            ? dayjs(bill.DATE).format('YYYY-MM-DD')
+            : ((bill.CREATED_DATE && dayjs(bill.CREATED_DATE).isValid()) ? dayjs(bill.CREATED_DATE).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
+        const num = (v) => (v !== undefined && v !== null) ? Number(v) : 0;
+        // A settlement still waiting to sync is sent separately; create must not pre-mark the bill settled
+        const settlePending = forCreate && bill.IS_SETTLED_UPDATE;
+
+        return {
+            BILL_ID: bill.BILL_ID || undefined,
+            INVOICE_NO: bill.INVOICE_NO,
+            CUSTOMER_ID: realCustomerId,
+            CUSTOMER_CODE: custCode,
+            CUSTOMER_NAME: bill.CUSTOMER_NAME,
+            CUSTOMER_PHONE: bill.CUSTOMER_PHONE,
+            CUSTOMER_ADDRESS: bill.CUSTOMER_ADDRESS,
+            BATCH_NO: bill.BATCH_NO || null,
+            VEHICLE_NO: bill.VEHICLE_NO || bill.LORRY_NO || '',
+            DRIVER_NAME: bill.DRIVER_NAME || '',
+            DATE: billDateStr,
+            CREATED_DATE: bill.CREATED_DATE || bill.CREATED_AT || dayjs().format('YYYY-MM-DD HH:mm:ss'),
+            TOTAL_AMOUNT: num(bill.TOTAL_AMOUNT),
+            PRINTED_SUB_TOTAL: num(bill.PRINTED_SUB_TOTAL),
+            NET_AMOUNT: settlePending ? num(bill.PRINTED_SUB_TOTAL || bill.TOTAL_AMOUNT) : num(bill.NET_AMOUNT),
+            FINAL_AMOUNT: settlePending ? num(bill.PRINTED_SUB_TOTAL || bill.TOTAL_AMOUNT) : num(bill.FINAL_AMOUNT),
+            DISCOUNT: settlePending ? 0 : Number(bill.DISCOUNT || 0),
+            HANDWRITTEN_SUB_TOTAL: settlePending ? 0 : num(bill.HANDWRITTEN_SUB_TOTAL),
+            PAYMENT_METHOD: bill.PAYMENT_METHOD || 'cash',
+            IS_SETTLED: settlePending ? 0 : num(bill.IS_SETTLED),
+            REMARK: bill.REMARK || null,
+            DEVICE_ID: bill.DEVICE_ID || getTerminalDeviceCode(),
+            CREATED_BY: bill.CREATED_BY_NAME || getCurrentUserName(),
+            CREATED_BY_NAME: bill.CREATED_BY_NAME || bill.ADDED_BY || getCurrentUserName(),
+            ITEMS: rawItems
+        };
+    }
+
+    // Dispatch notes: create/re-sync (links by INVOICE_NO), then settle, or delete. Same step rules as bills.
     async pushPendingDispatch(baseUrl = this.apiBase) {
         const pending = await db.dispatch_notes.where('IS_SYNCED').equals(0).toArray();
         for (const note of pending) {
+            if (note.SYNC_ERROR) continue;
             try {
-                let billIds = note.BILL_IDS_JSON || [];
-                if (typeof billIds === 'string') {
-                    try { billIds = JSON.parse(billIds); } catch(e) { billIds = billIds.split(',').map(s => s.trim()); }
+                if (note.DELETE_PENDING) {
+                    if (note.DISPATCH_ID || note.DISPATCH_NO) {
+                        await axios.post(`${baseUrl}/api/mill/dispatch/delete`, {
+                            DISPATCH_NO: note.DISPATCH_NO,
+                            DISPATCH_ID: note.DISPATCH_ID || null
+                        }, { timeout: 15000 });
+                    }
+                    await db.dispatch_notes.delete(note.LOCAL_ID);
+                    continue;
                 }
-                if (!Array.isArray(billIds)) billIds = [];
 
-                let invoiceNos = note.INVOICE_NOS_JSON || [];
-                if (typeof invoiceNos === 'string') {
-                    try { invoiceNos = JSON.parse(invoiceNos); } catch(e) { invoiceNos = invoiceNos.split(',').map(s => s.trim()); }
-                }
-                if (!Array.isArray(invoiceNos)) invoiceNos = [];
-
-                const res = await axios.post(`${baseUrl}/api/mill/dispatch/create`, {
-                    DISPATCH_NO: note.DISPATCH_NO,
-                    BILL_IDS: billIds,
-                    INVOICE_NOS: invoiceNos,
-                    DATE: dayjs(note.DATE).format('YYYY-MM-DD'),
-                    CREATED_DATE: note.CREATED_DATE || note.CREATED_AT || dayjs().toISOString(),
-                    DRIVER_NAME: note.DRIVER_NAME || 'Main Driver',
-                    LORRY_NO: note.LORRY_NO || note.VEHICLE_NO || 'Mill Lorry',
-                    STAFF_NAME: note.STAFF_NAME || 'Officer',
-                    TOTAL_5KG: note.TOTAL_5KG,
-                    TOTAL_10KG: note.TOTAL_10KG,
-                    TOTAL_25KG: note.TOTAL_25KG,
-                    TOTAL_BAGS: note.TOTAL_BAGS,
-                    DEVICE_ID: note.DEVICE_ID || getTerminalDeviceCode(),
-                    CREATED_BY: note.ADDED_BY || note.CREATED_BY_NAME || getCurrentUserName(),
-                    CREATED_BY_NAME: note.CREATED_BY_NAME || note.ADDED_BY || getCurrentUserName()
-                }, { timeout: 8000 });
-
-                if (res.data && res.data.success) {
+                // Older records only had IS_SYNCED=0 to mean "needs create"
+                const legacyNeedsPush = note.NEEDS_PUSH === undefined && !note.SETTLE_PENDING;
+                if (!note.DISPATCH_ID || note.NEEDS_PUSH || legacyNeedsPush) {
+                    const res = await axios.post(`${baseUrl}/api/mill/dispatch/create`, await this.buildDispatchPayload(note), { timeout: 15000 });
+                    if (!res.data?.success) throw new Error(res.data?.message || 'Server did not confirm the dispatch note');
                     await db.dispatch_notes.update(note.LOCAL_ID, {
                         DISPATCH_ID: res.data.dispatchId,
                         DISPATCH_NO: res.data.dispatchNo || note.DISPATCH_NO,
-                        IS_SYNCED: 1
+                        NEEDS_PUSH: false
                     });
+                    note.DISPATCH_ID = res.data.dispatchId;
                 }
+
+                if (note.SETTLE_PENDING && note.SETTLE_PAYLOAD) {
+                    const res = await axios.post(`${baseUrl}/api/mill/dispatch/settle`, {
+                        ...note.SETTLE_PAYLOAD,
+                        DISPATCH_NO: note.DISPATCH_NO,
+                        DISPATCH_ID: note.DISPATCH_ID
+                    }, { timeout: 20000 });
+                    if (!res.data?.success) throw new Error(res.data?.message || 'Server did not confirm the settlement');
+                    await db.dispatch_notes.update(note.LOCAL_ID, { SETTLE_PENDING: false, STATUS: 'SETTLED' });
+                }
+
+                await db.dispatch_notes.update(note.LOCAL_ID, { IS_SYNCED: 1, SYNC_ERROR: null, SYNC_NOTE: null });
             } catch (err) {
-                console.error(`Failed to push dispatch note #${note.LOCAL_ID}:`, err.message);
-                if (err.response && err.response.status === 401) {
-                    console.warn('Push dispatch paused: Unauthorized (401)');
-                    break;
-                }
+                const outcome = await this.recordSyncFailure('dispatch_notes', note.LOCAL_ID, err, `Dispatch ${note.DISPATCH_NO || note.LOCAL_ID}`);
+                if (outcome === 'stop') break;
             }
         }
+    }
+
+    async buildDispatchPayload(note) {
+        const toList = (v) => {
+            let list = v || [];
+            if (typeof list === 'string') {
+                try { list = JSON.parse(list); } catch (e) { list = list.split(','); }
+            }
+            return Array.isArray(list) ? list.map(x => String(x).trim()).filter(Boolean) : [];
+        };
+        const invoiceNos = toList(note.INVOICE_NOS_JSON || note.INVOICE_NOS);
+        // Only real server ids, and only when no invoice list exists (older notes)
+        let billIds = [];
+        if (invoiceNos.length === 0) {
+            const wanted = toList(note.BILL_IDS_JSON).map(Number);
+            const local = await db.sales_bills.toArray();
+            billIds = local.filter(b => b.BILL_ID && wanted.includes(Number(b.BILL_ID))).map(b => b.BILL_ID);
+        }
+        return {
+            DISPATCH_NO: note.DISPATCH_NO,
+            INVOICE_NOS: invoiceNos,
+            BILL_IDS: billIds,
+            DATE: dayjs(note.DATE).format('YYYY-MM-DD'),
+            CREATED_DATE: note.CREATED_DATE || note.CREATED_AT || dayjs().format('YYYY-MM-DD HH:mm:ss'),
+            DRIVER_NAME: note.DRIVER_NAME || 'Main Driver',
+            LORRY_NO: note.LORRY_NO || note.VEHICLE_NO || 'Mill Lorry',
+            STAFF_NAME: note.STAFF_NAME || 'Officer',
+            TOTAL_5KG: note.TOTAL_5KG,
+            TOTAL_10KG: note.TOTAL_10KG,
+            TOTAL_25KG: note.TOTAL_25KG,
+            TOTAL_BAGS: note.TOTAL_BAGS,
+            DEVICE_ID: note.DEVICE_ID || getTerminalDeviceCode(),
+            CREATED_BY: note.ADDED_BY || note.CREATED_BY_NAME || getCurrentUserName(),
+            CREATED_BY_NAME: note.CREATED_BY_NAME || note.ADDED_BY || getCurrentUserName()
+        };
     }
 
     async pushPendingInward(baseUrl = this.apiBase) {
         const pending = await db.stock_inwards.where('IS_SYNCED').equals(0).toArray();
         for (const inward of pending) {
+            if (inward.SYNC_ERROR) continue;
             try {
+                const clientRef = await this.ensureClientRef('stock_inwards', inward, 'I');
                 const res = await axios.post(`${baseUrl}/api/mill/inward/add`, {
+                    CLIENT_REF: clientRef,
                     INWARD_TYPE: inward.INWARD_TYPE || 'mill_purchase',
                     ITEM_ID: inward.ITEM_ID,
                     PLACE_ID: inward.PLACE_ID || null,
@@ -744,9 +769,9 @@ class SyncService {
                     DRIVER_NAME: inward.DRIVER_NAME || '',
                     SUPPLIER_ID: inward.SUPPLIER_ID || null,
                     DATE: dayjs(inward.DATE).format('YYYY-MM-DD'),
-                    CREATED_DATE: inward.CREATED_DATE || inward.CREATED_AT || dayjs().toISOString(),
+                    CREATED_DATE: inward.CREATED_DATE || inward.CREATED_AT || dayjs().format('YYYY-MM-DD HH:mm:ss'),
                     NOTES: inward.NOTES || ''
-                }, { timeout: 8000 });
+                }, { timeout: 15000 });
 
                 if (res.data.success) {
                     await db.stock_inwards.update(inward.LOCAL_ID, {
@@ -756,7 +781,8 @@ class SyncService {
                     });
                 }
             } catch (err) {
-                console.error(`Failed to push stock inward #${inward.LOCAL_ID}:`, err.message);
+                const outcome = await this.recordSyncFailure('stock_inwards', inward.LOCAL_ID, err, `Stock inward #${inward.LOCAL_ID}`);
+                if (outcome === 'stop') break;
             }
         }
     }
@@ -764,6 +790,7 @@ class SyncService {
     async pushPendingReturns(baseUrl = this.apiBase) {
         const pending = await db.sales_returns.where('IS_SYNCED').equals(0).toArray();
         for (const ret of pending) {
+            if (ret.SYNC_ERROR) continue;
             try {
                 if (ret.RETURN_ID) {
                     // Existing return record being updated (PUT)
@@ -789,7 +816,14 @@ class SyncService {
                         REFUND_LINE_TOTAL: ret.REFUND_AMOUNT || 0
                     }];
 
+                    // One-time reference made once and kept, so a re-send is recognised by the server
+                    let clientRef = ret.CLIENT_REF;
+                    if (!clientRef) {
+                        clientRef = `${getTerminalDeviceCode()}-R${ret.LOCAL_ID}-${dayjs().format('YYYYMMDDHHmmss')}`;
+                        await db.sales_returns.update(ret.LOCAL_ID, { CLIENT_REF: clientRef });
+                    }
                     const res = await axios.post(`${baseUrl}/api/mill/returns/add`, {
+                        CLIENT_REF: clientRef,
                         BILL_ID: ret.BILL_ID || 0,
                         INVOICE_NO: ret.INVOICE_NO || `RET-${ret.LOCAL_ID}`,
                         CUSTOMER_ID: ret.CUSTOMER_ID || null,
@@ -797,9 +831,9 @@ class SyncService {
                         REFUND_METHOD: ret.REFUND_TYPE || ret.REFUND_METHOD || 'cash',
                         REASON: ret.REASON || '',
                         DATE: dayjs(ret.DATE).format('YYYY-MM-DD'),
-                        CREATED_DATE: ret.CREATED_DATE || ret.CREATED_AT || dayjs().toISOString(),
+                        CREATED_DATE: ret.CREATED_DATE || ret.CREATED_AT || dayjs().format('YYYY-MM-DD HH:mm:ss'),
                         ITEMS: returnItems
-                    }, { timeout: 8000 });
+                    }, { timeout: 15000 });
 
                     if (res.data?.success) {
                         await db.sales_returns.update(ret.LOCAL_ID, {
@@ -810,7 +844,8 @@ class SyncService {
                     }
                 }
             } catch (err) {
-                console.error(`Failed to push sales return #${ret.LOCAL_ID}:`, err.message);
+                const outcome = await this.recordSyncFailure('sales_returns', ret.LOCAL_ID, err, `Return #${ret.LOCAL_ID}`);
+                if (outcome === 'stop') break;
             }
         }
     }
@@ -925,32 +960,44 @@ class SyncService {
         }
     }
 
+    // Local notes whose create/settle has not reached the server yet: their bills keep the local link
+    async getProtectedDispatchNos() {
+        const notes = await db.dispatch_notes.where('IS_SYNCED').equals(0).toArray();
+        return new Set(notes.map(n => n.DISPATCH_NO).filter(Boolean));
+    }
+
     async pullSalesBills(baseUrl = this.apiBase) {
         try {
-            const res = await axios.get(`${baseUrl}/api/mill/sales/list`, { timeout: 8000 });
-            if (res.data?.success && Array.isArray(res.data.result)) {
-                for (const bill of res.data.result) {
-                    if (!bill || !bill.INVOICE_NO) continue;
-                    const existing = await db.sales_bills.where('INVOICE_NO').equals(bill.INVOICE_NO).first();
-                    const cleanPayload = { ...bill };
-                    delete cleanPayload.LOCAL_ID;
-                    if (existing) {
-                        if (existing.IS_SYNCED === 0 || existing.IS_EDIT_PENDING) {
-                            continue; // Do not overwrite unsynced local edits
-                        }
-                        await db.sales_bills.update(existing.LOCAL_ID, {
-                            ...cleanPayload,
-                            IS_SYNCED: 1
-                        });
-                    } else {
-                        await db.sales_bills.add({
-                            ...cleanPayload,
-                            IS_SYNCED: 1
-                        });
-                    }
+            const res = await axios.get(`${baseUrl}/api/mill/sales/list`, { timeout: 15000 });
+            if (!res.data?.success || !Array.isArray(res.data.result)) return;
+
+            const protectedNos = await this.getProtectedDispatchNos();
+            const serverInvoices = new Set();
+            for (const bill of res.data.result) {
+                if (!bill || !bill.INVOICE_NO) continue;
+                serverInvoices.add(bill.INVOICE_NO);
+                const existing = await db.sales_bills.where('INVOICE_NO').equals(bill.INVOICE_NO).first();
+                const cleanPayload = { ...bill };
+                delete cleanPayload.LOCAL_ID;
+                if (existing) {
+                    // Never overwrite local work that has not reached the server yet
+                    if (existing.IS_SYNCED === 0 || existing.IS_EDIT_PENDING || existing.IS_SETTLED_UPDATE || existing.DELETE_PENDING) continue;
+                    if (existing.DISPATCH_NO && protectedNos.has(existing.DISPATCH_NO)) continue;
+                    await db.sales_bills.update(existing.LOCAL_ID, { ...cleanPayload, IS_SYNCED: 1, SYNC_ERROR: null, SYNC_NOTE: null });
+                } else {
+                    await db.sales_bills.add({ ...cleanPayload, IS_SYNCED: 1 });
                 }
-                this.notify('salesUpdated');
             }
+
+            // Bills deleted on the server (web or another PC): remove the synced local copy
+            const local = await db.sales_bills.where('IS_SYNCED').equals(1).toArray();
+            // Never touch bills made in the last 15 minutes (avoid any race with a just-finished push)
+            const recent = (b) => b.CREATED_DATE && dayjs().diff(dayjs(b.CREATED_DATE), 'minute') < 15;
+            const gone = local.filter(b => b.BILL_ID && b.INVOICE_NO && !serverInvoices.has(b.INVOICE_NO)
+                && !(b.DISPATCH_NO && protectedNos.has(b.DISPATCH_NO)) && !recent(b));
+            if (gone.length > 0) await db.sales_bills.bulkDelete(gone.map(b => b.LOCAL_ID));
+
+            this.notify('salesUpdated');
         } catch (e) {
             console.error('Error pulling sales bills:', e);
         }
@@ -958,30 +1005,30 @@ class SyncService {
 
     async pullDispatchNotes(baseUrl = this.apiBase) {
         try {
-            const res = await axios.get(`${baseUrl}/api/mill/dispatch/list`, { timeout: 8000 });
-            if (res.data?.success && Array.isArray(res.data.result)) {
-                for (const note of res.data.result) {
-                    if (!note || !note.DISPATCH_NO) continue;
-                    const existing = await db.dispatch_notes.where('DISPATCH_NO').equals(note.DISPATCH_NO).first();
-                    const cleanPayload = { ...note };
-                    delete cleanPayload.LOCAL_ID;
-                    if (existing) {
-                        if (existing.IS_SYNCED === 0 || existing.IS_EDIT_PENDING) {
-                            continue; // Do not overwrite unsynced local edits
-                        }
-                        await db.dispatch_notes.update(existing.LOCAL_ID, {
-                            ...cleanPayload,
-                            IS_SYNCED: 1
-                        });
-                    } else {
-                        await db.dispatch_notes.add({
-                            ...cleanPayload,
-                            IS_SYNCED: 1
-                        });
-                    }
+            const res = await axios.get(`${baseUrl}/api/mill/dispatch/list`, { timeout: 15000 });
+            if (!res.data?.success || !Array.isArray(res.data.result)) return;
+
+            const serverNos = new Set();
+            for (const note of res.data.result) {
+                if (!note || !note.DISPATCH_NO) continue;
+                serverNos.add(note.DISPATCH_NO);
+                const existing = await db.dispatch_notes.where('DISPATCH_NO').equals(note.DISPATCH_NO).first();
+                const cleanPayload = { ...note };
+                delete cleanPayload.LOCAL_ID;
+                if (existing) {
+                    if (existing.IS_SYNCED === 0 || existing.SETTLE_PENDING || existing.DELETE_PENDING) continue;
+                    await db.dispatch_notes.update(existing.LOCAL_ID, { ...cleanPayload, IS_SYNCED: 1, SYNC_ERROR: null, SYNC_NOTE: null });
+                } else {
+                    await db.dispatch_notes.add({ ...cleanPayload, IS_SYNCED: 1 });
                 }
-                this.notify('dispatchUpdated');
             }
+
+            // Notes deleted on the server: remove the synced local copy
+            const local = await db.dispatch_notes.where('IS_SYNCED').equals(1).toArray();
+            const gone = local.filter(n => n.DISPATCH_ID && n.DISPATCH_NO && !serverNos.has(n.DISPATCH_NO));
+            if (gone.length > 0) await db.dispatch_notes.bulkDelete(gone.map(n => n.LOCAL_ID));
+
+            this.notify('dispatchUpdated');
         } catch (e) {
             console.error('Error pulling dispatch notes:', e);
         }
@@ -1049,6 +1096,7 @@ class SyncService {
     async pushPendingExpenses(baseUrl = this.apiBase) {
         const pending = await db.expenses.where('IS_SYNCED').equals(0).toArray();
         for (const exp of pending) {
+            if (exp.SYNC_ERROR) continue;
             try {
                 if (exp.EXPENSE_ID) {
                     const res = await axios.put(`${baseUrl}/api/mill/expenses/${exp.EXPENSE_ID}`, {
@@ -1067,14 +1115,16 @@ class SyncService {
                         });
                     }
                 } else {
+                    const clientRef = await this.ensureClientRef('expenses', exp, 'X');
                     const res = await axios.post(`${baseUrl}/api/mill/expenses/add`, {
+                        CLIENT_REF: clientRef,
                         CATEGORY_NAME: exp.CATEGORY_NAME,
                         AMOUNT: exp.AMOUNT,
                         PAYMENT_METHOD: exp.PAYMENT_METHOD || 'cash',
                         PAID_TO: exp.PAID_TO || null,
                         REF_NO: exp.REF_NO || null,
                         DATE: exp.DATE ? dayjs(exp.DATE).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
-                        CREATED_DATE: exp.CREATED_DATE || exp.CREATED_AT || dayjs().toISOString(),
+                        CREATED_DATE: exp.CREATED_DATE || exp.CREATED_AT || dayjs().format('YYYY-MM-DD HH:mm:ss'),
                         NOTES: exp.NOTES || null,
                         DEVICE_ID: exp.DEVICE_ID || 'ELECTRON'
                     }, { timeout: 8000 });
@@ -1088,7 +1138,8 @@ class SyncService {
                     }
                 }
             } catch (err) {
-                console.error(`Failed to push expense #${exp.LOCAL_ID}:`, err.message);
+                const outcome = await this.recordSyncFailure('expenses', exp.LOCAL_ID, err, `Expense #${exp.LOCAL_ID}`);
+                if (outcome === 'stop') break;
             }
         }
     }
